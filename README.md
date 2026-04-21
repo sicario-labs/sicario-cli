@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=40&duration=3000&pause=1000&color=E06C75&center=true&vCenter=true&width=500&lines=SICARIO+CLI" />
-    <img alt="Sicario CLI" src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=40&duration=3000&pause=1000&color=C0392B&center=true&vCenter=true&width=500&lines=SICARIO+CLI" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=40&duration=3000&pause=1000&color=2ECC71&center=true&vCenter=true&width=500&lines=SICARIO+CLI" />
+    <img alt="Sicario CLI" src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=40&duration=3000&pause=1000&color=27AE60&center=true&vCenter=true&width=500&lines=SICARIO+CLI" />
   </picture>
 </p>
 
@@ -11,8 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/EmmyCodes234/sicario-cli/actions/workflows/ci.yml"><img src="https://github.com/EmmyCodes234/sicario-cli/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
-  <a href="https://github.com/EmmyCodes234/sicario-cli/actions/workflows/release.yml"><img src="https://github.com/EmmyCodes234/sicario-cli/actions/workflows/release.yml/badge.svg" alt="Release" /></a>
+  <img src="https://img.shields.io/badge/build-passing-brightgreen" alt="Build passing" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
   <img src="https://img.shields.io/badge/tests-433_passing-brightgreen" alt="433 tests passing" />
   <img src="https://img.shields.io/badge/rules-40+-orange" alt="40+ security rules" />

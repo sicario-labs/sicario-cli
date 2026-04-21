@@ -5,9 +5,9 @@
 //!
 //! Requirements: 11.3, 11.4
 
-use crate::engine::{Severity, Vulnerability};
-use super::interfaces::ExposureStatus;
 use super::exposure::CloudExposureAnalyzer;
+use super::interfaces::ExposureStatus;
+use crate::engine::{Severity, Vulnerability};
 
 /// Assign cloud-aware priority to a list of vulnerabilities.
 ///
@@ -18,7 +18,7 @@ use super::exposure::CloudExposureAnalyzer;
 ///
 /// Also sets `vulnerability.cloud_exposed` to reflect the determination.
 pub fn assign_cloud_priority(
-    vulnerabilities: &mut Vec<Vulnerability>,
+    vulnerabilities: &mut [Vulnerability],
     analyzer: &CloudExposureAnalyzer,
 ) {
     for vuln in vulnerabilities.iter_mut() {
@@ -58,8 +58,8 @@ fn demote_severity(severity: Severity) -> Severity {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::OwaspCategory;
     use crate::cloud::interfaces::{CloudProvider, CspmFinding, KubernetesConfig};
+    use crate::engine::OwaspCategory;
     use std::collections::HashMap;
     use std::path::PathBuf;
     use uuid::Uuid;

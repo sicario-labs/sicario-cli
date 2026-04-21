@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use uuid::Uuid;
 
 use crate::engine::{Severity, Vulnerability};
-use crate::tui::app::{AppState, TuiMessage, create_tui_channel};
+use crate::tui::app::{create_tui_channel, AppState, TuiMessage};
 
 // ── Arbitrary generators ──────────────────────────────────────────────────────
 
@@ -32,19 +32,21 @@ fn arb_vulnerability() -> impl Strategy<Value = Vulnerability> {
         arb_severity(),
         any::<bool>(),
     )
-        .prop_map(|(rule_id, file, line, col, snippet, severity, reachable)| Vulnerability {
-            id: Uuid::new_v4(),
-            rule_id,
-            file_path: PathBuf::from(file),
-            line,
-            column: col,
-            snippet,
-            severity,
-            reachable,
-            cloud_exposed: None,
-            cwe_id: None,
-            owasp_category: None,
-        })
+        .prop_map(
+            |(rule_id, file, line, col, snippet, severity, reachable)| Vulnerability {
+                id: Uuid::new_v4(),
+                rule_id,
+                file_path: PathBuf::from(file),
+                line,
+                column: col,
+                snippet,
+                severity,
+                reachable,
+                cloud_exposed: None,
+                cwe_id: None,
+                owasp_category: None,
+            },
+        )
 }
 
 fn arb_tui_message() -> impl Strategy<Value = TuiMessage> {
@@ -52,7 +54,10 @@ fn arb_tui_message() -> impl Strategy<Value = TuiMessage> {
         // ScanProgress
         (0usize..500usize, 1usize..500usize).prop_map(|(scanned, total)| {
             let scanned = scanned.min(total);
-            TuiMessage::ScanProgress { files_scanned: scanned, total }
+            TuiMessage::ScanProgress {
+                files_scanned: scanned,
+                total,
+            }
         }),
         // VulnerabilityFound
         arb_vulnerability().prop_map(TuiMessage::VulnerabilityFound),

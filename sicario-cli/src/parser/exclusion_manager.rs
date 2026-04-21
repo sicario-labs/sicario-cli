@@ -41,7 +41,7 @@ impl ExclusionManager {
     /// Build default exclusion patterns
     fn build_default_excludes() -> Result<GlobSet> {
         let mut builder = GlobSetBuilder::new();
-        
+
         // Default exclusions
         let defaults = vec![
             "node_modules/**",
@@ -69,22 +69,22 @@ impl ExclusionManager {
     fn load_gitignore(&mut self, path: &Path) -> Result<()> {
         let content = std::fs::read_to_string(path)?;
         let mut builder = GlobSetBuilder::new();
-        
+
         for line in content.lines() {
             let line = line.trim();
-            
+
             // Skip empty lines and comments
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
-            
+
             // Handle negation patterns (lines starting with !)
             if line.starts_with('!') {
                 // Negation patterns are not directly supported in globset
                 // For now, we skip them (could be enhanced later)
                 continue;
             }
-            
+
             // Convert gitignore pattern to glob pattern
             let pattern = if line.ends_with('/') {
                 // Directory pattern
@@ -96,12 +96,12 @@ impl ExclusionManager {
                 // Relative path pattern
                 line.to_string()
             };
-            
+
             if let Ok(glob) = Glob::new(&pattern) {
                 builder.add(glob);
             }
         }
-        
+
         self.gitignore_patterns = builder.build()?;
         Ok(())
     }
@@ -110,22 +110,22 @@ impl ExclusionManager {
     pub fn load_sicarioignore(&mut self, path: &Path) -> Result<()> {
         let content = std::fs::read_to_string(path)?;
         let mut builder = GlobSetBuilder::new();
-        
+
         for line in content.lines() {
             let line = line.trim();
-            
+
             // Skip empty lines and comments
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
-            
+
             // Handle negation patterns (lines starting with !)
             if line.starts_with('!') {
                 // Negation patterns are not directly supported in globset
                 // For now, we skip them (could be enhanced later)
                 continue;
             }
-            
+
             // Convert pattern to glob pattern
             let pattern = if line.ends_with('/') {
                 // Directory pattern
@@ -137,12 +137,12 @@ impl ExclusionManager {
                 // Relative path pattern
                 line.to_string()
             };
-            
+
             if let Ok(glob) = Glob::new(&pattern) {
                 builder.add(glob);
             }
         }
-        
+
         self.sicarioignore_patterns = builder.build()?;
         Ok(())
     }
@@ -165,7 +165,7 @@ mod tests {
     fn test_default_exclusions() {
         let temp_dir = std::env::temp_dir();
         let manager = ExclusionManager::new(&temp_dir).unwrap();
-        
+
         assert!(manager.is_excluded(Path::new("node_modules/package/index.js")));
         assert!(manager.is_excluded(Path::new("dist/bundle.js")));
         assert!(manager.is_excluded(Path::new("target/debug/app")));
@@ -176,20 +176,20 @@ mod tests {
     fn test_gitignore_loading() {
         let temp_dir = std::env::temp_dir().join("sicario_gitignore_test");
         fs::create_dir_all(&temp_dir).unwrap();
-        
+
         // Create a .gitignore file
         let gitignore_path = temp_dir.join(".gitignore");
         fs::write(&gitignore_path, "*.log\ntemp/\n# Comment\n\nbuild/**/*.o").unwrap();
-        
+
         let manager = ExclusionManager::new(&temp_dir).unwrap();
-        
+
         // Test patterns from .gitignore
         assert!(manager.is_excluded(Path::new("debug.log")));
         assert!(manager.is_excluded(Path::new("src/debug.log")));
         assert!(manager.is_excluded(Path::new("temp/file.txt")));
         assert!(manager.is_excluded(Path::new("build/src/main.o")));
         assert!(!manager.is_excluded(Path::new("src/main.rs")));
-        
+
         // Cleanup
         fs::remove_dir_all(&temp_dir).ok();
     }
@@ -198,20 +198,24 @@ mod tests {
     fn test_sicarioignore_loading() {
         let temp_dir = std::env::temp_dir().join("sicario_sicarioignore_test");
         fs::create_dir_all(&temp_dir).unwrap();
-        
+
         // Create a .sicarioignore file
         let sicarioignore_path = temp_dir.join(".sicarioignore");
-        fs::write(&sicarioignore_path, "*.test.js\nfixtures/\n# Test comment\n\nvendor/**").unwrap();
-        
+        fs::write(
+            &sicarioignore_path,
+            "*.test.js\nfixtures/\n# Test comment\n\nvendor/**",
+        )
+        .unwrap();
+
         let manager = ExclusionManager::new(&temp_dir).unwrap();
-        
+
         // Test patterns from .sicarioignore
         assert!(manager.is_excluded(Path::new("app.test.js")));
         assert!(manager.is_excluded(Path::new("src/app.test.js")));
         assert!(manager.is_excluded(Path::new("fixtures/data.json")));
         assert!(manager.is_excluded(Path::new("vendor/lib/module.js")));
         assert!(!manager.is_excluded(Path::new("src/app.js")));
-        
+
         // Cleanup
         fs::remove_dir_all(&temp_dir).ok();
     }
@@ -220,22 +224,22 @@ mod tests {
     fn test_combined_exclusions() {
         let temp_dir = std::env::temp_dir().join("sicario_combined_test");
         fs::create_dir_all(&temp_dir).unwrap();
-        
+
         // Create both .gitignore and .sicarioignore
         let gitignore_path = temp_dir.join(".gitignore");
         fs::write(&gitignore_path, "*.log").unwrap();
-        
+
         let sicarioignore_path = temp_dir.join(".sicarioignore");
         fs::write(&sicarioignore_path, "*.test.js").unwrap();
-        
+
         let manager = ExclusionManager::new(&temp_dir).unwrap();
-        
+
         // Test patterns from both files
         assert!(manager.is_excluded(Path::new("debug.log")));
         assert!(manager.is_excluded(Path::new("app.test.js")));
         assert!(manager.is_excluded(Path::new("node_modules/lib.js"))); // default
         assert!(!manager.is_excluded(Path::new("src/app.js")));
-        
+
         // Cleanup
         fs::remove_dir_all(&temp_dir).ok();
     }
@@ -244,17 +248,17 @@ mod tests {
     fn test_directory_patterns() {
         let temp_dir = std::env::temp_dir().join("sicario_dir_test");
         fs::create_dir_all(&temp_dir).unwrap();
-        
+
         let gitignore_path = temp_dir.join(".gitignore");
         fs::write(&gitignore_path, "cache/\nlogs/").unwrap();
-        
+
         let manager = ExclusionManager::new(&temp_dir).unwrap();
-        
+
         assert!(manager.is_excluded(Path::new("cache/data.db")));
         assert!(manager.is_excluded(Path::new("cache/subdir/file.txt")));
         assert!(manager.is_excluded(Path::new("logs/app.log")));
         assert!(!manager.is_excluded(Path::new("src/cache.rs")));
-        
+
         // Cleanup
         fs::remove_dir_all(&temp_dir).ok();
     }
@@ -263,17 +267,17 @@ mod tests {
     fn test_empty_ignore_files() {
         let temp_dir = std::env::temp_dir().join("sicario_empty_test");
         fs::create_dir_all(&temp_dir).unwrap();
-        
+
         // Create empty .gitignore
         let gitignore_path = temp_dir.join(".gitignore");
         fs::write(&gitignore_path, "").unwrap();
-        
+
         let manager = ExclusionManager::new(&temp_dir).unwrap();
-        
+
         // Should still have default exclusions
         assert!(manager.is_excluded(Path::new("node_modules/lib.js")));
         assert!(!manager.is_excluded(Path::new("src/main.rs")));
-        
+
         // Cleanup
         fs::remove_dir_all(&temp_dir).ok();
     }
@@ -282,16 +286,20 @@ mod tests {
     fn test_comments_and_empty_lines() {
         let temp_dir = std::env::temp_dir().join("sicario_comments_test");
         fs::create_dir_all(&temp_dir).unwrap();
-        
+
         let gitignore_path = temp_dir.join(".gitignore");
-        fs::write(&gitignore_path, "# This is a comment\n\n*.log\n\n# Another comment\n*.tmp").unwrap();
-        
+        fs::write(
+            &gitignore_path,
+            "# This is a comment\n\n*.log\n\n# Another comment\n*.tmp",
+        )
+        .unwrap();
+
         let manager = ExclusionManager::new(&temp_dir).unwrap();
-        
+
         assert!(manager.is_excluded(Path::new("debug.log")));
         assert!(manager.is_excluded(Path::new("temp.tmp")));
         assert!(!manager.is_excluded(Path::new("src/main.rs")));
-        
+
         // Cleanup
         fs::remove_dir_all(&temp_dir).ok();
     }
@@ -300,15 +308,15 @@ mod tests {
     fn test_no_ignore_files() {
         let temp_dir = std::env::temp_dir().join("sicario_no_ignore_test");
         fs::create_dir_all(&temp_dir).unwrap();
-        
+
         // Don't create any ignore files
         let manager = ExclusionManager::new(&temp_dir).unwrap();
-        
+
         // Should only have default exclusions
         assert!(manager.is_excluded(Path::new("node_modules/lib.js")));
         assert!(manager.is_excluded(Path::new("dist/bundle.js")));
         assert!(!manager.is_excluded(Path::new("src/main.rs")));
-        
+
         // Cleanup
         fs::remove_dir_all(&temp_dir).ok();
     }
@@ -324,7 +332,7 @@ mod property_tests {
     // Validates: Requirements 15.1, 15.2, 15.3, 15.4
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(30))]
-        
+
         #[test]
         fn test_exclusion_pattern_effectiveness(
             pattern_count in 1usize..10,
@@ -332,26 +340,26 @@ mod property_tests {
         ) {
             let temp_dir = std::env::temp_dir().join(format!("sicario_excl_prop_{}", uuid::Uuid::new_v4()));
             fs::create_dir_all(&temp_dir).unwrap();
-            
+
             // Generate random exclusion patterns
             let patterns = generate_exclusion_patterns(pattern_count);
-            
+
             // Create .sicarioignore with generated patterns
             let sicarioignore_path = temp_dir.join(".sicarioignore");
             fs::write(&sicarioignore_path, patterns.join("\n")).unwrap();
-            
+
             let manager = ExclusionManager::new(&temp_dir).unwrap();
-            
+
             // Generate test file paths
             let test_files = generate_test_file_paths(file_count);
-            
+
             // Test that patterns are applied correctly
             for file_path in &test_files {
                 let is_excluded = manager.is_excluded(Path::new(file_path));
-                
+
                 // Verify exclusion logic
                 let should_be_excluded = should_match_patterns(file_path, &patterns);
-                
+
                 // Allow for default exclusions to also match
                 if should_be_excluded {
                     prop_assert!(is_excluded, "File {} should be excluded by pattern", file_path);
@@ -359,23 +367,23 @@ mod property_tests {
                 // Note: We don't assert !is_excluded when should_be_excluded is false
                 // because default patterns might also match
             }
-            
+
             // Test default exclusions are always applied
             prop_assert!(manager.is_excluded(Path::new("node_modules/lib.js")));
             prop_assert!(manager.is_excluded(Path::new("dist/bundle.js")));
             prop_assert!(manager.is_excluded(Path::new("target/debug/app")));
-            
+
             // Cleanup
             fs::remove_dir_all(&temp_dir).ok();
         }
     }
-    
+
     // Helper function to generate random exclusion patterns
     fn generate_exclusion_patterns(count: usize) -> Vec<String> {
         let mut patterns = Vec::new();
         let extensions = vec!["log", "tmp", "bak", "cache"];
         let dirs = vec!["temp", "cache", "logs", "backup"];
-        
+
         for i in 0..count {
             if i % 2 == 0 {
                 // File extension pattern
@@ -385,32 +393,34 @@ mod property_tests {
                 patterns.push(format!("{}/", dirs[i % dirs.len()]));
             }
         }
-        
+
         patterns
     }
-    
+
     // Helper function to generate test file paths
     fn generate_test_file_paths(count: usize) -> Vec<String> {
         let mut paths = Vec::new();
         let extensions = vec!["js", "rs", "py", "log", "tmp", "bak"];
         let dirs = vec!["src", "lib", "temp", "cache", "logs"];
-        
+
         for i in 0..count {
             let dir = &dirs[i % dirs.len()];
             let ext = &extensions[i % extensions.len()];
             paths.push(format!("{}/file{}.{}", dir, i, ext));
         }
-        
+
         paths
     }
-    
+
     // Helper function to check if a file should match given patterns
     fn should_match_patterns(file_path: &str, patterns: &[String]) -> bool {
         for pattern in patterns {
             if pattern.ends_with('/') {
                 // Directory pattern
                 let dir_name = pattern.trim_end_matches('/');
-                if file_path.starts_with(&format!("{}/", dir_name)) || file_path.contains(&format!("/{}/", dir_name)) {
+                if file_path.starts_with(&format!("{}/", dir_name))
+                    || file_path.contains(&format!("/{}/", dir_name))
+                {
                     return true;
                 }
             } else if pattern.starts_with("*.") {

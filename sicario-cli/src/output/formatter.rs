@@ -4,7 +4,9 @@
 
 use std::io::{self, IsTerminal, Write};
 
-use comfy_table::{modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Table, ContentArrangement, Cell};
+use comfy_table::{
+    modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, ContentArrangement, Table,
+};
 use indicatif::{ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 
@@ -27,7 +29,12 @@ pub struct FormatterConfig {
 
 impl FormatterConfig {
     /// Build config from CLI flags and TTY detection.
-    pub fn from_flags(no_color: bool, force_color: bool, max_lines: usize, max_chars: usize) -> Self {
+    pub fn from_flags(
+        no_color: bool,
+        force_color: bool,
+        max_lines: usize,
+        max_chars: usize,
+    ) -> Self {
         let is_tty = io::stdout().is_terminal();
         let color_enabled = if force_color {
             true
@@ -104,7 +111,7 @@ pub fn create_scan_progress(total_files: u64, config: &FormatterConfig) -> Progr
     let pb = ProgressBar::new(total_files);
     pb.set_style(
         ProgressStyle::with_template(
-            "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} files ({eta})"
+            "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} files ({eta})",
         )
         .unwrap()
         .progress_chars("█▓░"),
@@ -133,12 +140,23 @@ pub fn render_findings_table(
     }
 
     table.set_content_arrangement(ContentArrangement::Dynamic);
-    table.set_header(vec!["Severity", "Confidence", "Rule ID", "File", "Line", "Snippet"]);
+    table.set_header(vec![
+        "Severity",
+        "Confidence",
+        "Rule ID",
+        "File",
+        "Line",
+        "Snippet",
+    ]);
 
     for v in vulns {
         let sev_str = colored_severity(&v.severity, config.color_enabled);
         let confidence_str = "—".to_string(); // confidence scoring not yet wired
-        let snippet = truncate_snippet(&v.snippet, config.max_lines_per_finding, config.max_chars_per_line);
+        let snippet = truncate_snippet(
+            &v.snippet,
+            config.max_lines_per_finding,
+            config.max_chars_per_line,
+        );
         let file_str = v.file_path.display().to_string();
 
         table.add_row(vec![
@@ -162,7 +180,11 @@ pub fn render_finding_text(
     writer: &mut dyn Write,
 ) -> io::Result<()> {
     let sev = colored_severity(&v.severity, config.color_enabled);
-    let snippet = truncate_snippet(&v.snippet, config.max_lines_per_finding, config.max_chars_per_line);
+    let snippet = truncate_snippet(
+        &v.snippet,
+        config.max_lines_per_finding,
+        config.max_chars_per_line,
+    );
     writeln!(
         writer,
         "[{}] {} {}:{}",
@@ -186,8 +208,8 @@ pub fn render_extended_findings_table(
     config: &FormatterConfig,
     writer: &mut dyn Write,
 ) -> io::Result<()> {
-    use crate::confidence::ConfidenceScorer;
     use crate::confidence::scorer::ConfidenceScoring;
+    use crate::confidence::ConfidenceScorer;
 
     if findings.is_empty() {
         writeln!(writer, "No findings detected.")?;
@@ -204,12 +226,23 @@ pub fn render_extended_findings_table(
     }
 
     table.set_content_arrangement(ContentArrangement::Dynamic);
-    table.set_header(vec!["Severity", "Confidence", "Rule ID", "File", "Line", "Snippet"]);
+    table.set_header(vec![
+        "Severity",
+        "Confidence",
+        "Rule ID",
+        "File",
+        "Line",
+        "Snippet",
+    ]);
 
     for f in findings {
         let sev_str = colored_severity(&f.severity, config.color_enabled);
         let confidence_str = ConfidenceScorer::format_score(f.confidence_score);
-        let snippet = truncate_snippet(&f.snippet, config.max_lines_per_finding, config.max_chars_per_line);
+        let snippet = truncate_snippet(
+            &f.snippet,
+            config.max_lines_per_finding,
+            config.max_chars_per_line,
+        );
         let file_str = f.file_path.display().to_string();
 
         table.add_row(vec![
@@ -232,12 +265,16 @@ pub fn render_extended_finding_text(
     config: &FormatterConfig,
     writer: &mut dyn Write,
 ) -> io::Result<()> {
-    use crate::confidence::ConfidenceScorer;
     use crate::confidence::scorer::ConfidenceScoring;
+    use crate::confidence::ConfidenceScorer;
 
     let sev = colored_severity(&f.severity, config.color_enabled);
     let confidence = ConfidenceScorer::format_score(f.confidence_score);
-    let snippet = truncate_snippet(&f.snippet, config.max_lines_per_finding, config.max_chars_per_line);
+    let snippet = truncate_snippet(
+        &f.snippet,
+        config.max_lines_per_finding,
+        config.max_chars_per_line,
+    );
     writeln!(
         writer,
         "[{}] ({} confidence) {} {}:{}",
@@ -254,7 +291,11 @@ pub fn render_extended_finding_text(
 }
 
 /// Render diff output with green/red coloring for fix command.
-pub fn render_diff(diff_text: &str, config: &FormatterConfig, writer: &mut dyn Write) -> io::Result<()> {
+pub fn render_diff(
+    diff_text: &str,
+    config: &FormatterConfig,
+    writer: &mut dyn Write,
+) -> io::Result<()> {
     for line in diff_text.lines() {
         if !config.color_enabled {
             writeln!(writer, "{line}")?;

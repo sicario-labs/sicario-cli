@@ -6,18 +6,17 @@
 
 use anyhow::{Context, Result};
 use chrono::Utc;
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use serde::Deserialize;
 use std::io::{Cursor, Read};
 use std::sync::{Arc, Mutex};
 
-use crate::engine::Severity;
 use super::known_vulnerability::KnownVulnerability;
-use super::vuln_db::{severity_to_str, owasp_to_str};
+use super::vuln_db::{owasp_to_str, severity_to_str};
+use crate::engine::Severity;
 
 /// OSV.dev bulk export base URL
-const OSV_BASE_URL: &str =
-    "https://osv-vulnerabilities.storage.googleapis.com";
+const OSV_BASE_URL: &str = "https://osv-vulnerabilities.storage.googleapis.com";
 
 // ---------------------------------------------------------------------------
 // OSV JSON schema (subset we care about)
@@ -105,7 +104,8 @@ impl OsvImporter {
             );
         }
 
-        let bytes = response.bytes()
+        let bytes = response
+            .bytes()
             .with_context(|| format!("Failed to read OSV response body for {}", ecosystem))?;
 
         self.import_zip_bytes(&bytes, ecosystem)
@@ -114,13 +114,13 @@ impl OsvImporter {
     /// Parse a ZIP archive containing OSV JSON files and upsert each record.
     pub fn import_zip_bytes(&self, zip_bytes: &[u8], ecosystem: &str) -> Result<usize> {
         let cursor = Cursor::new(zip_bytes);
-        let mut archive = zip::ZipArchive::new(cursor)
-            .context("Failed to open OSV ZIP archive")?;
+        let mut archive = zip::ZipArchive::new(cursor).context("Failed to open OSV ZIP archive")?;
 
         let mut count = 0usize;
 
         for i in 0..archive.len() {
-            let mut file = archive.by_index(i)
+            let mut file = archive
+                .by_index(i)
                 .with_context(|| format!("Failed to read ZIP entry {}", i))?;
 
             if !file.name().ends_with(".json") {
@@ -145,8 +145,8 @@ impl OsvImporter {
     /// Parse a single OSV JSON string and upsert into the database.
     /// Returns 1 if the record was new/updated, 0 if skipped.
     pub fn import_osv_json(&self, json_str: &str, _ecosystem: &str) -> Result<usize> {
-        let record: OsvRecord = serde_json::from_str(json_str)
-            .context("Failed to parse OSV JSON")?;
+        let record: OsvRecord =
+            serde_json::from_str(json_str).context("Failed to parse OSV JSON")?;
 
         let mut count = 0usize;
 
@@ -171,19 +171,17 @@ impl OsvImporter {
             return Ok(true); // No modified field → always upsert
         };
 
-        let conn = self.conn.lock().map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
 
         // Check existing last_synced_at for this record
         let existing: rusqlite::Result<String> = conn.query_row(
             "SELECT last_synced_at FROM known_vulnerabilities
              WHERE package_name = ?1 AND ecosystem = ?2
              AND (cve_id = ?3 OR ghsa_id = ?4)",
-            params![
-                kv.package_name,
-                kv.ecosystem,
-                kv.cve_id,
-                kv.ghsa_id,
-            ],
+            params![kv.package_name, kv.ecosystem, kv.cve_id, kv.ghsa_id,],
             |row| row.get(0),
         );
 
@@ -198,7 +196,10 @@ impl OsvImporter {
     }
 
     fn upsert_kv(&self, kv: &KnownVulnerability) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
 
         let versions_json = serde_json::to_string(&kv.vulnerable_versions)?;
         let severity_str = severity_to_str(kv.severity);
@@ -240,8 +241,8 @@ fn osv_record_to_known_vulnerability(
     let mut cve_id: Option<String> = None;
     let mut ghsa_id: Option<String> = None;
 
-    let all_ids = std::iter::once(record.id.as_str())
-        .chain(record.aliases.iter().map(String::as_str));
+    let all_ids =
+        std::iter::once(record.id.as_str()).chain(record.aliases.iter().map(String::as_str));
 
     for id in all_ids {
         if id.starts_with("CVE-") && cve_id.is_none() {
@@ -356,10 +357,10 @@ fn cvss_score_to_severity(score: f32) -> Severity {
 
 #[cfg(test)]
 mod tests {
+    use super::super::known_vulnerability::{CREATE_METADATA_TABLE_SQL, CREATE_TABLE_SQL};
     use super::*;
     use rusqlite::Connection;
     use std::sync::{Arc, Mutex};
-    use super::super::known_vulnerability::{CREATE_TABLE_SQL, CREATE_METADATA_TABLE_SQL};
 
     fn make_conn() -> Arc<Mutex<Connection>> {
         let conn = Connection::open_in_memory().unwrap();
@@ -399,11 +400,13 @@ mod tests {
 
         // Verify the record was inserted
         let locked = conn.lock().unwrap();
-        let name: String = locked.query_row(
-            "SELECT package_name FROM known_vulnerabilities WHERE package_name = 'lodash'",
-            [],
-            |row| row.get(0),
-        ).unwrap();
+        let name: String = locked
+            .query_row(
+                "SELECT package_name FROM known_vulnerabilities WHERE package_name = 'lodash'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
         assert_eq!(name, "lodash");
     }
 
@@ -414,11 +417,13 @@ mod tests {
         importer.import_osv_json(SAMPLE_OSV_JSON, "npm").unwrap();
 
         let locked = conn.lock().unwrap();
-        let cve_id: Option<String> = locked.query_row(
-            "SELECT cve_id FROM known_vulnerabilities WHERE package_name = 'lodash'",
-            [],
-            |row| row.get(0),
-        ).unwrap();
+        let cve_id: Option<String> = locked
+            .query_row(
+                "SELECT cve_id FROM known_vulnerabilities WHERE package_name = 'lodash'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
         assert_eq!(cve_id, Some("CVE-2021-23337".to_string()));
     }
 

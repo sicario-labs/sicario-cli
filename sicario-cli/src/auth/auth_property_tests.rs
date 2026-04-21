@@ -11,8 +11,7 @@ use crate::auth::{DeviceCodeResponse, TokenResponse};
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /// Allowed characters for a PKCE code_verifier per RFC 7636 §4.1
-const VERIFIER_CHARS: &str =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+const VERIFIER_CHARS: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
 
 /// Compute the expected code_challenge independently of the production code.
 fn expected_challenge(verifier: &str) -> String {
@@ -25,11 +24,8 @@ fn expected_challenge(verifier: &str) -> String {
 /// Strategy that generates valid code_verifier strings (43–128 chars from the
 /// RFC 7636 §4.1 unreserved character set).
 fn verifier_strategy() -> impl Strategy<Value = String> {
-    prop::collection::vec(
-        prop::sample::select(VERIFIER_CHARS.as_bytes()),
-        43..=128,
-    )
-    .prop_map(|bytes| bytes.iter().map(|&b| b as char).collect())
+    prop::collection::vec(prop::sample::select(VERIFIER_CHARS.as_bytes()), 43..=128)
+        .prop_map(|bytes| bytes.iter().map(|&b| b as char).collect())
 }
 
 // ── Property 19: OAuth Device Flow compliance ─────────────────────────────────

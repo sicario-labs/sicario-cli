@@ -7,12 +7,12 @@
 //! Requirements: 8.1, 8.2, 8.4
 
 pub mod client;
-pub mod telemetry;
 pub mod ruleset;
+pub mod telemetry;
 
 #[cfg(test)]
 mod telemetry_property_tests;
 
-pub use client::{ConvexClient, ConvexConfig, ConnectionState};
-pub use telemetry::{TelemetryEvent, TelemetryAction};
+pub use client::{ConnectionState, ConvexClient, ConvexConfig};
 pub use ruleset::RulesetUpdate;
+pub use telemetry::{TelemetryAction, TelemetryEvent};

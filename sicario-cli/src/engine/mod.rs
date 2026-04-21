@@ -6,16 +6,16 @@ use anyhow::Result;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
+pub mod reachability;
 pub mod sast_engine;
+pub mod sca;
 pub mod security_rule;
 pub mod vulnerability;
-pub mod reachability;
-pub mod sca;
 
 pub use sast_engine::SastEngine;
-pub use security_rule::{SecurityRule, QueryPattern, RuleTestCase, TestExpectation};
-pub use vulnerability::{Vulnerability, Severity, OwaspCategory, Finding, TraceStep};
 pub use sca::{KnownVulnerability, VulnerabilityDatabaseManager};
+pub use security_rule::{QueryPattern, RuleTestCase, SecurityRule, TestExpectation};
+pub use vulnerability::{Finding, OwaspCategory, Severity, TraceStep, Vulnerability};
 
 #[cfg(test)]
 mod tests {

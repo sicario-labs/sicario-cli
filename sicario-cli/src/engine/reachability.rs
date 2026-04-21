@@ -97,7 +97,9 @@ impl CallGraph {
 
     /// Look up a function by file path and name
     pub fn find_function(&self, file_path: &Path, name: &str) -> Option<FunctionId> {
-        self.name_index.get(&(file_path.to_path_buf(), name.to_string())).copied()
+        self.name_index
+            .get(&(file_path.to_path_buf(), name.to_string()))
+            .copied()
     }
 
     /// Return all taint source function IDs
@@ -294,11 +296,7 @@ fn extract_functions_from_file(
 }
 
 /// Find the function node that encloses a given line number in a file.
-fn find_enclosing_function(
-    path: &Path,
-    line: usize,
-    graph: &CallGraph,
-) -> Option<FunctionId> {
+fn find_enclosing_function(path: &Path, line: usize, graph: &CallGraph) -> Option<FunctionId> {
     // Pick the function whose definition line is closest to (but ≤) the call line
     graph
         .nodes
@@ -378,7 +376,10 @@ fn is_framework_taint_text(text: &str, language: Language) -> bool {
         }
         Language::JavaScript | Language::TypeScript => {
             // process.env or HTTP client calls
-            matches!(text, "process" | "fetch" | "axios" | "request" | "got" | "superagent" | "http" | "https")
+            matches!(
+                text,
+                "process" | "fetch" | "axios" | "request" | "got" | "superagent" | "http" | "https"
+            )
         }
         _ => false,
     }
@@ -409,18 +410,10 @@ fn function_definition_query(language: Language) -> &'static str {
   (method_definition name: (property_identifier) @name)
 ]"#
         }
-        Language::Python => {
-            r#"(function_definition name: (identifier) @name)"#
-        }
-        Language::Rust => {
-            r#"(function_item name: (identifier) @name)"#
-        }
-        Language::Go => {
-            r#"(function_declaration name: (identifier) @name)"#
-        }
-        Language::Java => {
-            r#"(method_declaration name: (identifier) @name)"#
-        }
+        Language::Python => r#"(function_definition name: (identifier) @name)"#,
+        Language::Rust => r#"(function_item name: (identifier) @name)"#,
+        Language::Go => r#"(function_declaration name: (identifier) @name)"#,
+        Language::Java => r#"(method_declaration name: (identifier) @name)"#,
     }
 }
 
@@ -430,18 +423,10 @@ fn call_expression_query(language: Language) -> &'static str {
         Language::JavaScript | Language::TypeScript => {
             r#"(call_expression function: (identifier) @callee)"#
         }
-        Language::Python => {
-            r#"(call function: (identifier) @callee)"#
-        }
-        Language::Rust => {
-            r#"(call_expression function: (identifier) @callee)"#
-        }
-        Language::Go => {
-            r#"(call_expression function: (identifier) @callee)"#
-        }
-        Language::Java => {
-            r#"(method_invocation name: (identifier) @callee)"#
-        }
+        Language::Python => r#"(call function: (identifier) @callee)"#,
+        Language::Rust => r#"(call_expression function: (identifier) @callee)"#,
+        Language::Go => r#"(call_expression function: (identifier) @callee)"#,
+        Language::Java => r#"(method_invocation name: (identifier) @callee)"#,
     }
 }
 
@@ -526,8 +511,7 @@ impl ReachabilityAnalyzer {
                         continue;
                     }
                     let call_line = callee_capture.node.start_position().row + 1;
-                    let caller_id =
-                        find_enclosing_function(path, call_line, &self.call_graph);
+                    let caller_id = find_enclosing_function(path, call_line, &self.call_graph);
                     // Search all files for the callee
                     let callee_id = self
                         .call_graph
@@ -761,7 +745,11 @@ function handler(req) {
         let mut found_names: Vec<String> = Vec::new();
         for m in cursor.matches(&query, tree.root_node(), source.as_bytes()) {
             for cap in m.captures {
-                let text = cap.node.utf8_text(source.as_bytes()).unwrap_or("").to_string();
+                let text = cap
+                    .node
+                    .utf8_text(source.as_bytes())
+                    .unwrap_or("")
+                    .to_string();
                 found_names.push(text);
             }
         }
@@ -796,11 +784,24 @@ function process(input) {
 
         // Both functions should be in the graph
         assert!(
-            analyzer.call_graph.nodes.values().any(|n| n.name == "handler"),
+            analyzer
+                .call_graph
+                .nodes
+                .values()
+                .any(|n| n.name == "handler"),
             "Expected 'handler' in call graph, found: {:?}",
-            analyzer.call_graph.nodes.values().map(|n| &n.name).collect::<Vec<_>>()
+            analyzer
+                .call_graph
+                .nodes
+                .values()
+                .map(|n| &n.name)
+                .collect::<Vec<_>>()
         );
-        assert!(analyzer.call_graph.nodes.values().any(|n| n.name == "process"));
+        assert!(analyzer
+            .call_graph
+            .nodes
+            .values()
+            .any(|n| n.name == "process"));
     }
 
     #[test]

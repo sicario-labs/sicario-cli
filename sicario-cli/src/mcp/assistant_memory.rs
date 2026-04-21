@@ -92,8 +92,8 @@ impl AssistantMemory {
 
     /// Create an in-memory database (useful for tests).
     pub fn in_memory() -> Result<Self> {
-        let conn = Connection::open_in_memory()
-            .context("Failed to open in-memory Assistant Memory DB")?;
+        let conn =
+            Connection::open_in_memory().context("Failed to open in-memory Assistant Memory DB")?;
 
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS triage_decisions (
@@ -191,11 +191,9 @@ impl AssistantMemory {
     /// Return the total number of stored triage decisions.
     pub fn count(&self) -> Result<usize> {
         let conn = self.conn.lock().unwrap();
-        let n: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM triage_decisions",
-            [],
-            |row| row.get(0),
-        )?;
+        let n: i64 = conn.query_row("SELECT COUNT(*) FROM triage_decisions", [], |row| {
+            row.get(0)
+        })?;
         Ok(n as usize)
     }
 
@@ -211,10 +209,7 @@ impl AssistantMemory {
 /// - Trim leading/trailing whitespace
 /// - Collapse internal whitespace runs to a single space
 fn normalise_snippet(snippet: &str) -> String {
-    snippet
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
+    snippet.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 #[cfg(test)]
@@ -228,14 +223,20 @@ mod tests {
     #[test]
     fn test_record_and_query_approved() {
         let m = mem();
-        m.record_decision("sql-injection", "SELECT * FROM users WHERE id = 'x'", TriageDecision::Approved).unwrap();
+        m.record_decision(
+            "sql-injection",
+            "SELECT * FROM users WHERE id = 'x'",
+            TriageDecision::Approved,
+        )
+        .unwrap();
         assert!(m.is_approved("sql-injection", "SELECT * FROM users WHERE id = 'x'"));
     }
 
     #[test]
     fn test_confirmed_is_not_approved() {
         let m = mem();
-        m.record_decision("xss", "innerHTML = userInput", TriageDecision::Confirmed).unwrap();
+        m.record_decision("xss", "innerHTML = userInput", TriageDecision::Confirmed)
+            .unwrap();
         assert!(!m.is_approved("xss", "innerHTML = userInput"));
     }
 
@@ -248,18 +249,21 @@ mod tests {
     #[test]
     fn test_upsert_updates_decision() {
         let m = mem();
-        m.record_decision("rule-1", "code snippet", TriageDecision::Confirmed).unwrap();
+        m.record_decision("rule-1", "code snippet", TriageDecision::Confirmed)
+            .unwrap();
         assert!(!m.is_approved("rule-1", "code snippet"));
 
         // Update to approved
-        m.record_decision("rule-1", "code snippet", TriageDecision::Approved).unwrap();
+        m.record_decision("rule-1", "code snippet", TriageDecision::Approved)
+            .unwrap();
         assert!(m.is_approved("rule-1", "code snippet"));
     }
 
     #[test]
     fn test_whitespace_normalisation() {
         let m = mem();
-        m.record_decision("rule-1", "  foo   bar  ", TriageDecision::Approved).unwrap();
+        m.record_decision("rule-1", "  foo   bar  ", TriageDecision::Approved)
+            .unwrap();
         // Different whitespace, same normalised form
         assert!(m.is_approved("rule-1", "foo bar"));
         assert!(m.is_approved("rule-1", "  foo   bar  "));
@@ -269,15 +273,18 @@ mod tests {
     fn test_count() {
         let m = mem();
         assert_eq!(m.count().unwrap(), 0);
-        m.record_decision("r1", "s1", TriageDecision::Approved).unwrap();
-        m.record_decision("r2", "s2", TriageDecision::Confirmed).unwrap();
+        m.record_decision("r1", "s1", TriageDecision::Approved)
+            .unwrap();
+        m.record_decision("r2", "s2", TriageDecision::Confirmed)
+            .unwrap();
         assert_eq!(m.count().unwrap(), 2);
     }
 
     #[test]
     fn test_clear() {
         let m = mem();
-        m.record_decision("r1", "s1", TriageDecision::Approved).unwrap();
+        m.record_decision("r1", "s1", TriageDecision::Approved)
+            .unwrap();
         m.clear().unwrap();
         assert_eq!(m.count().unwrap(), 0);
     }
@@ -285,9 +292,12 @@ mod tests {
     #[test]
     fn test_get_decisions_for_rule() {
         let m = mem();
-        m.record_decision("rule-x", "snippet-a", TriageDecision::Approved).unwrap();
-        m.record_decision("rule-x", "snippet-b", TriageDecision::Confirmed).unwrap();
-        m.record_decision("rule-y", "snippet-c", TriageDecision::Approved).unwrap();
+        m.record_decision("rule-x", "snippet-a", TriageDecision::Approved)
+            .unwrap();
+        m.record_decision("rule-x", "snippet-b", TriageDecision::Confirmed)
+            .unwrap();
+        m.record_decision("rule-y", "snippet-c", TriageDecision::Approved)
+            .unwrap();
 
         let records = m.get_decisions_for_rule("rule-x").unwrap();
         assert_eq!(records.len(), 2);
@@ -297,8 +307,10 @@ mod tests {
     #[test]
     fn test_different_rules_same_snippet_independent() {
         let m = mem();
-        m.record_decision("rule-a", "snippet", TriageDecision::Approved).unwrap();
-        m.record_decision("rule-b", "snippet", TriageDecision::Confirmed).unwrap();
+        m.record_decision("rule-a", "snippet", TriageDecision::Approved)
+            .unwrap();
+        m.record_decision("rule-b", "snippet", TriageDecision::Confirmed)
+            .unwrap();
 
         assert!(m.is_approved("rule-a", "snippet"));
         assert!(!m.is_approved("rule-b", "snippet"));

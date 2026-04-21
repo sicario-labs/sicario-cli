@@ -101,7 +101,10 @@ fn count_rules_in_files(files: &[PathBuf]) -> usize {
     for path in files {
         if let Ok(content) = std::fs::read_to_string(path) {
             // Each rule starts with a `- id:` line; count those
-            total += content.lines().filter(|l| l.trim_start().starts_with("- id:")).count();
+            total += content
+                .lines()
+                .filter(|l| l.trim_start().starts_with("- id:"))
+                .count();
         }
     }
     total
@@ -114,7 +117,11 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
-    fn make_tech(languages: &[&str], package_managers: &[&str], frameworks: &[&str]) -> DetectedTechnologies {
+    fn make_tech(
+        languages: &[&str],
+        package_managers: &[&str],
+        frameworks: &[&str],
+    ) -> DetectedTechnologies {
         DetectedTechnologies {
             languages: languages.iter().map(|s| s.to_string()).collect(),
             package_managers: package_managers.iter().map(|s| s.to_string()).collect(),
@@ -142,7 +149,10 @@ mod tests {
         let tech = make_tech(&["JavaScript", "Python"], &[], &[]);
         let config = RuleConfigurator::configure(&tech, dir.path());
 
-        assert!(config.rule_files.iter().any(|f| f.ends_with("javascript.yaml")));
+        assert!(config
+            .rule_files
+            .iter()
+            .any(|f| f.ends_with("javascript.yaml")));
         assert!(config.rule_files.iter().any(|f| f.ends_with("python.yaml")));
         assert_eq!(config.rule_count, 5);
     }
@@ -156,7 +166,10 @@ mod tests {
         let tech = make_tech(&["JavaScript"], &[], &[]);
         let config = RuleConfigurator::configure(&tech, dir.path());
 
-        assert!(config.rule_files.iter().any(|f| f.ends_with("javascript.yaml")));
+        assert!(config
+            .rule_files
+            .iter()
+            .any(|f| f.ends_with("javascript.yaml")));
         assert!(!config.rule_files.iter().any(|f| f.ends_with("java.yaml")));
     }
 
@@ -169,7 +182,10 @@ mod tests {
         let tech = make_tech(&["JavaScript"], &[], &["Next.js"]);
         let config = RuleConfigurator::configure(&tech, dir.path());
 
-        assert!(config.rule_files.iter().any(|f| f.ends_with("next-js.yaml")));
+        assert!(config
+            .rule_files
+            .iter()
+            .any(|f| f.ends_with("next-js.yaml")));
         assert!(config.selected_categories.contains(&"Next.js".to_string()));
     }
 
@@ -186,7 +202,11 @@ mod tests {
 
     #[test]
     fn test_estimate_default_rule_count() {
-        let tech = make_tech(&["JavaScript", "TypeScript"], &["npm"], &["React", "Next.js"]);
+        let tech = make_tech(
+            &["JavaScript", "TypeScript"],
+            &["npm"],
+            &["React", "Next.js"],
+        );
         let count = RuleConfigurator::estimate_default_rule_count(&tech);
         // 5 base + 2*8 lang + 2*6 fw = 5 + 16 + 12 = 33
         assert_eq!(count, 33);
@@ -200,8 +220,13 @@ mod tests {
         let tech = make_tech(&[], &[], &[]);
         let config = RuleConfigurator::configure(&tech, dir.path());
 
-        assert!(config.rule_files.iter().any(|f| f.ends_with("universal.yaml")));
-        assert!(config.selected_categories.contains(&"Universal".to_string()));
+        assert!(config
+            .rule_files
+            .iter()
+            .any(|f| f.ends_with("universal.yaml")));
+        assert!(config
+            .selected_categories
+            .contains(&"Universal".to_string()));
         assert_eq!(config.rule_count, 10);
     }
 }

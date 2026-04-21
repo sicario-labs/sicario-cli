@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 use crate::engine::{Severity, Vulnerability};
-use crate::tui::app::{AppState, TuiMessage, create_tui_channel};
+use crate::tui::app::{create_tui_channel, AppState, TuiMessage};
 
 // ── Generators ────────────────────────────────────────────────────────────────
 
@@ -32,19 +32,21 @@ fn arb_vulnerability() -> impl Strategy<Value = Vulnerability> {
         "[a-zA-Z0-9 ]{5,40}",
         arb_severity(),
     )
-        .prop_map(|(rule_id, file, line, col, snippet, severity)| Vulnerability {
-            id: Uuid::new_v4(),
-            rule_id,
-            file_path: PathBuf::from(file),
-            line,
-            column: col,
-            snippet,
-            severity,
-            reachable: false,
-            cloud_exposed: None,
-            cwe_id: None,
-            owasp_category: None,
-        })
+        .prop_map(
+            |(rule_id, file, line, col, snippet, severity)| Vulnerability {
+                id: Uuid::new_v4(),
+                rule_id,
+                file_path: PathBuf::from(file),
+                line,
+                column: col,
+                snippet,
+                severity,
+                reachable: false,
+                cloud_exposed: None,
+                cwe_id: None,
+                owasp_category: None,
+            },
+        )
 }
 
 // ── Simulated input event types ───────────────────────────────────────────────
@@ -81,16 +83,26 @@ fn apply_key(state: AppState, key: &SimKey) -> (AppState, bool) {
             state
         }
         SimKey::Down => match state {
-            AppState::Results { vulnerabilities, selected } if !vulnerabilities.is_empty() => {
+            AppState::Results {
+                vulnerabilities,
+                selected,
+            } if !vulnerabilities.is_empty() => {
                 let next = (selected + 1).min(vulnerabilities.len() - 1);
-                AppState::Results { vulnerabilities, selected: next }
+                AppState::Results {
+                    vulnerabilities,
+                    selected: next,
+                }
             }
             other => other,
         },
         SimKey::Up => match state {
-            AppState::Results { vulnerabilities, selected } => {
-                AppState::Results { vulnerabilities, selected: selected.saturating_sub(1) }
-            }
+            AppState::Results {
+                vulnerabilities,
+                selected,
+            } => AppState::Results {
+                vulnerabilities,
+                selected: selected.saturating_sub(1),
+            },
             other => other,
         },
         SimKey::Enter | SimKey::Other => state,

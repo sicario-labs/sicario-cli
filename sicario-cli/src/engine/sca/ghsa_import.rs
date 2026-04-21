@@ -6,13 +6,13 @@
 
 use anyhow::{Context, Result};
 use chrono::Utc;
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
-use crate::engine::Severity;
 use super::known_vulnerability::KnownVulnerability;
-use super::vuln_db::{severity_to_str, owasp_to_str};
+use super::vuln_db::{owasp_to_str, severity_to_str};
+use crate::engine::Severity;
 
 const GHSA_API_URL: &str = "https://api.github.com/graphql";
 
@@ -205,7 +205,10 @@ impl GhsaImporter {
     }
 
     fn upsert_kv(&self, kv: &KnownVulnerability) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
 
         let versions_json = serde_json::to_string(&kv.vulnerable_versions)?;
         let severity_str = severity_to_str(kv.severity);
@@ -270,9 +273,7 @@ fn ghsa_node_to_known_vulnerability(node: GhsaNode) -> Result<KnownVulnerability
         .map(parse_ghsa_version_range)
         .unwrap_or_default();
 
-    let patched_version = node
-        .first_patched_version
-        .map(|v| v.identifier);
+    let patched_version = node.first_patched_version.map(|v| v.identifier);
 
     let severity = ghsa_severity_to_enum(node.severity.as_deref());
 

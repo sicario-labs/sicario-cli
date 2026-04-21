@@ -2,8 +2,8 @@
 
 use anyhow::Result;
 use crossterm::event::{Event, KeyCode, KeyEvent};
-use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
+use ratatui::Terminal;
 use std::io::Stdout;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
@@ -185,18 +185,18 @@ impl SicarioTui {
 
     /// Drain all pending messages from the worker channel without blocking
     fn drain_messages(&mut self) {
-        loop {
-            match self.rx.try_recv() {
-                Ok(msg) => self.process_message(msg),
-                Err(_) => break,
-            }
+        while let Ok(msg) = self.rx.try_recv() {
+            self.process_message(msg);
         }
     }
 
     /// Process a single TuiMessage and update application state accordingly
     pub fn process_message(&mut self, msg: TuiMessage) {
         match msg {
-            TuiMessage::ScanProgress { files_scanned, total } => {
+            TuiMessage::ScanProgress {
+                files_scanned,
+                total,
+            } => {
                 let progress = if total > 0 {
                     files_scanned as f64 / total as f64
                 } else {
@@ -219,7 +219,11 @@ impl SicarioTui {
                 };
             }
             TuiMessage::PatchGenerated(patch) => {
-                if let AppState::Results { vulnerabilities, selected } = &self.state {
+                if let AppState::Results {
+                    vulnerabilities,
+                    selected,
+                } = &self.state
+                {
                     if let Some(vuln) = vulnerabilities.get(*selected).cloned() {
                         self.state = AppState::PatchPreview {
                             vulnerability: vuln,
@@ -227,7 +231,8 @@ impl SicarioTui {
                         };
                     }
                 }
-            }            TuiMessage::PatchApplied => {
+            }
+            TuiMessage::PatchApplied => {
                 // Return to Results state after a successful patch application
                 let vulns = std::mem::take(&mut self.vulnerabilities);
                 self.state = AppState::Results {
@@ -245,7 +250,10 @@ impl SicarioTui {
             TuiMessage::DbSyncComplete { .. } | TuiMessage::DbSyncError(_) => {
                 // DB sync status — surfaced in future tasks
             }
-            TuiMessage::AuthPending { verification_uri, user_code } => {
+            TuiMessage::AuthPending {
+                verification_uri,
+                user_code,
+            } => {
                 self.state = AppState::AuthPending {
                     verification_uri,
                     user_code,
@@ -279,7 +287,10 @@ impl SicarioTui {
                     selected: 0,
                 };
             }
-            TuiMessage::OnboardingPatchApplied { file_path, vulnerabilities_fixed } => {
+            TuiMessage::OnboardingPatchApplied {
+                file_path,
+                vulnerabilities_fixed,
+            } => {
                 self.state = AppState::OnboardingSuccess {
                     file_path,
                     vulnerabilities_fixed,
@@ -293,7 +304,10 @@ impl SicarioTui {
         if let Event::Key(KeyEvent { code, .. }) = event {
             match &self.state {
                 // ── PatchPreview: Enter applies, Esc cancels ──────────────────
-                AppState::PatchPreview { vulnerability, patch } => {
+                AppState::PatchPreview {
+                    vulnerability,
+                    patch,
+                } => {
                     let vuln = vulnerability.clone();
                     let patch_str = patch.clone();
                     match code {
@@ -301,21 +315,25 @@ impl SicarioTui {
                             // Apply the patch via a worker thread so the TUI stays responsive
                             if let Some(tx) = &self.patch_tx {
                                 let tx = tx.clone();
-                                let project_root = vuln.file_path
+                                let project_root = vuln
+                                    .file_path
                                     .parent()
                                     .unwrap_or(std::path::Path::new("."))
                                     .to_path_buf();
                                 let vuln_clone = vuln.clone();
                                 let patch_content = patch_str.clone();
                                 std::thread::spawn(move || {
-                                    use crate::remediation::RemediationEngine;
                                     use crate::remediation::Patch;
+                                    use crate::remediation::RemediationEngine;
                                     match RemediationEngine::new(&project_root) {
                                         Ok(engine) => {
                                             // Reconstruct a Patch from the preview data
-                                            let original = std::fs::read_to_string(&vuln_clone.file_path)
-                                                .unwrap_or_default();
-                                            let backup = engine.backup_manager().backup_file(&vuln_clone.file_path)
+                                            let original =
+                                                std::fs::read_to_string(&vuln_clone.file_path)
+                                                    .unwrap_or_default();
+                                            let backup = engine
+                                                .backup_manager()
+                                                .backup_file(&vuln_clone.file_path)
                                                 .unwrap_or_else(|_| vuln_clone.file_path.clone());
                                             let p = Patch::new(
                                                 vuln_clone.file_path.clone(),
@@ -325,8 +343,14 @@ impl SicarioTui {
                                                 backup,
                                             );
                                             match engine.apply_patch(&p) {
-                                                Ok(_) => { let _ = tx.send(TuiMessage::PatchApplied); }
-                                                Err(e) => { let _ = tx.send(TuiMessage::PatchFailed(e.to_string())); }
+                                                Ok(_) => {
+                                                    let _ = tx.send(TuiMessage::PatchApplied);
+                                                }
+                                                Err(e) => {
+                                                    let _ = tx.send(TuiMessage::PatchFailed(
+                                                        e.to_string(),
+                                                    ));
+                                                }
                                             }
                                         }
                                         Err(e) => {
@@ -356,30 +380,33 @@ impl SicarioTui {
                     KeyCode::Char('q') | KeyCode::Esc => {
                         self.should_quit = true;
                     }
-                    KeyCode::Down | KeyCode::Char('j') => {
-                        match &mut self.state {
-                            AppState::Results { vulnerabilities, selected } => {
-                                if !vulnerabilities.is_empty() {
-                                    *selected = (*selected + 1).min(vulnerabilities.len() - 1);
-                                }
+                    KeyCode::Down | KeyCode::Char('j') => match &mut self.state {
+                        AppState::Results {
+                            vulnerabilities,
+                            selected,
+                        } => {
+                            if !vulnerabilities.is_empty() {
+                                *selected = (*selected + 1).min(vulnerabilities.len() - 1);
                             }
-                            AppState::OwaspResults { selected_category, .. } => {
-                                *selected_category = (*selected_category + 1).min(9);
-                            }
-                            _ => {}
                         }
-                    }
-                    KeyCode::Up | KeyCode::Char('k') => {
-                        match &mut self.state {
-                            AppState::Results { selected, .. } => {
-                                *selected = selected.saturating_sub(1);
-                            }
-                            AppState::OwaspResults { selected_category, .. } => {
-                                *selected_category = selected_category.saturating_sub(1);
-                            }
-                            _ => {}
+                        AppState::OwaspResults {
+                            selected_category, ..
+                        } => {
+                            *selected_category = (*selected_category + 1).min(9);
                         }
-                    }
+                        _ => {}
+                    },
+                    KeyCode::Up | KeyCode::Char('k') => match &mut self.state {
+                        AppState::Results { selected, .. } => {
+                            *selected = selected.saturating_sub(1);
+                        }
+                        AppState::OwaspResults {
+                            selected_category, ..
+                        } => {
+                            *selected_category = selected_category.saturating_sub(1);
+                        }
+                        _ => {}
+                    },
                     KeyCode::Enter => {
                         // In Onboarding state, Enter starts the scan
                         if matches!(self.state, AppState::Onboarding { .. }) {
@@ -392,13 +419,18 @@ impl SicarioTui {
                             };
                         }
                         // In Results state, Enter generates a patch for the selected vuln
-                        if let AppState::Results { vulnerabilities, selected } = &self.state {
+                        if let AppState::Results {
+                            vulnerabilities,
+                            selected,
+                        } = &self.state
+                        {
                             if let Some(vuln) = vulnerabilities.get(*selected).cloned() {
                                 if let Some(tx) = self.patch_tx.clone() {
                                     let vuln_clone = vuln.clone();
                                     std::thread::spawn(move || {
                                         use crate::remediation::RemediationEngine;
-                                        let project_root = vuln_clone.file_path
+                                        let project_root = vuln_clone
+                                            .file_path
                                             .parent()
                                             .unwrap_or(std::path::Path::new("."))
                                             .to_path_buf();
@@ -406,15 +438,21 @@ impl SicarioTui {
                                             Ok(engine) => {
                                                 match engine.generate_patch(&vuln_clone) {
                                                     Ok(patch) => {
-                                                        let _ = tx.send(TuiMessage::PatchGenerated(patch.diff.clone()));
+                                                        let _ =
+                                                            tx.send(TuiMessage::PatchGenerated(
+                                                                patch.diff.clone(),
+                                                            ));
                                                     }
                                                     Err(e) => {
-                                                        let _ = tx.send(TuiMessage::PatchFailed(e.to_string()));
+                                                        let _ = tx.send(TuiMessage::PatchFailed(
+                                                            e.to_string(),
+                                                        ));
                                                     }
                                                 }
                                             }
                                             Err(e) => {
-                                                let _ = tx.send(TuiMessage::PatchFailed(e.to_string()));
+                                                let _ =
+                                                    tx.send(TuiMessage::PatchFailed(e.to_string()));
                                             }
                                         }
                                     });
@@ -435,14 +473,18 @@ impl SicarioTui {
                     KeyCode::Char('o') => {
                         // 'o' toggles OWASP grouped view from Results
                         match &self.state {
-                            AppState::Results { vulnerabilities, .. } => {
+                            AppState::Results {
+                                vulnerabilities, ..
+                            } => {
                                 let vulns = vulnerabilities.clone();
                                 self.state = AppState::OwaspResults {
                                     vulnerabilities: vulns,
                                     selected_category: 0,
                                 };
                             }
-                            AppState::OwaspResults { vulnerabilities, .. } => {
+                            AppState::OwaspResults {
+                                vulnerabilities, ..
+                            } => {
                                 let vulns = vulnerabilities.clone();
                                 self.state = AppState::Results {
                                     vulnerabilities: vulns,
@@ -516,9 +558,9 @@ impl SicarioTui {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::{Severity, Vulnerability};
     use std::path::PathBuf;
     use uuid::Uuid;
-    use crate::engine::{Vulnerability, Severity};
 
     fn make_vuln() -> Vulnerability {
         Vulnerability {
@@ -570,20 +612,38 @@ mod tests {
         // Build a minimal SicarioTui without a real terminal
         // We test process_message directly via a helper struct
         let mut state = AppState::Welcome;
-        let msg = TuiMessage::ScanProgress { files_scanned: 3, total: 10 };
+        let msg = TuiMessage::ScanProgress {
+            files_scanned: 3,
+            total: 10,
+        };
         // Simulate what process_message does
-        if let TuiMessage::ScanProgress { files_scanned, total } = msg {
+        if let TuiMessage::ScanProgress {
+            files_scanned,
+            total,
+        } = msg
+        {
             let progress = files_scanned as f64 / total as f64;
-            state = AppState::Scanning { progress, files_scanned, total_files: total };
+            state = AppState::Scanning {
+                progress,
+                files_scanned,
+                total_files: total,
+            };
         }
-        assert!(matches!(state, AppState::Scanning { files_scanned: 3, .. }));
+        assert!(matches!(
+            state,
+            AppState::Scanning {
+                files_scanned: 3,
+                ..
+            }
+        ));
     }
 
     #[test]
     fn test_process_vulnerability_found_then_complete() {
         let (tx, rx) = create_tui_channel();
         let vuln = make_vuln();
-        tx.send(TuiMessage::VulnerabilityFound(vuln.clone())).unwrap();
+        tx.send(TuiMessage::VulnerabilityFound(vuln.clone()))
+            .unwrap();
         tx.send(TuiMessage::ScanComplete).unwrap();
 
         let mut vulns: Vec<Vulnerability> = Vec::new();
@@ -603,7 +663,10 @@ mod tests {
             }
         }
 
-        if let AppState::Results { vulnerabilities, .. } = state {
+        if let AppState::Results {
+            vulnerabilities, ..
+        } = state
+        {
             assert_eq!(vulnerabilities.len(), 1);
             assert_eq!(vulnerabilities[0].rule_id, "test-rule");
         } else {
@@ -612,9 +675,17 @@ mod tests {
     }
 
     #[test]
-    fn test_appstate_variants_exist() {        let _welcome = AppState::Welcome;
-        let _scanning = AppState::Scanning { progress: 0.5, files_scanned: 5, total_files: 10 };
-        let _results = AppState::Results { vulnerabilities: vec![], selected: 0 };
+    fn test_appstate_variants_exist() {
+        let _welcome = AppState::Welcome;
+        let _scanning = AppState::Scanning {
+            progress: 0.5,
+            files_scanned: 5,
+            total_files: 10,
+        };
+        let _results = AppState::Results {
+            vulnerabilities: vec![],
+            selected: 0,
+        };
         let _preview = AppState::PatchPreview {
             vulnerability: make_vuln(),
             patch: "diff".to_string(),

@@ -44,10 +44,8 @@ pub fn apply_ruleset_update(
         .context("Failed to serialise ruleset update to YAML")?;
 
     // Write to a temp file in the system temp directory
-    let tmp_path = std::env::temp_dir().join(format!(
-        "sicario_ruleset_{}.yaml",
-        uuid::Uuid::new_v4()
-    ));
+    let tmp_path =
+        std::env::temp_dir().join(format!("sicario_ruleset_{}.yaml", uuid::Uuid::new_v4()));
     std::fs::write(&tmp_path, yaml.as_bytes())
         .context("Failed to write ruleset YAML to temp file")?;
 
@@ -145,7 +143,11 @@ mod tests {
         };
 
         let result = apply_ruleset_update(&mut engine, &update);
-        assert!(result.is_ok(), "apply_ruleset_update failed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "apply_ruleset_update failed: {:?}",
+            result.err()
+        );
         assert!(
             engine.get_rule("injected-rule").is_some(),
             "Rule should be loaded into engine"

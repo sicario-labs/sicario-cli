@@ -50,9 +50,8 @@ impl RemediationEngine {
         let file_path = &vulnerability.file_path;
 
         // Read the original file content
-        let original_content = fs::read_to_string(file_path).with_context(|| {
-            format!("Failed to read file: {}", file_path.display())
-        })?;
+        let original_content = fs::read_to_string(file_path)
+            .with_context(|| format!("Failed to read file: {}", file_path.display()))?;
 
         // Build fix context from vulnerability metadata
         let context = self.build_fix_context(vulnerability, &original_content)?;
@@ -74,7 +73,11 @@ impl RemediationEngine {
         };
 
         // Compute unified diff
-        let diff = compute_unified_diff(file_path.to_str().unwrap_or("file"), &original_content, &fixed_content);
+        let diff = compute_unified_diff(
+            file_path.to_str().unwrap_or("file"),
+            &original_content,
+            &fixed_content,
+        );
 
         // Backup path will be set when the patch is applied; use a placeholder here
         let backup_path = self
@@ -109,7 +112,9 @@ impl RemediationEngine {
         // Write fixed content — restore on failure
         if let Err(e) = fs::write(&patch.file_path, &patch.fixed) {
             // Automatic restore on write failure (Requirement 14.4)
-            let _ = self.backup_manager.restore_file(&backup_path, &patch.file_path);
+            let _ = self
+                .backup_manager
+                .restore_file(&backup_path, &patch.file_path);
             return Err(e).with_context(|| {
                 format!("Failed to write patch to {}", patch.file_path.display())
             });
@@ -197,7 +202,12 @@ impl RemediationEngine {
         let fixed_snippet = rt.block_on(self.ai_client.generate_fix(context))?;
 
         // Replace the vulnerable snippet in the original file with the fix
-        Ok(splice_fix(original, vuln.line, &vuln.snippet, &fixed_snippet))
+        Ok(splice_fix(
+            original,
+            vuln.line,
+            &vuln.snippet,
+            &fixed_snippet,
+        ))
     }
 
     /// Validate that `code` is syntactically valid for `language`.
@@ -276,7 +286,9 @@ fn splice_fix(source: &str, target_line: usize, original_snippet: &str, fix: &st
 
     // Fall back to line-based replacement
     let mut lines: Vec<&str> = source.lines().collect();
-    let line_idx = target_line.saturating_sub(1).min(lines.len().saturating_sub(1));
+    let line_idx = target_line
+        .saturating_sub(1)
+        .min(lines.len().saturating_sub(1));
     if !lines.is_empty() {
         lines[line_idx] = fix;
     }
@@ -350,13 +362,18 @@ mod tests {
         let engine = RemediationEngine::new(dir.path()).unwrap();
 
         let file = dir.path().join("app.py");
-        fs::write(&file, "query = 'SELECT * FROM users WHERE id = ' + user_id\n").unwrap();
+        fs::write(
+            &file,
+            "query = 'SELECT * FROM users WHERE id = ' + user_id\n",
+        )
+        .unwrap();
 
         let backup = engine.backup_manager().backup_file(&file).unwrap();
         let patch = Patch::new(
             file.clone(),
             "query = 'SELECT * FROM users WHERE id = ' + user_id\n".to_string(),
-            "query = 'SELECT * FROM users WHERE id = %s'\ncursor.execute(query, (user_id,))\n".to_string(),
+            "query = 'SELECT * FROM users WHERE id = %s'\ncursor.execute(query, (user_id,))\n"
+                .to_string(),
             "--- app.py\n+++ app.py\n".to_string(),
             backup,
         );
@@ -439,12 +456,19 @@ mod tests {
                     && !l.starts_with("---")
             })
             .collect();
-        assert!(change_lines.is_empty(), "Expected no change lines, got: {:?}", change_lines);
+        assert!(
+            change_lines.is_empty(),
+            "Expected no change lines, got: {:?}",
+            change_lines
+        );
     }
 
     #[test]
     fn test_extract_context_snippet_middle_of_file() {
-        let source = (1..=20).map(|i| format!("line{}", i)).collect::<Vec<_>>().join("\n");
+        let source = (1..=20)
+            .map(|i| format!("line{}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         let snippet = extract_context_snippet(&source, 10, 3);
         assert!(snippet.contains("line10"));
         assert!(snippet.contains("line7"));
@@ -498,9 +522,17 @@ mod tests {
         let engine = RemediationEngine::new(dir.path()).unwrap();
 
         let file = dir.path().join("app.py");
-        fs::write(&file, "query = 'SELECT * FROM users WHERE id = ' + user_id\n").unwrap();
+        fs::write(
+            &file,
+            "query = 'SELECT * FROM users WHERE id = ' + user_id\n",
+        )
+        .unwrap();
 
-        let vuln = make_vuln(file.clone(), 1, "query = 'SELECT * FROM users WHERE id = ' + user_id");
+        let vuln = make_vuln(
+            file.clone(),
+            1,
+            "query = 'SELECT * FROM users WHERE id = ' + user_id",
+        );
         let patch = engine.generate_patch(&vuln).unwrap();
 
         // Without API key, falls back to template (original content)

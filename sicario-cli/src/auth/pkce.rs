@@ -4,8 +4,7 @@ use rand::Rng;
 use sha2::{Digest, Sha256};
 
 /// Allowed characters for code_verifier per RFC 7636 §4.1
-const VERIFIER_CHARS: &[u8] =
-    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+const VERIFIER_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
 
 /// Generate a cryptographically random code_verifier (43–128 characters) per RFC 7636 §4.1.
 pub fn generate_code_verifier() -> String {

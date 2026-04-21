@@ -6,6 +6,5 @@
 pub mod manager;
 
 pub use manager::{
-    Baseline, BaselineDelta, BaselineFinding, BaselineManagement, BaselineManager,
-    BaselineSummary,
+    Baseline, BaselineDelta, BaselineFinding, BaselineManagement, BaselineManager, BaselineSummary,
 };

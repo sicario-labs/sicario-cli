@@ -13,13 +13,12 @@ mod property_tests {
     use std::sync::{Arc, Mutex};
     use tempfile::TempDir;
 
-    use crate::engine::Severity;
     use crate::engine::sca::known_vulnerability::KnownVulnerability;
     use crate::engine::sca::manifest_parser::{
-        Dependency, ManifestParser, parse_package_json, parse_cargo_toml,
-        parse_requirements_txt,
+        parse_cargo_toml, parse_package_json, parse_requirements_txt, Dependency, ManifestParser,
     };
     use crate::engine::sca::vuln_db::VulnerabilityDatabaseManager;
+    use crate::engine::Severity;
 
     // ── Generators ────────────────────────────────────────────────────────────
 

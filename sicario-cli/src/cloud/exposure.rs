@@ -11,8 +11,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use super::interfaces::{
-    CloudProvider, CspmFinding, CspmIngester, ExposureStatus, KubernetesConfig,
-    KubernetesParser, ServiceExposure,
+    CloudProvider, CspmFinding, CspmIngester, ExposureStatus, KubernetesConfig, KubernetesParser,
+    ServiceExposure,
 };
 
 // ── Kubernetes YAML parser ────────────────────────────────────────────────────
@@ -95,22 +95,21 @@ impl KubernetesParser for YamlKubernetesParser {
             let labels = meta.labels.unwrap_or_default();
             let annotations = meta.annotations.unwrap_or_default();
 
-            let (service_type, ports, has_external_ingress) =
-                if let Some(spec) = manifest.spec {
-                    let svc_type = spec.service_type;
-                    let port_list: Vec<u16> = spec
-                        .ports
-                        .unwrap_or_default()
-                        .iter()
-                        .filter_map(|p| p.port)
-                        .collect();
-                    // An Ingress resource with rules is externally accessible
-                    let has_ingress = kind == "Ingress"
-                        && spec.rules.as_ref().map_or(false, |r| !r.is_empty());
-                    (svc_type, port_list, has_ingress)
-                } else {
-                    (None, vec![], false)
-                };
+            let (service_type, ports, has_external_ingress) = if let Some(spec) = manifest.spec {
+                let svc_type = spec.service_type;
+                let port_list: Vec<u16> = spec
+                    .ports
+                    .unwrap_or_default()
+                    .iter()
+                    .filter_map(|p| p.port)
+                    .collect();
+                // An Ingress resource with rules is externally accessible
+                let has_ingress =
+                    kind == "Ingress" && spec.rules.as_ref().is_some_and(|r| !r.is_empty());
+                (svc_type, port_list, has_ingress)
+            } else {
+                (None, vec![], false)
+            };
 
             configs.push(KubernetesConfig {
                 kind,
@@ -522,18 +521,12 @@ mod tests {
 
     #[test]
     fn test_infer_service_name_apps_dir() {
-        assert_eq!(
-            infer_service_name(Path::new("apps/auth/mod.rs")),
-            "auth"
-        );
+        assert_eq!(infer_service_name(Path::new("apps/auth/mod.rs")), "auth");
     }
 
     #[test]
     fn test_infer_service_name_fallback() {
-        assert_eq!(
-            infer_service_name(Path::new("handler.rs")),
-            "handler"
-        );
+        assert_eq!(infer_service_name(Path::new("handler.rs")), "handler");
     }
 
     #[test]

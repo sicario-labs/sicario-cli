@@ -2,4 +2,4 @@
 
 pub mod diff_scanner;
 
-pub use diff_scanner::{DiffScanner, DiffScanning, filter_findings_by_diff};
+pub use diff_scanner::{filter_findings_by_diff, DiffScanner, DiffScanning};

@@ -28,7 +28,12 @@ impl TechDetector {
         let mut frameworks: HashSet<String> = HashSet::new();
 
         // ── Manifest-based detection ──────────────────────────────────────────
-        Self::detect_from_manifests(project_root, &mut languages, &mut package_managers, &mut frameworks)?;
+        Self::detect_from_manifests(
+            project_root,
+            &mut languages,
+            &mut package_managers,
+            &mut frameworks,
+        )?;
 
         // ── File-extension-based language detection ───────────────────────────
         Self::detect_from_extensions(project_root, &mut languages)?;
@@ -155,11 +160,24 @@ impl TechDetector {
         Ok(())
     }
 
-    fn walk_for_extensions(dir: &Path, languages: &mut HashSet<String>, depth: usize, max_depth: usize) {
+    fn walk_for_extensions(
+        dir: &Path,
+        languages: &mut HashSet<String>,
+        depth: usize,
+        max_depth: usize,
+    ) {
         if depth > max_depth {
             return;
         }
-        let skip_dirs = ["node_modules", "target", "dist", "build", ".git", "vendor", "__pycache__"];
+        let skip_dirs = [
+            "node_modules",
+            "target",
+            "dist",
+            "build",
+            ".git",
+            "vendor",
+            "__pycache__",
+        ];
 
         let entries = match std::fs::read_dir(dir) {
             Ok(e) => e,
@@ -176,12 +194,24 @@ impl TechDetector {
                 Self::walk_for_extensions(&path, languages, depth + 1, max_depth);
             } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
                 match ext {
-                    "js" | "mjs" | "cjs" => { languages.insert("JavaScript".to_string()); }
-                    "ts" | "tsx" => { languages.insert("TypeScript".to_string()); }
-                    "py" => { languages.insert("Python".to_string()); }
-                    "rs" => { languages.insert("Rust".to_string()); }
-                    "go" => { languages.insert("Go".to_string()); }
-                    "java" | "kt" => { languages.insert("Java".to_string()); }
+                    "js" | "mjs" | "cjs" => {
+                        languages.insert("JavaScript".to_string());
+                    }
+                    "ts" | "tsx" => {
+                        languages.insert("TypeScript".to_string());
+                    }
+                    "py" => {
+                        languages.insert("Python".to_string());
+                    }
+                    "rs" => {
+                        languages.insert("Rust".to_string());
+                    }
+                    "go" => {
+                        languages.insert("Go".to_string());
+                    }
+                    "java" | "kt" => {
+                        languages.insert("Java".to_string());
+                    }
                     _ => {}
                 }
             }
@@ -284,7 +314,11 @@ mod tests {
     #[test]
     fn test_detect_npm_project() {
         let dir = TempDir::new().unwrap();
-        fs::write(dir.path().join("package.json"), r#"{"dependencies":{"react":"^18.0.0"}}"#).unwrap();
+        fs::write(
+            dir.path().join("package.json"),
+            r#"{"dependencies":{"react":"^18.0.0"}}"#,
+        )
+        .unwrap();
 
         let result = TechDetector::detect(dir.path()).unwrap();
         assert!(result.languages.contains(&"JavaScript".to_string()));
@@ -295,7 +329,11 @@ mod tests {
     #[test]
     fn test_detect_nextjs_project() {
         let dir = TempDir::new().unwrap();
-        fs::write(dir.path().join("package.json"), r#"{"dependencies":{"next":"^14.0.0","react":"^18.0.0"}}"#).unwrap();
+        fs::write(
+            dir.path().join("package.json"),
+            r#"{"dependencies":{"next":"^14.0.0","react":"^18.0.0"}}"#,
+        )
+        .unwrap();
         fs::write(dir.path().join("next.config.js"), "module.exports = {}").unwrap();
 
         let result = TechDetector::detect(dir.path()).unwrap();
@@ -306,7 +344,11 @@ mod tests {
     #[test]
     fn test_detect_python_django() {
         let dir = TempDir::new().unwrap();
-        fs::write(dir.path().join("requirements.txt"), "django==4.2\npsycopg2==2.9\n").unwrap();
+        fs::write(
+            dir.path().join("requirements.txt"),
+            "django==4.2\npsycopg2==2.9\n",
+        )
+        .unwrap();
         fs::write(dir.path().join("manage.py"), "#!/usr/bin/env python").unwrap();
 
         let result = TechDetector::detect(dir.path()).unwrap();
@@ -317,7 +359,11 @@ mod tests {
     #[test]
     fn test_detect_rust_project() {
         let dir = TempDir::new().unwrap();
-        fs::write(dir.path().join("Cargo.toml"), "[package]\nname = \"test\"\nversion = \"0.1.0\"\n").unwrap();
+        fs::write(
+            dir.path().join("Cargo.toml"),
+            "[package]\nname = \"test\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
 
         let result = TechDetector::detect(dir.path()).unwrap();
         assert!(result.languages.contains(&"Rust".to_string()));
@@ -327,7 +373,11 @@ mod tests {
     #[test]
     fn test_detect_go_project() {
         let dir = TempDir::new().unwrap();
-        fs::write(dir.path().join("go.mod"), "module example.com/myapp\n\ngo 1.21\n").unwrap();
+        fs::write(
+            dir.path().join("go.mod"),
+            "module example.com/myapp\n\ngo 1.21\n",
+        )
+        .unwrap();
 
         let result = TechDetector::detect(dir.path()).unwrap();
         assert!(result.languages.contains(&"Go".to_string()));

@@ -146,7 +146,10 @@ fn handle_connection(
     engine: Arc<Mutex<SastEngine>>,
     memory: Arc<AssistantMemory>,
 ) -> Result<()> {
-    let peer = stream.peer_addr().map(|a| a.to_string()).unwrap_or_default();
+    let peer = stream
+        .peer_addr()
+        .map(|a| a.to_string())
+        .unwrap_or_default();
     debug!("MCP: new connection from {}", peer);
 
     let mut writer = stream.try_clone().context("Failed to clone TCP stream")?;
@@ -181,11 +184,7 @@ fn handle_connection(
 /// Parse and dispatch a single JSON-RPC request line.
 ///
 /// Returns the serialised JSON-RPC response string.
-fn dispatch(
-    raw: &str,
-    engine: &Arc<Mutex<SastEngine>>,
-    memory: &Arc<AssistantMemory>,
-) -> String {
+fn dispatch(raw: &str, engine: &Arc<Mutex<SastEngine>>, memory: &Arc<AssistantMemory>) -> String {
     // Parse the request
     let request = match parse_request(raw) {
         Ok(r) => r,
@@ -314,10 +313,7 @@ fn handle_scan_code(
 }
 
 /// Handle `get_rules` — return all loaded security rules.
-fn handle_get_rules(
-    engine: &Arc<Mutex<SastEngine>>,
-    id: Option<serde_json::Value>,
-) -> String {
+fn handle_get_rules(engine: &Arc<Mutex<SastEngine>>, id: Option<serde_json::Value>) -> String {
     let eng = match engine.lock() {
         Ok(e) => e,
         Err(_) => {
@@ -335,10 +331,7 @@ fn handle_get_rules(
 
 /// Filter out vulnerabilities whose patterns have been previously approved
 /// in the Assistant Memory store.
-fn filter_approved(
-    vulns: Vec<Vulnerability>,
-    memory: &Arc<AssistantMemory>,
-) -> Vec<Vulnerability> {
+fn filter_approved(vulns: Vec<Vulnerability>, memory: &Arc<AssistantMemory>) -> Vec<Vulnerability> {
     vulns
         .into_iter()
         .filter(|v| !memory.is_approved(&v.rule_id, &v.snippet))
@@ -447,7 +440,11 @@ mod tests {
 
         // Connect and send a get_rules request
         let mut stream = TcpStream::connect(format!("127.0.0.1:{}", port)).unwrap();
-        writeln!(stream, r#"{{"jsonrpc":"2.0","method":"get_rules","params":{{}},"id":1}}"#).unwrap();
+        writeln!(
+            stream,
+            r#"{{"jsonrpc":"2.0","method":"get_rules","params":{{}},"id":1}}"#
+        )
+        .unwrap();
 
         let mut reader = BufReader::new(stream);
         let mut line = String::new();

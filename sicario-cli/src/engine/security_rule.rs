@@ -88,7 +88,10 @@ test_cases:
     language: JavaScript
 "#;
         let rule: SecurityRule = serde_yaml::from_str(yaml).unwrap();
-        assert_eq!(rule.help_uri, Some("https://example.com/rules/test-rule".to_string()));
+        assert_eq!(
+            rule.help_uri,
+            Some("https://example.com/rules/test-rule".to_string())
+        );
         let cases = rule.test_cases.unwrap();
         assert_eq!(cases.len(), 2);
         assert_eq!(cases[0].expected, TestExpectation::TruePositive);

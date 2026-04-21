@@ -30,7 +30,11 @@ const SICARIO_LOGO_ASCII: &str = r#"
 
 /// Print branded version output.
 pub fn print_branded_version(unicode: bool, color: bool, writer: &mut dyn Write) -> io::Result<()> {
-    let logo = if unicode { SICARIO_LOGO } else { SICARIO_LOGO_ASCII };
+    let logo = if unicode {
+        SICARIO_LOGO
+    } else {
+        SICARIO_LOGO_ASCII
+    };
 
     if color {
         writeln!(writer, "{}", logo.red().bold())?;
@@ -115,11 +119,16 @@ pub fn print_scan_summary(
     };
 
     let width = 60;
-    let bar: String = std::iter::repeat(h).take(width).collect();
+    let bar: String = std::iter::repeat_n(h, width).collect();
 
     writeln!(writer)?;
     writeln!(writer, "{tl}{bar}{tr}")?;
-    writeln!(writer, "{v_char}  {:<width$}{v_char}", "Scan Summary", width = width - 2)?;
+    writeln!(
+        writer,
+        "{v_char}  {:<width$}{v_char}",
+        "Scan Summary",
+        width = width - 2
+    )?;
     writeln!(writer, "{v_char}{bar}{v_char}")?;
 
     let duration_secs = summary.scan_duration.as_secs_f64();
@@ -140,16 +149,37 @@ pub fn print_scan_summary(
     let rules_line = format!("Rules loaded: {}", summary.rules_loaded);
     let semgrep_line = format!("Semgrep estimate: ~{:.1}s (10x slower)", semgrep_estimate);
 
-    if color {
-        writeln!(writer, "{v_char}  {:<width$}{v_char}", findings_line, width = width - 2)?;
-    } else {
-        writeln!(writer, "{v_char}  {:<width$}{v_char}", findings_line, width = width - 2)?;
-    }
+    writeln!(
+        writer,
+        "{v_char}  {:<width$}{v_char}",
+        findings_line,
+        width = width - 2
+    )?;
 
-    writeln!(writer, "{v_char}  {:<width$}{v_char}", duration_line, width = width - 2)?;
-    writeln!(writer, "{v_char}  {:<width$}{v_char}", files_line, width = width - 2)?;
-    writeln!(writer, "{v_char}  {:<width$}{v_char}", rules_line, width = width - 2)?;
-    writeln!(writer, "{v_char}  {:<width$}{v_char}", semgrep_line, width = width - 2)?;
+    writeln!(
+        writer,
+        "{v_char}  {:<width$}{v_char}",
+        duration_line,
+        width = width - 2
+    )?;
+    writeln!(
+        writer,
+        "{v_char}  {:<width$}{v_char}",
+        files_line,
+        width = width - 2
+    )?;
+    writeln!(
+        writer,
+        "{v_char}  {:<width$}{v_char}",
+        rules_line,
+        width = width - 2
+    )?;
+    writeln!(
+        writer,
+        "{v_char}  {:<width$}{v_char}",
+        semgrep_line,
+        width = width - 2
+    )?;
     writeln!(writer, "{bl}{bar}{br}")?;
 
     Ok(())

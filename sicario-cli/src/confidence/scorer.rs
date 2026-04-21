@@ -320,7 +320,11 @@ mod tests {
         let finding = make_finding();
         let input = ScoringInput::default_for_pattern_match();
         let score = scorer.score(&finding, &input);
-        assert!(score >= 0.0 && score <= 1.0, "Score out of range: {}", score);
+        assert!(
+            score >= 0.0 && score <= 1.0,
+            "Score out of range: {}",
+            score
+        );
     }
 
     #[test]
@@ -450,14 +454,22 @@ mod tests {
     fn test_convenience_score_with_confirmed_taint() {
         let finding = make_finding();
         let score = score_with_confirmed_taint(&finding, 3);
-        assert!(score >= 0.8, "Convenience confirmed taint should be >= 0.8, got {}", score);
+        assert!(
+            score >= 0.8,
+            "Convenience confirmed taint should be >= 0.8, got {}",
+            score
+        );
     }
 
     #[test]
     fn test_convenience_score_generic_pattern() {
         let finding = make_finding();
         let score = score_generic_pattern(&finding);
-        assert!(score <= 0.5, "Convenience generic pattern should be <= 0.5, got {}", score);
+        assert!(
+            score <= 0.5,
+            "Convenience generic pattern should be <= 0.5, got {}",
+            score
+        );
     }
 
     #[test]
@@ -475,7 +487,11 @@ mod tests {
             },
         };
         let score = scorer.score(&finding, &input);
-        assert!(score >= 0.0, "Score should never go below 0.0, got {}", score);
+        assert!(
+            score >= 0.0,
+            "Score should never go below 0.0, got {}",
+            score
+        );
     }
 
     #[test]
@@ -489,7 +505,11 @@ mod tests {
         };
         let score = scorer.score(&finding, &input);
         // Should be high but slightly lower than user-controlled
-        assert!(score >= 0.6, "Non-user taint path should still be fairly high: {}", score);
+        assert!(
+            score >= 0.6,
+            "Non-user taint path should still be fairly high: {}",
+            score
+        );
         assert!(score < 1.0);
     }
 }

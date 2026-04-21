@@ -68,7 +68,11 @@ mod property_tests {
             })
     }
 
-    fn make_vuln_for_file(file_path: std::path::PathBuf, line: usize, snippet: &str) -> Vulnerability {
+    fn make_vuln_for_file(
+        file_path: std::path::PathBuf,
+        line: usize,
+        snippet: &str,
+    ) -> Vulnerability {
         Vulnerability {
             id: Uuid::new_v4(),
             rule_id: "hardcoded-secret".to_string(),

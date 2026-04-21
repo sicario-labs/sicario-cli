@@ -2,4 +2,4 @@
 
 pub mod scan_cache;
 
-pub use scan_cache::{CachedFinding, CachedScanResult, CacheStats, ScanCache, ScanCaching};
+pub use scan_cache::{CacheStats, CachedFinding, CachedScanResult, ScanCache, ScanCaching};

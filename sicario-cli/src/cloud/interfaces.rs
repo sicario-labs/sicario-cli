@@ -54,10 +54,10 @@ impl KubernetesConfig {
         if self.has_external_ingress {
             return true;
         }
-        match self.service_type.as_deref() {
-            Some("LoadBalancer") | Some("NodePort") | Some("ExternalName") => true,
-            _ => false,
-        }
+        matches!(
+            self.service_type.as_deref(),
+            Some("LoadBalancer") | Some("NodePort") | Some("ExternalName")
+        )
     }
 }
 

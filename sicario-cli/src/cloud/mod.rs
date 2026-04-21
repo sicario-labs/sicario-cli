@@ -6,14 +6,14 @@
 //!
 //! Requirements: 11.1, 11.2, 11.3, 11.4, 11.5
 
-pub mod interfaces;
 pub mod exposure;
+pub mod interfaces;
 pub mod priority;
 pub mod priority_property_tests;
 
-pub use interfaces::{
-    CloudProvider, CspmFinding, CspmIngester, ExposureStatus, KubernetesConfig,
-    KubernetesParser, ServiceExposure,
-};
 pub use exposure::CloudExposureAnalyzer;
+pub use interfaces::{
+    CloudProvider, CspmFinding, CspmIngester, ExposureStatus, KubernetesConfig, KubernetesParser,
+    ServiceExposure,
+};
 pub use priority::assign_cloud_priority;

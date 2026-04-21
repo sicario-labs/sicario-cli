@@ -3,8 +3,8 @@
 //! Groups vulnerabilities by OWASP category, computes severity distributions,
 //! and exports reports in JSON and Markdown formats.
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::engine::{OwaspCategory, Severity, Vulnerability};
 
@@ -174,14 +174,7 @@ pub fn report_to_markdown(report: &ComplianceReport) -> String {
         let status = if cat.total == 0 { "✅" } else { "⚠️" };
         md.push_str(&format!(
             "| {} {} | {} | {} | {} | {} | {} | {} |\n",
-            status,
-            cat.label,
-            cat.total,
-            cat.critical,
-            cat.high,
-            cat.medium,
-            cat.low,
-            cat.info,
+            status, cat.label, cat.total, cat.critical, cat.high, cat.medium, cat.low, cat.info,
         ));
     }
 
@@ -212,7 +205,10 @@ pub fn group_by_owasp(
     for vuln in vulnerabilities {
         if let Some(cat) = vuln.owasp_category {
             let key = format!("{:?}", cat);
-            map.entry(key).or_insert_with(|| (cat, Vec::new())).1.push(vuln);
+            map.entry(key)
+                .or_insert_with(|| (cat, Vec::new()))
+                .1
+                .push(vuln);
         }
     }
 
@@ -263,7 +259,10 @@ mod tests {
         let vulns = vec![
             make_vuln(Severity::High, Some(OwaspCategory::A03_Injection)),
             make_vuln(Severity::Critical, Some(OwaspCategory::A03_Injection)),
-            make_vuln(Severity::Medium, Some(OwaspCategory::A01_BrokenAccessControl)),
+            make_vuln(
+                Severity::Medium,
+                Some(OwaspCategory::A01_BrokenAccessControl),
+            ),
         ];
         let report = generate_compliance_report(&vulns);
         assert_eq!(report.total_vulnerabilities, 3);
@@ -292,7 +291,10 @@ mod tests {
 
     #[test]
     fn test_report_to_json_valid() {
-        let vulns = vec![make_vuln(Severity::High, Some(OwaspCategory::A03_Injection))];
+        let vulns = vec![make_vuln(
+            Severity::High,
+            Some(OwaspCategory::A03_Injection),
+        )];
         let report = generate_compliance_report(&vulns);
         let json = report_to_json(&report).unwrap();
         assert!(json.contains("A03_Injection"));
@@ -311,8 +313,14 @@ mod tests {
     #[test]
     fn test_group_by_owasp_canonical_order() {
         let vulns = vec![
-            make_vuln(Severity::High, Some(OwaspCategory::A10_ServerSideRequestForgery)),
-            make_vuln(Severity::Medium, Some(OwaspCategory::A01_BrokenAccessControl)),
+            make_vuln(
+                Severity::High,
+                Some(OwaspCategory::A10_ServerSideRequestForgery),
+            ),
+            make_vuln(
+                Severity::Medium,
+                Some(OwaspCategory::A01_BrokenAccessControl),
+            ),
         ];
         let groups = group_by_owasp(&vulns);
         assert_eq!(groups.len(), 2);

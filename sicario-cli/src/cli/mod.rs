@@ -1,16 +1,16 @@
 //! Clap-based CLI definitions for Sicario.
 
-pub mod scan;
-pub mod fix;
 pub mod baseline;
+pub mod benchmark;
+pub mod cache;
 pub mod config;
+pub mod exit_code;
+pub mod fix;
 pub mod hook;
 pub mod lsp;
-pub mod benchmark;
 pub mod rules;
-pub mod cache;
+pub mod scan;
 pub mod suppressions;
-pub mod exit_code;
 
 use clap::{Parser, Subcommand};
 
@@ -36,7 +36,7 @@ pub struct SicarioCli {
 #[derive(Subcommand, Debug)]
 pub enum Command {
     /// Run a security scan on a directory
-    Scan(ScanArgs),
+    Scan(Box<ScanArgs>),
     /// Initialize a new Sicario project configuration
     Init,
     /// Generate compliance reports

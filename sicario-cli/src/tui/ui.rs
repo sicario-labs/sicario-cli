@@ -2,13 +2,11 @@
 //!
 //! Implements immediate-mode rendering for all AppState variants using Ratatui.
 
-use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{
-    Block, Borders, Gauge, List, ListItem, ListState, Paragraph, Wrap,
-};
+use ratatui::widgets::{Block, Borders, Gauge, List, ListItem, ListState, Paragraph, Wrap};
+use ratatui::Frame;
 
 use super::AppState;
 use crate::engine::{Severity, Vulnerability};
@@ -25,21 +23,43 @@ pub fn render(frame: &mut Frame, state: &AppState) {
             package_managers,
             frameworks,
             rules_configured,
-        } => render_onboarding(frame, languages, package_managers, frameworks, *rules_configured),
-        AppState::AuthPending { verification_uri, user_code } => {
+        } => render_onboarding(
+            frame,
+            languages,
+            package_managers,
+            frameworks,
+            *rules_configured,
+        ),
+        AppState::AuthPending {
+            verification_uri,
+            user_code,
+        } => {
             render_auth_pending(frame, verification_uri, user_code);
         }
         AppState::AuthComplete => render_auth_complete(frame),
-        AppState::Scanning { progress, files_scanned, total_files } => {
+        AppState::Scanning {
+            progress,
+            files_scanned,
+            total_files,
+        } => {
             render_scanning(frame, *progress, *files_scanned, *total_files);
         }
-        AppState::Results { vulnerabilities, selected } => {
+        AppState::Results {
+            vulnerabilities,
+            selected,
+        } => {
             render_results(frame, vulnerabilities, *selected);
         }
-        AppState::OwaspResults { vulnerabilities, selected_category } => {
+        AppState::OwaspResults {
+            vulnerabilities,
+            selected_category,
+        } => {
             render_owasp_results(frame, vulnerabilities, *selected_category);
         }
-        AppState::PatchPreview { vulnerability, patch } => {
+        AppState::PatchPreview {
+            vulnerability,
+            patch,
+        } => {
             render_patch_preview(frame, vulnerability, patch);
         }
         AppState::PatchSuccess { file_path } => {
@@ -48,7 +68,10 @@ pub fn render(frame: &mut Frame, state: &AppState) {
         AppState::PatchError { message } => {
             render_patch_error(frame, message);
         }
-        AppState::OnboardingSuccess { file_path, vulnerabilities_fixed } => {
+        AppState::OnboardingSuccess {
+            file_path,
+            vulnerabilities_fixed,
+        } => {
             render_onboarding_success(frame, file_path, *vulnerabilities_fixed);
         }
     }
@@ -84,22 +107,30 @@ pub fn render_welcome(frame: &mut Frame) {
         )),
         Line::from(Span::styled(
             "  ███████╗██║██║     ███████║██████╔╝██║██║   ██║ ",
-            Style::default().fg(Color::LightRed).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::LightRed)
+                .add_modifier(Modifier::BOLD),
         )),
         Line::from(Span::styled(
             "  ╚════██║██║██║     ██╔══██║██╔══██╗██║██║   ██║ ",
-            Style::default().fg(Color::LightRed).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::LightRed)
+                .add_modifier(Modifier::BOLD),
         )),
         Line::from(Span::styled(
             "  ███████║██║╚██████╗██║  ██║██║  ██║██║╚██████╔╝ ",
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
         Line::from(vec![
             Span::styled("  v", Style::default().fg(Color::DarkGray)),
             Span::styled(
                 env!("CARGO_PKG_VERSION"),
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
                 "  ·  Next-generation SAST — 10x faster than legacy scanners",
@@ -109,27 +140,55 @@ pub fn render_welcome(frame: &mut Frame) {
         Line::from(""),
         Line::from(vec![
             Span::styled("  ┌─ ", Style::default().fg(Color::DarkGray)),
-            Span::styled("Quick Start", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-            Span::styled(" ─────────────────────────────────────────┐", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                "Quick Start",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                " ─────────────────────────────────────────┐",
+                Style::default().fg(Color::DarkGray),
+            ),
         ]),
         Line::from(vec![
             Span::styled("  │  ", Style::default().fg(Color::DarkGray)),
-            Span::styled("i", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-            Span::styled("  →  Zero-config onboarding (auto-detect & scan)", Style::default().fg(Color::White)),
+            Span::styled(
+                "i",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "  →  Zero-config onboarding (auto-detect & scan)",
+                Style::default().fg(Color::White),
+            ),
         ]),
         Line::from(vec![
             Span::styled("  │  ", Style::default().fg(Color::DarkGray)),
-            Span::styled("s", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-            Span::styled("  →  Start scanning current directory", Style::default().fg(Color::White)),
+            Span::styled(
+                "s",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "  →  Start scanning current directory",
+                Style::default().fg(Color::White),
+            ),
         ]),
         Line::from(vec![
             Span::styled("  │  ", Style::default().fg(Color::DarkGray)),
-            Span::styled("q", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "q",
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            ),
             Span::styled("  →  Quit", Style::default().fg(Color::White)),
         ]),
-        Line::from(vec![
-            Span::styled("  └──────────────────────────────────────────────────┘", Style::default().fg(Color::DarkGray)),
-        ]),
+        Line::from(vec![Span::styled(
+            "  └──────────────────────────────────────────────────┘",
+            Style::default().fg(Color::DarkGray),
+        )]),
     ];
 
     let paragraph = Paragraph::new(Text::from(logo))
@@ -156,10 +215,10 @@ pub fn render_onboarding(
         .direction(Direction::Vertical)
         .margin(1)
         .constraints([
-            Constraint::Length(3),  // title bar
-            Constraint::Length(6),  // detected technologies
-            Constraint::Length(4),  // rules summary
-            Constraint::Min(0),     // action prompt
+            Constraint::Length(3), // title bar
+            Constraint::Length(6), // detected technologies
+            Constraint::Length(4), // rules summary
+            Constraint::Min(0),    // action prompt
         ])
         .split(area);
 
@@ -169,7 +228,9 @@ pub fn render_onboarding(
         .border_style(Style::default().fg(Color::Magenta))
         .title(Span::styled(
             " ⚡ Zero-Config Onboarding ",
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
         ));
     frame.render_widget(outer, area);
 
@@ -193,7 +254,12 @@ pub fn render_onboarding(
     let tech_lines = vec![
         Line::from(vec![
             Span::styled("  Languages:       ", Style::default().fg(Color::DarkGray)),
-            Span::styled(lang_str, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                lang_str,
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
         ]),
         Line::from(vec![
             Span::styled("  Package managers:", Style::default().fg(Color::DarkGray)),
@@ -205,13 +271,12 @@ pub fn render_onboarding(
         ]),
     ];
 
-    let tech_panel = Paragraph::new(Text::from(tech_lines))
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan))
-                .title(" Detected Technologies "),
-        );
+    let tech_panel = Paragraph::new(Text::from(tech_lines)).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan))
+            .title(" Detected Technologies "),
+    );
     frame.render_widget(tech_panel, chunks[1]);
 
     // Rules summary
@@ -220,7 +285,9 @@ pub fn render_onboarding(
             Span::styled("  Configured ", Style::default().fg(Color::White)),
             Span::styled(
                 format!("{}", rules_configured),
-                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
                 " security rules optimised for your stack.",
@@ -234,13 +301,12 @@ pub fn render_onboarding(
         )),
     ];
 
-    let rules_panel = Paragraph::new(Text::from(rules_lines))
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Green))
-                .title(" Ready to Scan "),
-        );
+    let rules_panel = Paragraph::new(Text::from(rules_lines)).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Green))
+            .title(" Ready to Scan "),
+    );
     frame.render_widget(rules_panel, chunks[2]);
 }
 
@@ -254,10 +320,10 @@ pub fn render_scanning(frame: &mut Frame, progress: f64, files_scanned: usize, t
         .direction(Direction::Vertical)
         .margin(2)
         .constraints([
-            Constraint::Length(3),  // title
-            Constraint::Length(3),  // progress bar
-            Constraint::Length(2),  // stats
-            Constraint::Min(0),     // padding
+            Constraint::Length(3), // title
+            Constraint::Length(3), // progress bar
+            Constraint::Length(2), // stats
+            Constraint::Min(0),    // padding
         ])
         .split(area);
 
@@ -267,7 +333,9 @@ pub fn render_scanning(frame: &mut Frame, progress: f64, files_scanned: usize, t
         .border_style(Style::default().fg(Color::Cyan))
         .title(Span::styled(
             " Scanning… ",
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
         ));
     frame.render_widget(outer, area);
 
@@ -290,7 +358,9 @@ pub fn render_scanning(frame: &mut Frame, progress: f64, files_scanned: usize, t
         Span::styled("  Files scanned: ", Style::default().fg(Color::DarkGray)),
         Span::styled(
             format!("{}", files_scanned),
-            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
         ),
         Span::styled("  /  ", Style::default().fg(Color::DarkGray)),
         Span::styled(
@@ -310,7 +380,9 @@ pub fn render_results(frame: &mut Frame, vulnerabilities: &[Vulnerability], sele
     if vulnerabilities.is_empty() {
         let msg = Paragraph::new(Span::styled(
             "  No vulnerabilities found. Your code looks clean!",
-            Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
         ))
         .block(
             Block::default()
@@ -344,13 +416,12 @@ pub fn render_results(frame: &mut Frame, vulnerabilities: &[Vulnerability], sele
                 Span::raw(prefix),
                 Span::styled(
                     format!("[{:?}] ", v.severity),
-                    Style::default().fg(severity_color).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(severity_color)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 cloud_badge,
-                Span::styled(
-                    v.rule_id.clone(),
-                    Style::default().fg(Color::White),
-                ),
+                Span::styled(v.rule_id.clone(), Style::default().fg(Color::White)),
             ]);
             ListItem::new(line)
         })
@@ -395,10 +466,7 @@ fn render_vuln_detail(frame: &mut Frame, vuln: &Vulnerability, area: Rect) {
         ]),
         Some(false) => Line::from(vec![
             Span::styled("Cloud:    ", Style::default().fg(Color::DarkGray)),
-            Span::styled(
-                " Internal (isolated)",
-                Style::default().fg(Color::Green),
-            ),
+            Span::styled(" Internal (isolated)", Style::default().fg(Color::Green)),
         ]),
         None => Line::from(vec![
             Span::styled("Cloud:    ", Style::default().fg(Color::DarkGray)),
@@ -409,7 +477,12 @@ fn render_vuln_detail(frame: &mut Frame, vuln: &Vulnerability, area: Rect) {
     let lines = vec![
         Line::from(vec![
             Span::styled("Rule:     ", Style::default().fg(Color::DarkGray)),
-            Span::styled(vuln.rule_id.clone(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                vuln.rule_id.clone(),
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            ),
         ]),
         Line::from(vec![
             Span::styled("File:     ", Style::default().fg(Color::DarkGray)),
@@ -429,19 +502,28 @@ fn render_vuln_detail(frame: &mut Frame, vuln: &Vulnerability, area: Rect) {
             Span::styled("Severity: ", Style::default().fg(Color::DarkGray)),
             Span::styled(
                 format!("{:?}", vuln.severity),
-                Style::default().fg(severity_color).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(severity_color)
+                    .add_modifier(Modifier::BOLD),
             ),
         ]),
         Line::from(vec![
             Span::styled("Reachable:", Style::default().fg(Color::DarkGray)),
             Span::styled(
                 if vuln.reachable { " Yes" } else { " No" },
-                Style::default().fg(if vuln.reachable { Color::Red } else { Color::Yellow }),
+                Style::default().fg(if vuln.reachable {
+                    Color::Red
+                } else {
+                    Color::Yellow
+                }),
             ),
         ]),
         cloud_line,
         Line::from(""),
-        Line::from(Span::styled("Snippet:", Style::default().fg(Color::DarkGray))),
+        Line::from(Span::styled(
+            "Snippet:",
+            Style::default().fg(Color::DarkGray),
+        )),
         Line::from(Span::styled(
             format!("  {}", vuln.snippet),
             Style::default().fg(Color::White),
@@ -483,7 +565,9 @@ pub fn render_patch_preview(frame: &mut Frame, vulnerability: &Vulnerability, pa
             Span::styled("  Rule:     ", Style::default().fg(Color::DarkGray)),
             Span::styled(
                 vulnerability.rule_id.clone(),
-                Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
             ),
         ]),
         Line::from(vec![
@@ -497,7 +581,9 @@ pub fn render_patch_preview(frame: &mut Frame, vulnerability: &Vulnerability, pa
             Span::styled("  Severity: ", Style::default().fg(Color::DarkGray)),
             Span::styled(
                 format!("{:?}", vulnerability.severity),
-                Style::default().fg(severity_color).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(severity_color)
+                    .add_modifier(Modifier::BOLD),
             ),
         ]),
     ];
@@ -515,11 +601,20 @@ pub fn render_patch_preview(frame: &mut Frame, vulnerability: &Vulnerability, pa
         .lines()
         .map(|line| {
             if line.starts_with('+') {
-                Line::from(Span::styled(line.to_string(), Style::default().fg(Color::Green)))
+                Line::from(Span::styled(
+                    line.to_string(),
+                    Style::default().fg(Color::Green),
+                ))
             } else if line.starts_with('-') {
-                Line::from(Span::styled(line.to_string(), Style::default().fg(Color::Red)))
+                Line::from(Span::styled(
+                    line.to_string(),
+                    Style::default().fg(Color::Red),
+                ))
             } else if line.starts_with("@@") {
-                Line::from(Span::styled(line.to_string(), Style::default().fg(Color::Cyan)))
+                Line::from(Span::styled(
+                    line.to_string(),
+                    Style::default().fg(Color::Cyan),
+                ))
             } else {
                 Line::from(Span::raw(line.to_string()))
             }
@@ -556,7 +651,9 @@ pub fn render_patch_success(frame: &mut Frame, file_path: &std::path::Path) {
         Line::from(""),
         Line::from(Span::styled(
             "  ✓ Patch applied successfully!",
-            Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
         Line::from(Span::styled(
@@ -628,17 +725,31 @@ pub fn render_onboarding_success(
         )),
         Line::from(""),
         Line::from(vec![
-            Span::styled("  ✓  Fixed ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "  ✓  Fixed ",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled(
                 format!("{}", vulnerabilities_fixed),
-                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
                 " vulnerability",
-                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
             ),
             if vulnerabilities_fixed != 1 {
-                Span::styled("ies", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
+                Span::styled(
+                    "ies",
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                )
             } else {
                 Span::raw("")
             },
@@ -679,7 +790,9 @@ pub fn render_onboarding_success(
                 .border_style(Style::default().fg(Color::Green))
                 .title(Span::styled(
                     " ⚡ Magic Moment — Security Fix Applied ",
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
                 )),
         )
         .wrap(Wrap { trim: false });
@@ -769,13 +882,12 @@ pub fn render_auth_complete(frame: &mut Frame) {
         )),
     ];
 
-    let paragraph = Paragraph::new(Text::from(lines))
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Green))
-                .title(" Login Complete "),
-        );
+    let paragraph = Paragraph::new(Text::from(lines)).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Green))
+            .title(" Login Complete "),
+    );
 
     frame.render_widget(paragraph, area);
 }
@@ -818,13 +930,15 @@ pub fn render_owasp_results(
                 Span::raw(prefix),
                 Span::styled(
                     format!("{:2} ", cat.total),
-                    Style::default().fg(count_color).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(count_color)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
                     // Shorten label to fit: strip "A0X:2021 – " prefix for display
                     cat.label
-                        .splitn(2, '–')
-                        .nth(1)
+                        .split_once('–')
+                        .map(|x| x.1)
                         .unwrap_or(&cat.label)
                         .trim()
                         .to_string(),
@@ -869,7 +983,9 @@ pub fn render_owasp_results(
                 Span::styled("Category: ", Style::default().fg(Color::DarkGray)),
                 Span::styled(
                     cat.label.clone(),
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
                 ),
             ]),
             Line::from(""),
@@ -882,7 +998,9 @@ pub fn render_owasp_results(
                 Span::styled("   High: ", Style::default().fg(Color::DarkGray)),
                 Span::styled(
                     format!("{}", cat.high),
-                    Style::default().fg(Color::LightRed).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::LightRed)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled("   Medium: ", Style::default().fg(Color::DarkGray)),
                 Span::styled(
@@ -894,7 +1012,10 @@ pub fn render_owasp_results(
                 Span::styled("  Low:      ", Style::default().fg(Color::DarkGray)),
                 Span::styled(format!("{}", cat.low), Style::default().fg(Color::Blue)),
                 Span::styled("   Info:   ", Style::default().fg(Color::DarkGray)),
-                Span::styled(format!("{}", cat.info), Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    format!("{}", cat.info),
+                    Style::default().fg(Color::DarkGray),
+                ),
             ]),
             Line::from(""),
             Line::from(Span::styled(
@@ -922,7 +1043,9 @@ pub fn render_owasp_results(
     if category_vulns.is_empty() {
         let empty = Paragraph::new(Span::styled(
             "  ✅ No findings in this category.",
-            Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
         ))
         .block(
             Block::default()
@@ -942,12 +1065,7 @@ pub fn render_owasp_results(
                         Style::default().fg(sev_color).add_modifier(Modifier::BOLD),
                     ),
                     Span::styled(
-                        format!(
-                            "{}:{}  {}",
-                            v.file_path.display(),
-                            v.line,
-                            v.rule_id
-                        ),
+                        format!("{}:{}  {}", v.file_path.display(), v.line, v.rule_id),
                         Style::default().fg(Color::White),
                     ),
                 ]);
@@ -1026,7 +1144,13 @@ mod tests {
             files_scanned: 50,
             total_files: 100,
         };
-        assert!(matches!(state, AppState::Scanning { files_scanned: 50, .. }));
+        assert!(matches!(
+            state,
+            AppState::Scanning {
+                files_scanned: 50,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -1035,7 +1159,10 @@ mod tests {
             vulnerabilities: vec![],
             selected: 0,
         };
-        if let AppState::Results { vulnerabilities, .. } = state {
+        if let AppState::Results {
+            vulnerabilities, ..
+        } = state
+        {
             assert!(vulnerabilities.is_empty());
         }
     }
@@ -1043,7 +1170,8 @@ mod tests {
     #[test]
     fn test_appstate_patch_preview() {
         let vuln = make_vuln(Severity::High);
-        let patch = "+let safe = parameterized_query(input);\n-let unsafe = query(input);".to_string();
+        let patch =
+            "+let safe = parameterized_query(input);\n-let unsafe = query(input);".to_string();
         let state = AppState::PatchPreview {
             vulnerability: vuln,
             patch: patch.clone(),

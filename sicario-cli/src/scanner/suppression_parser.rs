@@ -124,14 +124,20 @@ impl SuppressionParser {
         rule_id: &str,
     ) -> SuppressionResult {
         if target_line <= 1 {
-            return SuppressionResult { suppressed: false, rule_id: None };
+            return SuppressionResult {
+                suppressed: false,
+                rule_id: None,
+            };
         }
 
         let preceding_line_idx = target_line - 2;
         let lines: Vec<&str> = source.lines().collect();
 
         if preceding_line_idx >= lines.len() {
-            return SuppressionResult { suppressed: false, rule_id: None };
+            return SuppressionResult {
+                suppressed: false,
+                rule_id: None,
+            };
         }
 
         let preceding = lines[preceding_line_idx];
@@ -144,7 +150,10 @@ impl SuppressionParser {
                 suppressed: true,
                 rule_id: Some(rid.clone()),
             },
-            _ => SuppressionResult { suppressed: false, rule_id: None },
+            _ => SuppressionResult {
+                suppressed: false,
+                rule_id: None,
+            },
         }
     }
 
@@ -164,7 +173,10 @@ impl SuppressionParser {
     /// Count the number of suppressed findings in a source file.
     /// Returns the total count of SAST suppression directives found.
     pub fn count_sast_suppressions(&self, source: &str) -> usize {
-        source.lines().filter(|l| parse_sast_suppression(l).is_some()).count()
+        source
+            .lines()
+            .filter(|l| parse_sast_suppression(l).is_some())
+            .count()
     }
 }
 
@@ -322,7 +334,8 @@ mod tests {
 
     #[test]
     fn test_suppression_only_applies_to_next_line() {
-        let source = "// sicario-ignore-secret\nconst key = \"secret\";\nconst other = \"also_secret\";";
+        let source =
+            "// sicario-ignore-secret\nconst key = \"secret\";\nconst other = \"also_secret\";";
         let parser = SuppressionParser::new();
         assert!(!parser.is_suppressed_in_source(source, 1));
         assert!(parser.is_suppressed_in_source(source, 2));
@@ -331,7 +344,8 @@ mod tests {
 
     #[test]
     fn test_suppressed_lines_set() {
-        let source = "line1\n// sicario-ignore-secret\nline3\nline4\n# sicario-ignore-secret\nline6";
+        let source =
+            "line1\n// sicario-ignore-secret\nline3\nline4\n# sicario-ignore-secret\nline6";
         let parser = SuppressionParser::new();
         let suppressed = parser.suppressed_lines_in_source(source);
         assert!(suppressed.contains(&3));

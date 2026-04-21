@@ -92,8 +92,8 @@ struct PackageJson {
 
 /// Parse `package.json` and return npm dependencies.
 pub fn parse_package_json(path: &Path) -> Result<Vec<Dependency>> {
-    let content = std::fs::read_to_string(path)
-        .with_context(|| format!("Failed to read {:?}", path))?;
+    let content =
+        std::fs::read_to_string(path).with_context(|| format!("Failed to read {:?}", path))?;
 
     let pkg: PackageJson = serde_json::from_str(&content)
         .with_context(|| format!("Failed to parse package.json at {:?}", path))?;
@@ -116,9 +116,7 @@ pub fn parse_package_json(path: &Path) -> Result<Vec<Dependency>> {
 fn normalize_npm_version(spec: &str) -> String {
     let trimmed = spec.trim();
     // Strip leading range operators
-    let stripped = trimmed.trim_start_matches(|c: char| {
-        matches!(c, '^' | '~' | '>' | '<' | '=' | ' ')
-    });
+    let stripped = trimmed.trim_start_matches(['^', '~', '>', '<', '=', ' ']);
     // If it looks like a plain semver, return it; otherwise return as-is
     if stripped.is_empty() {
         trimmed.to_string()
@@ -156,15 +154,19 @@ struct CargoDepTable {
 
 /// Parse `Cargo.toml` and return crates.io dependencies.
 pub fn parse_cargo_toml(path: &Path) -> Result<Vec<Dependency>> {
-    let content = std::fs::read_to_string(path)
-        .with_context(|| format!("Failed to read {:?}", path))?;
+    let content =
+        std::fs::read_to_string(path).with_context(|| format!("Failed to read {:?}", path))?;
 
     let cargo: CargoToml = toml::from_str(&content)
         .with_context(|| format!("Failed to parse Cargo.toml at {:?}", path))?;
 
     let mut deps = Vec::new();
 
-    for (name, value) in cargo.dependencies.iter().chain(cargo.dev_dependencies.iter()) {
+    for (name, value) in cargo
+        .dependencies
+        .iter()
+        .chain(cargo.dev_dependencies.iter())
+    {
         let version = match value {
             CargoDepValue::Version(v) => normalize_cargo_version(v),
             CargoDepValue::Table(t) => {
@@ -195,9 +197,7 @@ pub fn parse_cargo_toml(path: &Path) -> Result<Vec<Dependency>> {
 /// Strip Cargo version requirement prefixes (`^`, `~`, `>=`, etc.).
 fn normalize_cargo_version(spec: &str) -> String {
     let trimmed = spec.trim();
-    let stripped = trimmed.trim_start_matches(|c: char| {
-        matches!(c, '^' | '~' | '>' | '<' | '=' | ' ')
-    });
+    let stripped = trimmed.trim_start_matches(['^', '~', '>', '<', '=', ' ']);
     if stripped.is_empty() {
         trimmed.to_string()
     } else {
@@ -213,8 +213,8 @@ fn normalize_cargo_version(spec: &str) -> String {
 ///
 /// Supports version specifiers: `==`, `>=`, `~=`, `<=`, `!=`, `>`, `<`.
 pub fn parse_requirements_txt(path: &Path) -> Result<Vec<Dependency>> {
-    let content = std::fs::read_to_string(path)
-        .with_context(|| format!("Failed to read {:?}", path))?;
+    let content =
+        std::fs::read_to_string(path).with_context(|| format!("Failed to read {:?}", path))?;
 
     let mut deps = Vec::new();
 
@@ -281,9 +281,7 @@ fn parse_requirements_line(line: &str) -> Option<Dependency> {
 /// Extract the version string from a requirements specifier like `==2.28.0`.
 fn extract_requirements_version(spec: &str) -> String {
     // Strip the operator prefix
-    let stripped = spec.trim_start_matches(|c: char| {
-        matches!(c, '=' | '~' | '>' | '<' | '!' | ' ')
-    });
+    let stripped = spec.trim_start_matches(['=', '~', '>', '<', '!', ' ']);
     // Take only the first version if there are multiple constraints
     stripped
         .split(',')
@@ -321,8 +319,12 @@ mod tests {
         );
         let deps = parse_package_json(&dir.path().join("package.json")).unwrap();
         assert_eq!(deps.len(), 2);
-        assert!(deps.iter().any(|d| d.package_name == "lodash" && d.version == "4.17.20"));
-        assert!(deps.iter().any(|d| d.package_name == "express" && d.version == "4.18.0"));
+        assert!(deps
+            .iter()
+            .any(|d| d.package_name == "lodash" && d.version == "4.17.20"));
+        assert!(deps
+            .iter()
+            .any(|d| d.package_name == "express" && d.version == "4.18.0"));
     }
 
     #[test]
@@ -366,8 +368,12 @@ tokio = { version = "1.35", features = ["full"] }
 "#,
         );
         let deps = parse_cargo_toml(&dir.path().join("Cargo.toml")).unwrap();
-        assert!(deps.iter().any(|d| d.package_name == "serde" && d.version == "1.0"));
-        assert!(deps.iter().any(|d| d.package_name == "tokio" && d.version == "1.35"));
+        assert!(deps
+            .iter()
+            .any(|d| d.package_name == "serde" && d.version == "1.0"));
+        assert!(deps
+            .iter()
+            .any(|d| d.package_name == "tokio" && d.version == "1.35"));
     }
 
     #[test]
@@ -386,7 +392,9 @@ proptest = "1.4"
 "#,
         );
         let deps = parse_cargo_toml(&dir.path().join("Cargo.toml")).unwrap();
-        assert!(deps.iter().any(|d| d.package_name == "proptest" && d.ecosystem == "crates.io"));
+        assert!(deps
+            .iter()
+            .any(|d| d.package_name == "proptest" && d.ecosystem == "crates.io"));
     }
 
     // ── requirements.txt ─────────────────────────────────────────────────
@@ -400,9 +408,15 @@ proptest = "1.4"
             "requests==2.28.0\nflask>=2.0.0\ndjango~=4.2.0\n",
         );
         let deps = parse_requirements_txt(&dir.path().join("requirements.txt")).unwrap();
-        assert!(deps.iter().any(|d| d.package_name == "requests" && d.version == "2.28.0"));
-        assert!(deps.iter().any(|d| d.package_name == "flask" && d.version == "2.0.0"));
-        assert!(deps.iter().any(|d| d.package_name == "django" && d.version == "4.2.0"));
+        assert!(deps
+            .iter()
+            .any(|d| d.package_name == "requests" && d.version == "2.28.0"));
+        assert!(deps
+            .iter()
+            .any(|d| d.package_name == "flask" && d.version == "2.0.0"));
+        assert!(deps
+            .iter()
+            .any(|d| d.package_name == "django" && d.version == "4.2.0"));
     }
 
     #[test]
@@ -438,11 +452,7 @@ proptest = "1.4"
             "package.json",
             r#"{"dependencies":{"lodash":"4.17.21"}}"#,
         );
-        write(
-            dir.path(),
-            "requirements.txt",
-            "requests==2.28.0\n",
-        );
+        write(dir.path(), "requirements.txt", "requests==2.28.0\n");
 
         let sub = dir.path().join("sub");
         fs::create_dir_all(&sub).unwrap();

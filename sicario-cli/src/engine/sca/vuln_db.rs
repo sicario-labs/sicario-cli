@@ -6,20 +6,19 @@
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use semver::{Version, VersionReq};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
+use super::known_vulnerability::{KnownVulnerability, CREATE_METADATA_TABLE_SQL, CREATE_TABLE_SQL};
 use crate::engine::{OwaspCategory, Severity};
-use super::known_vulnerability::{
-    KnownVulnerability, CREATE_METADATA_TABLE_SQL, CREATE_TABLE_SQL,
-};
 
 /// Events emitted by the background sync thread.
 #[derive(Debug, Clone)]
+#[allow(clippy::enum_variant_names)]
 pub enum DbSyncEvent {
     SyncStarted,
     SyncComplete { new_entries: usize },
@@ -71,7 +70,10 @@ impl VulnerabilityDatabaseManager {
         package_name: &str,
         version: &str,
     ) -> Result<Vec<KnownVulnerability>> {
-        let conn = self.conn.lock().map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
 
         let mut stmt = conn.prepare(
             "SELECT cve_id, ghsa_id, package_name, ecosystem, vulnerable_versions,
@@ -118,7 +120,10 @@ impl VulnerabilityDatabaseManager {
 
     /// Return the timestamp of the most recent successful sync.
     pub fn last_synced_at(&self) -> Result<Option<DateTime<Utc>>> {
-        let conn = self.conn.lock().map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
 
         let result: rusqlite::Result<String> = conn.query_row(
             "SELECT value FROM metadata WHERE key = 'last_synced_at'",
@@ -140,7 +145,10 @@ impl VulnerabilityDatabaseManager {
 
     /// Update the last_synced_at timestamp in the metadata table.
     pub fn update_last_synced_at(&self, ts: DateTime<Utc>) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
         conn.execute(
             "INSERT OR REPLACE INTO metadata (key, value) VALUES ('last_synced_at', ?1)",
             params![ts.to_rfc3339()],
@@ -153,7 +161,10 @@ impl VulnerabilityDatabaseManager {
     /// Uses `INSERT OR REPLACE` so that re-importing the same advisory updates
     /// the existing row rather than creating a duplicate.
     pub fn upsert(&self, kv: &KnownVulnerability) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
 
         let versions_json = serde_json::to_string(&kv.vulnerable_versions)?;
         let severity_str = severity_to_str(kv.severity);
@@ -185,8 +196,8 @@ impl VulnerabilityDatabaseManager {
     /// Force an immediate synchronization from all configured upstream sources.
     /// Returns the count of new/updated entries.
     pub fn sync_now(&self) -> Result<usize> {
-        use super::osv_import::OsvImporter;
         use super::ghsa_import::GhsaImporter;
+        use super::osv_import::OsvImporter;
 
         let mut total = 0usize;
 
@@ -275,8 +286,7 @@ struct RawRow {
 
 fn raw_to_known_vulnerability(raw: RawRow) -> Result<KnownVulnerability> {
     let vulnerable_versions: Vec<String> =
-        serde_json::from_str(&raw.vulnerable_versions_json)
-            .unwrap_or_default();
+        serde_json::from_str(&raw.vulnerable_versions_json).unwrap_or_default();
 
     let severity = str_to_severity(&raw.severity_str);
     let owasp_category = raw.owasp_category_str.as_deref().and_then(str_to_owasp);
@@ -363,7 +373,9 @@ pub fn str_to_owasp(s: &str) -> Option<OwaspCategory> {
         "A05_SecurityMisconfiguration" => Some(OwaspCategory::A05_SecurityMisconfiguration),
         "A06_VulnerableComponents" => Some(OwaspCategory::A06_VulnerableComponents),
         "A07_IdentificationAuthFailures" => Some(OwaspCategory::A07_IdentificationAuthFailures),
-        "A08_SoftwareDataIntegrityFailures" => Some(OwaspCategory::A08_SoftwareDataIntegrityFailures),
+        "A08_SoftwareDataIntegrityFailures" => {
+            Some(OwaspCategory::A08_SoftwareDataIntegrityFailures)
+        }
         "A09_SecurityLoggingFailures" => Some(OwaspCategory::A09_SecurityLoggingFailures),
         "A10_ServerSideRequestForgery" => Some(OwaspCategory::A10_ServerSideRequestForgery),
         _ => None,

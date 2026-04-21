@@ -73,11 +73,19 @@ impl JsonRpcError {
     pub const INTERNAL_ERROR: i32 = -32603;
 
     pub fn parse_error() -> Self {
-        Self { code: Self::PARSE_ERROR, message: "Parse error".to_string(), data: None }
+        Self {
+            code: Self::PARSE_ERROR,
+            message: "Parse error".to_string(),
+            data: None,
+        }
     }
 
     pub fn invalid_request(msg: impl Into<String>) -> Self {
-        Self { code: Self::INVALID_REQUEST, message: msg.into(), data: None }
+        Self {
+            code: Self::INVALID_REQUEST,
+            message: msg.into(),
+            data: None,
+        }
     }
 
     pub fn method_not_found(method: &str) -> Self {
@@ -89,11 +97,19 @@ impl JsonRpcError {
     }
 
     pub fn invalid_params(msg: impl Into<String>) -> Self {
-        Self { code: Self::INVALID_PARAMS, message: msg.into(), data: None }
+        Self {
+            code: Self::INVALID_PARAMS,
+            message: msg.into(),
+            data: None,
+        }
     }
 
     pub fn internal_error(msg: impl Into<String>) -> Self {
-        Self { code: Self::INTERNAL_ERROR, message: msg.into(), data: None }
+        Self {
+            code: Self::INTERNAL_ERROR,
+            message: msg.into(),
+            data: None,
+        }
     }
 }
 
@@ -132,8 +148,7 @@ pub enum McpResponsePayload {
 
 /// Parse a raw JSON-RPC request into a typed `McpRequest`.
 pub fn parse_request(raw: &str) -> Result<McpRequest, JsonRpcError> {
-    let rpc: JsonRpcRequest =
-        serde_json::from_str(raw).map_err(|_| JsonRpcError::parse_error())?;
+    let rpc: JsonRpcRequest = serde_json::from_str(raw).map_err(|_| JsonRpcError::parse_error())?;
 
     if rpc.jsonrpc != "2.0" {
         return Err(JsonRpcError::invalid_request("jsonrpc must be \"2.0\""));
@@ -173,16 +188,21 @@ pub fn parse_request(raw: &str) -> Result<McpRequest, JsonRpcError> {
 
 /// Serialize an `McpResponse` into a JSON-RPC 2.0 response string.
 pub fn serialize_response(response: McpResponse) -> String {
-    let result = serde_json::to_value(&response.payload)
-        .unwrap_or(serde_json::Value::Null);
+    let result = serde_json::to_value(&response.payload).unwrap_or(serde_json::Value::Null);
     let rpc = JsonRpcResponse::success(response.id, result);
-    serde_json::to_string(&rpc).unwrap_or_else(|_| r#"{"jsonrpc":"2.0","error":{"code":-32603,"message":"Serialization error"},"id":null}"#.to_string())
+    serde_json::to_string(&rpc).unwrap_or_else(|_| {
+        r#"{"jsonrpc":"2.0","error":{"code":-32603,"message":"Serialization error"},"id":null}"#
+            .to_string()
+    })
 }
 
 /// Serialize a JSON-RPC error response.
 pub fn serialize_error(id: Option<serde_json::Value>, error: JsonRpcError) -> String {
     let rpc = JsonRpcResponse::error(id, error);
-    serde_json::to_string(&rpc).unwrap_or_else(|_| r#"{"jsonrpc":"2.0","error":{"code":-32603,"message":"Serialization error"},"id":null}"#.to_string())
+    serde_json::to_string(&rpc).unwrap_or_else(|_| {
+        r#"{"jsonrpc":"2.0","error":{"code":-32603,"message":"Serialization error"},"id":null}"#
+            .to_string()
+    })
 }
 
 #[cfg(test)]
@@ -191,7 +211,8 @@ mod tests {
 
     #[test]
     fn test_parse_scan_file_request() {
-        let raw = r#"{"jsonrpc":"2.0","method":"scan_file","params":{"path":"src/main.rs"},"id":1}"#;
+        let raw =
+            r#"{"jsonrpc":"2.0","method":"scan_file","params":{"path":"src/main.rs"},"id":1}"#;
         let req = parse_request(raw).unwrap();
         assert!(matches!(req.method, McpMethod::ScanFile { path } if path == "src/main.rs"));
         assert_eq!(req.id, Some(serde_json::json!(1)));
@@ -233,7 +254,10 @@ mod tests {
 
     #[test]
     fn test_serialize_error_response() {
-        let s = serialize_error(Some(serde_json::json!(1)), JsonRpcError::internal_error("oops"));
+        let s = serialize_error(
+            Some(serde_json::json!(1)),
+            JsonRpcError::internal_error("oops"),
+        );
         let v: serde_json::Value = serde_json::from_str(&s).unwrap();
         assert_eq!(v["jsonrpc"], "2.0");
         assert_eq!(v["error"]["code"], JsonRpcError::INTERNAL_ERROR);
@@ -242,7 +266,8 @@ mod tests {
 
     #[test]
     fn test_json_rpc_response_success() {
-        let resp = JsonRpcResponse::success(Some(serde_json::json!(42)), serde_json::json!({"ok": true}));
+        let resp =
+            JsonRpcResponse::success(Some(serde_json::json!(42)), serde_json::json!({"ok": true}));
         assert!(resp.result.is_some());
         assert!(resp.error.is_none());
     }

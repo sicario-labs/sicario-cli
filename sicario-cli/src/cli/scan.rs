@@ -1,7 +1,7 @@
 //! Scan subcommand arguments.
 
-use clap::{ArgGroup, Parser, ValueEnum};
 use crate::engine::vulnerability::Severity;
+use clap::{ArgGroup, Parser, ValueEnum};
 
 /// Output format for scan results.
 #[derive(Debug, Clone, Copy, ValueEnum)]

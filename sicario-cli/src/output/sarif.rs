@@ -178,48 +178,46 @@ pub fn emit_sarif(vulns: &[Vulnerability], tool_version: &str) -> SarifDocument 
         }
     }
 
-    let results: Vec<SarifResult> = vulns.iter().map(|v| {
-        let taxa = v.cwe_id.as_ref().map(|cwe| {
-            vec![SarifTaxon {
-                id: cwe.clone(),
-                tool_component: SarifToolComponentRef {
-                    name: "CWE".to_string(),
-                },
-            }]
-        });
-
-        // Confidence score: use 1.0 (100) as default since confidence scoring
-        // is not yet wired; the rank field is always present per spec.
-        let confidence_score = 1.0_f64;
-
-        SarifResult {
-            rule_id: v.rule_id.clone(),
-            message: SarifMessage {
-                text: format!(
-                    "{} at {}:{}",
-                    v.rule_id,
-                    v.file_path.display(),
-                    v.line
-                ),
-            },
-            level: severity_to_sarif_level(&v.severity).to_string(),
-            locations: vec![SarifLocation {
-                physical_location: SarifPhysicalLocation {
-                    artifact_location: SarifArtifactLocation {
-                        uri: v.file_path.display().to_string(),
+    let results: Vec<SarifResult> = vulns
+        .iter()
+        .map(|v| {
+            let taxa = v.cwe_id.as_ref().map(|cwe| {
+                vec![SarifTaxon {
+                    id: cwe.clone(),
+                    tool_component: SarifToolComponentRef {
+                        name: "CWE".to_string(),
                     },
-                    region: SarifRegion {
-                        start_line: v.line,
-                        start_column: v.column,
-                    },
+                }]
+            });
+
+            // Confidence score: use 1.0 (100) as default since confidence scoring
+            // is not yet wired; the rank field is always present per spec.
+            let confidence_score = 1.0_f64;
+
+            SarifResult {
+                rule_id: v.rule_id.clone(),
+                message: SarifMessage {
+                    text: format!("{} at {}:{}", v.rule_id, v.file_path.display(), v.line),
                 },
-            }],
-            taxa,
-            properties: Some(SarifPropertyBag {
-                rank: Some(confidence_score * 100.0),
-            }),
-        }
-    }).collect();
+                level: severity_to_sarif_level(&v.severity).to_string(),
+                locations: vec![SarifLocation {
+                    physical_location: SarifPhysicalLocation {
+                        artifact_location: SarifArtifactLocation {
+                            uri: v.file_path.display().to_string(),
+                        },
+                        region: SarifRegion {
+                            start_line: v.line,
+                            start_column: v.column,
+                        },
+                    },
+                }],
+                taxa,
+                properties: Some(SarifPropertyBag {
+                    rank: Some(confidence_score * 100.0),
+                }),
+            }
+        })
+        .collect();
 
     SarifDocument {
         schema: "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json".to_string(),

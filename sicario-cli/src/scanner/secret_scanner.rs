@@ -106,12 +106,7 @@ impl SecretScanner {
         for oid in commit_oids {
             if let Ok(commit) = repo.find_commit(oid) {
                 if let Ok(tree) = commit.tree() {
-                    self.scan_tree_for_secrets(
-                        &repo,
-                        &tree,
-                        &mut visited_blobs,
-                        &mut all_secrets,
-                    );
+                    self.scan_tree_for_secrets(&repo, &tree, &mut visited_blobs, &mut all_secrets);
                 }
             }
         }
@@ -141,11 +136,8 @@ impl SecretScanner {
                             continue;
                         }
                         if let Ok(content) = std::str::from_utf8(blob.content()) {
-                            let file_path = PathBuf::from(
-                                entry.name().unwrap_or("<unknown>"),
-                            );
-                            let mut found =
-                                self.scan_content_for_secrets(content, &file_path);
+                            let file_path = PathBuf::from(entry.name().unwrap_or("<unknown>"));
+                            let mut found = self.scan_content_for_secrets(content, &file_path);
                             secrets.append(&mut found);
                         }
                     }
@@ -175,11 +167,7 @@ impl SecretScanner {
     }
 
     /// Scan raw source content for secrets (no suppression filtering).
-    pub fn scan_content_for_secrets(
-        &self,
-        content: &str,
-        file_path: &Path,
-    ) -> Vec<DetectedSecret> {
+    pub fn scan_content_for_secrets(&self, content: &str, file_path: &Path) -> Vec<DetectedSecret> {
         let mut secrets = Vec::new();
 
         for (line_idx, line) in content.lines().enumerate() {
@@ -236,7 +224,8 @@ impl SecretScanner {
     ///
     /// Requirements: 16.1, 16.2
     pub fn is_suppressed(&self, file: &Path, line: usize) -> Result<bool> {
-        self.suppression_parser.check_suppression_comment(file, line)
+        self.suppression_parser
+            .check_suppression_comment(file, line)
     }
 
     /// Scan staged files and verify all detected secrets, returning only
@@ -281,7 +270,9 @@ mod tests {
         let content = "const key = \"AKIAIOSFODNN7EXAMPLE\";";
         let secrets = scanner.scan_content_for_secrets(content, Path::new("test.js"));
         assert!(!secrets.is_empty());
-        let aws = secrets.iter().find(|s| s.secret_type == SecretType::AwsAccessKey);
+        let aws = secrets
+            .iter()
+            .find(|s| s.secret_type == SecretType::AwsAccessKey);
         assert!(aws.is_some(), "Should detect AWS access key");
     }
 
@@ -290,7 +281,9 @@ mod tests {
         let scanner = create_scanner();
         let content = "const stripe = require('stripe')('sk_test_ABCDEFGHIJKLMNOPQRSTUVWXYZ');";
         let secrets = scanner.scan_content_for_secrets(content, Path::new("test.js"));
-        let stripe = secrets.iter().find(|s| s.secret_type == SecretType::StripeKey);
+        let stripe = secrets
+            .iter()
+            .find(|s| s.secret_type == SecretType::StripeKey);
         assert!(stripe.is_some(), "Should detect Stripe live key");
     }
 
@@ -299,16 +292,21 @@ mod tests {
         let scanner = create_scanner();
         let content = "DATABASE_URL=postgres://admin:password123@db.example.com/myapp";
         let secrets = scanner.scan_content_for_secrets(content, Path::new(".env"));
-        let db = secrets.iter().find(|s| s.secret_type == SecretType::DatabaseUrl);
+        let db = secrets
+            .iter()
+            .find(|s| s.secret_type == SecretType::DatabaseUrl);
         assert!(db.is_some(), "Should detect database URL");
     }
 
     #[test]
     fn test_scan_content_detects_private_key() {
         let scanner = create_scanner();
-        let content = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----";
+        let content =
+            "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----";
         let secrets = scanner.scan_content_for_secrets(content, Path::new("key.pem"));
-        let pk = secrets.iter().find(|s| s.secret_type == SecretType::PrivateKey);
+        let pk = secrets
+            .iter()
+            .find(|s| s.secret_type == SecretType::PrivateKey);
         assert!(pk.is_some(), "Should detect private key");
     }
 
@@ -322,7 +320,9 @@ mod tests {
         let scanner = create_scanner();
         let secrets = scanner.scan_file_for_secrets(f.path()).unwrap();
         // The AWS key on line 2 should be suppressed by the comment on line 1
-        let aws = secrets.iter().find(|s| s.secret_type == SecretType::AwsAccessKey);
+        let aws = secrets
+            .iter()
+            .find(|s| s.secret_type == SecretType::AwsAccessKey);
         assert!(aws.is_none(), "Suppressed AWS key should not be reported");
     }
 
@@ -334,7 +334,9 @@ mod tests {
 
         let scanner = create_scanner();
         let secrets = scanner.scan_file_for_secrets(f.path()).unwrap();
-        let aws = secrets.iter().find(|s| s.secret_type == SecretType::AwsAccessKey);
+        let aws = secrets
+            .iter()
+            .find(|s| s.secret_type == SecretType::AwsAccessKey);
         assert!(aws.is_some(), "Unsuppressed AWS key should be reported");
     }
 
@@ -343,7 +345,9 @@ mod tests {
         let scanner = create_scanner();
         let content = "line1\nline2\nconst key = \"AKIAIOSFODNN7EXAMPLE\";\nline4";
         let secrets = scanner.scan_content_for_secrets(content, Path::new("test.js"));
-        let aws = secrets.iter().find(|s| s.secret_type == SecretType::AwsAccessKey);
+        let aws = secrets
+            .iter()
+            .find(|s| s.secret_type == SecretType::AwsAccessKey);
         assert!(aws.is_some());
         assert_eq!(aws.unwrap().line, 3, "AWS key should be on line 3");
     }
@@ -377,7 +381,9 @@ mod tests {
         let scanner = create_scanner();
         let secrets = scanner.scan_git_history(temp_dir.path()).unwrap();
 
-        let aws = secrets.iter().find(|s| s.secret_type == SecretType::AwsAccessKey);
+        let aws = secrets
+            .iter()
+            .find(|s| s.secret_type == SecretType::AwsAccessKey);
         assert!(aws.is_some(), "Should find AWS key in git history");
     }
 }

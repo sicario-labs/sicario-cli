@@ -50,13 +50,13 @@ mod telemetry_property_tests {
 
     fn arb_vulnerability() -> impl Strategy<Value = Vulnerability> {
         (
-            "[a-z][a-z0-9-]{1,30}",   // rule_id
-            "[a-z][a-z0-9/._-]{1,60}", // file_path
+            "[a-z][a-z0-9-]{1,30}",     // rule_id
+            "[a-z][a-z0-9/._-]{1,60}",  // file_path
             1usize..=5000usize,         // line
             1usize..=200usize,          // column
             "[a-zA-Z0-9 (){};=]{5,80}", // snippet
             arb_severity(),
-            proptest::bool::ANY,        // reachable
+            proptest::bool::ANY, // reachable
             arb_owasp(),
         )
             .prop_map(

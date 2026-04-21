@@ -14,9 +14,9 @@ use anyhow::Result;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 
-use crate::tui::app::TuiMessage;
 use super::detector::TechDetector;
 use super::rule_configurator::RuleConfigurator;
+use crate::tui::app::TuiMessage;
 
 /// Drives the zero-configuration onboarding experience.
 pub struct OnboardingFlow {
@@ -81,9 +81,7 @@ impl OnboardingFlow {
         let vulnerabilities = self.run_scan(&config.rule_files)?;
 
         // ── Phase 5: Present first actionable fix ─────────────────────────────
-        let _ = tx.send(TuiMessage::OnboardingComplete {
-            vulnerabilities,
-        });
+        let _ = tx.send(TuiMessage::OnboardingComplete { vulnerabilities });
 
         Ok(())
     }
@@ -211,7 +209,9 @@ mod tests {
         handle.join().unwrap();
 
         let messages: Vec<TuiMessage> = rx.try_iter().collect();
-        let detected = messages.iter().find(|m| matches!(m, TuiMessage::OnboardingDetected { .. }));
+        let detected = messages
+            .iter()
+            .find(|m| matches!(m, TuiMessage::OnboardingDetected { .. }));
         assert!(detected.is_some(), "Should send OnboardingDetected message");
 
         if let Some(TuiMessage::OnboardingDetected { languages, .. }) = detected {
@@ -235,7 +235,9 @@ mod tests {
         handle.join().unwrap();
 
         let messages: Vec<TuiMessage> = rx.try_iter().collect();
-        let complete = messages.iter().find(|m| matches!(m, TuiMessage::OnboardingComplete { .. }));
+        let complete = messages
+            .iter()
+            .find(|m| matches!(m, TuiMessage::OnboardingComplete { .. }));
         assert!(complete.is_some(), "Should send OnboardingComplete message");
     }
 
@@ -272,8 +274,12 @@ mod tests {
         let messages: Vec<TuiMessage> = rx.try_iter().collect();
 
         // OnboardingDetected must come before OnboardingComplete
-        let detected_idx = messages.iter().position(|m| matches!(m, TuiMessage::OnboardingDetected { .. }));
-        let complete_idx = messages.iter().position(|m| matches!(m, TuiMessage::OnboardingComplete { .. }));
+        let detected_idx = messages
+            .iter()
+            .position(|m| matches!(m, TuiMessage::OnboardingDetected { .. }));
+        let complete_idx = messages
+            .iter()
+            .position(|m| matches!(m, TuiMessage::OnboardingComplete { .. }));
 
         assert!(detected_idx.is_some(), "OnboardingDetected must be sent");
         assert!(complete_idx.is_some(), "OnboardingComplete must be sent");

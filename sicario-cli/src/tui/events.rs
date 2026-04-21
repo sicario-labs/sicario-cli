@@ -18,8 +18,13 @@ pub fn poll_event(timeout: Duration) -> Result<Option<Event>> {
 pub fn is_quit_event(event: &Event) -> bool {
     matches!(
         event,
-        Event::Key(KeyEvent { code: KeyCode::Char('q'), .. })
-            | Event::Key(KeyEvent { code: KeyCode::Esc, .. })
+        Event::Key(KeyEvent {
+            code: KeyCode::Char('q'),
+            ..
+        }) | Event::Key(KeyEvent {
+            code: KeyCode::Esc,
+            ..
+        })
     )
 }
 
@@ -27,8 +32,13 @@ pub fn is_quit_event(event: &Event) -> bool {
 pub fn is_down_event(event: &Event) -> bool {
     matches!(
         event,
-        Event::Key(KeyEvent { code: KeyCode::Down, .. })
-            | Event::Key(KeyEvent { code: KeyCode::Char('j'), .. })
+        Event::Key(KeyEvent {
+            code: KeyCode::Down,
+            ..
+        }) | Event::Key(KeyEvent {
+            code: KeyCode::Char('j'),
+            ..
+        })
     )
 }
 
@@ -36,14 +46,25 @@ pub fn is_down_event(event: &Event) -> bool {
 pub fn is_up_event(event: &Event) -> bool {
     matches!(
         event,
-        Event::Key(KeyEvent { code: KeyCode::Up, .. })
-            | Event::Key(KeyEvent { code: KeyCode::Char('k'), .. })
+        Event::Key(KeyEvent {
+            code: KeyCode::Up,
+            ..
+        }) | Event::Key(KeyEvent {
+            code: KeyCode::Char('k'),
+            ..
+        })
     )
 }
 
 /// Returns `true` if the event is a confirmation (Enter).
 pub fn is_enter_event(event: &Event) -> bool {
-    matches!(event, Event::Key(KeyEvent { code: KeyCode::Enter, .. }))
+    matches!(
+        event,
+        Event::Key(KeyEvent {
+            code: KeyCode::Enter,
+            ..
+        })
+    )
 }
 
 #[cfg(test)]

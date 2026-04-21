@@ -41,8 +41,7 @@ mod binary_portability_tests {
         }
 
         // Fallback: derive from CARGO_MANIFEST_DIR
-        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
-            .unwrap_or_else(|_| ".".to_string());
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
 
         // Walk up to the workspace root (one level above the crate manifest)
         let workspace_root = PathBuf::from(&manifest_dir)
@@ -54,12 +53,20 @@ mod binary_portability_tests {
         let debug_bin = workspace_root
             .join("target")
             .join("debug")
-            .join(if cfg!(windows) { "sicario.exe" } else { "sicario" });
+            .join(if cfg!(windows) {
+                "sicario.exe"
+            } else {
+                "sicario"
+            });
 
         let release_bin = workspace_root
             .join("target")
             .join("release")
-            .join(if cfg!(windows) { "sicario.exe" } else { "sicario" });
+            .join(if cfg!(windows) {
+                "sicario.exe"
+            } else {
+                "sicario"
+            });
 
         if release_bin.exists() {
             release_bin
@@ -80,7 +87,9 @@ mod binary_portability_tests {
     fn is_release_build() -> bool {
         // Cargo sets PROFILE to "release" for `cargo test --release`
         let sep = std::path::MAIN_SEPARATOR_STR;
-        std::env::var("PROFILE").map(|p| p == "release").unwrap_or(false)
+        std::env::var("PROFILE")
+            .map(|p| p == "release")
+            .unwrap_or(false)
             || binary_path()
                 .to_string_lossy()
                 .contains(&format!("{}release{}", sep, sep))
@@ -121,8 +130,7 @@ mod binary_portability_tests {
             return;
         }
 
-        let metadata = std::fs::metadata(&path)
-            .expect("Must be able to read binary metadata");
+        let metadata = std::fs::metadata(&path).expect("Must be able to read binary metadata");
         let size = metadata.len();
 
         let limit = if is_release_build() {
@@ -138,7 +146,11 @@ mod binary_portability_tests {
             size,
             size as f64 / (1024.0 * 1024.0),
             limit / (1024 * 1024),
-            if is_release_build() { "release" } else { "debug" }
+            if is_release_build() {
+                "release"
+            } else {
+                "debug"
+            }
         );
     }
 
@@ -195,10 +207,8 @@ mod binary_portability_tests {
                     );
                 }
                 // stdout and stderr must be valid UTF-8 (portability requirement)
-                let _ = String::from_utf8(out.stdout)
-                    .expect("Binary stdout must be valid UTF-8");
-                let _ = String::from_utf8(out.stderr)
-                    .expect("Binary stderr must be valid UTF-8");
+                let _ = String::from_utf8(out.stdout).expect("Binary stdout must be valid UTF-8");
+                let _ = String::from_utf8(out.stderr).expect("Binary stderr must be valid UTF-8");
             }
             Err(e) => {
                 panic!(
@@ -458,10 +468,7 @@ mod binary_portability_tests {
                             found_path,
                             out.status.code()
                         );
-                        println!(
-                            "Binary is available on PATH at: {} ✓",
-                            found_path
-                        );
+                        println!("Binary is available on PATH at: {} ✓", found_path);
                     }
                     Err(e) => {
                         panic!(
@@ -505,8 +512,8 @@ mod binary_portability_tests {
         // The install.sh script must default to a directory that is on PATH
         // for standard Unix/macOS installations.
         let installer_path = {
-            let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
-                .unwrap_or_else(|_| ".".to_string());
+            let manifest_dir =
+                std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
             let workspace_root = std::path::PathBuf::from(&manifest_dir)
                 .parent()
                 .map(|p| p.to_path_buf())
@@ -515,12 +522,15 @@ mod binary_portability_tests {
         };
 
         if !installer_path.exists() {
-            println!("SKIP: install.sh not found at '{}'", installer_path.display());
+            println!(
+                "SKIP: install.sh not found at '{}'",
+                installer_path.display()
+            );
             return;
         }
 
-        let content = std::fs::read_to_string(&installer_path)
-            .expect("Must be able to read install.sh");
+        let content =
+            std::fs::read_to_string(&installer_path).expect("Must be able to read install.sh");
 
         // The installer must define a default install directory.
         assert!(
@@ -554,8 +564,8 @@ mod binary_portability_tests {
     #[test]
     fn test_homebrew_formula_installs_to_bin() {
         let formula_path = {
-            let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
-                .unwrap_or_else(|_| ".".to_string());
+            let manifest_dir =
+                std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
             let workspace_root = std::path::PathBuf::from(&manifest_dir)
                 .parent()
                 .map(|p| p.to_path_buf())

@@ -47,8 +47,12 @@ impl BackupManager {
     pub fn new(project_root: &Path) -> Result<Self> {
         let sicario_dir = project_root.join(".sicario");
         let backup_dir = sicario_dir.join("backups");
-        fs::create_dir_all(&backup_dir)
-            .with_context(|| format!("Failed to create backup directory: {}", backup_dir.display()))?;
+        fs::create_dir_all(&backup_dir).with_context(|| {
+            format!(
+                "Failed to create backup directory: {}",
+                backup_dir.display()
+            )
+        })?;
 
         let history_path = sicario_dir.join("patch_history.json");
 
@@ -73,8 +77,12 @@ impl BackupManager {
             .unwrap_or(0);
         let subdir_name = format!("{}_{}", timestamp, nanos);
         let backup_subdir = self.backup_dir.join(&subdir_name);
-        fs::create_dir_all(&backup_subdir)
-            .with_context(|| format!("Failed to create backup subdir: {}", backup_subdir.display()))?;
+        fs::create_dir_all(&backup_subdir).with_context(|| {
+            format!(
+                "Failed to create backup subdir: {}",
+                backup_subdir.display()
+            )
+        })?;
 
         // Preserve the relative path structure inside the backup directory so
         // that multiple files from the same patch can coexist.
@@ -83,14 +91,13 @@ impl BackupManager {
             .ok_or_else(|| anyhow::anyhow!("Invalid file path: {}", file_path.display()))?;
         let backup_path = backup_subdir.join(file_name);
 
-        fs::copy(file_path, &backup_path)
-            .with_context(|| {
-                format!(
-                    "Failed to copy {} to {}",
-                    file_path.display(),
-                    backup_path.display()
-                )
-            })?;
+        fs::copy(file_path, &backup_path).with_context(|| {
+            format!(
+                "Failed to copy {} to {}",
+                file_path.display(),
+                backup_path.display()
+            )
+        })?;
 
         Ok(backup_path)
     }
@@ -114,10 +121,14 @@ impl BackupManager {
     pub fn record_patch(&self, entry: PatchHistoryEntry) -> Result<()> {
         let mut entries = self.load_history()?;
         entries.push(entry);
-        let json = serde_json::to_string_pretty(&entries)
-            .context("Failed to serialize patch history")?;
-        fs::write(&self.history_path, json)
-            .with_context(|| format!("Failed to write patch history: {}", self.history_path.display()))?;
+        let json =
+            serde_json::to_string_pretty(&entries).context("Failed to serialize patch history")?;
+        fs::write(&self.history_path, json).with_context(|| {
+            format!(
+                "Failed to write patch history: {}",
+                self.history_path.display()
+            )
+        })?;
         Ok(())
     }
 
@@ -129,11 +140,16 @@ impl BackupManager {
     /// Load all patch history entries from disk.
     ///
     /// Returns an empty `Vec` if the history file does not exist yet.
-    pub fn load_history(&self) -> Result<Vec<PatchHistoryEntry>> {        if !self.history_path.exists() {
+    pub fn load_history(&self) -> Result<Vec<PatchHistoryEntry>> {
+        if !self.history_path.exists() {
             return Ok(Vec::new());
         }
-        let json = fs::read_to_string(&self.history_path)
-            .with_context(|| format!("Failed to read patch history: {}", self.history_path.display()))?;
+        let json = fs::read_to_string(&self.history_path).with_context(|| {
+            format!(
+                "Failed to read patch history: {}",
+                self.history_path.display()
+            )
+        })?;
         serde_json::from_str(&json).context("Failed to parse patch history JSON")
     }
 
@@ -277,9 +293,7 @@ mod tests {
         // Cleanup with 30-day threshold — recent backup should survive
         mgr.cleanup_old_backups(30).unwrap();
 
-        let entries: Vec<_> = fs::read_dir(&mgr.backup_dir)
-            .unwrap()
-            .collect();
+        let entries: Vec<_> = fs::read_dir(&mgr.backup_dir).unwrap().collect();
         assert!(!entries.is_empty(), "Recent backup should not be removed");
     }
 }

@@ -45,7 +45,10 @@ pub fn spawn_scan_worker(job: ScanJob, tx: Sender<TuiMessage>) -> thread::JoinHa
 /// sync status and stale-cache warnings.
 pub fn db_sync_event_to_tui_message(event: DbSyncEvent) -> TuiMessage {
     match event {
-        DbSyncEvent::SyncStarted => TuiMessage::ScanProgress { files_scanned: 0, total: 0 },
+        DbSyncEvent::SyncStarted => TuiMessage::ScanProgress {
+            files_scanned: 0,
+            total: 0,
+        },
         DbSyncEvent::SyncComplete { new_entries } => TuiMessage::DbSyncComplete { new_entries },
         DbSyncEvent::SyncError(msg) => TuiMessage::DbSyncError(msg),
     }
@@ -146,7 +149,9 @@ mod tests {
         handle.join().unwrap();
 
         let messages: Vec<TuiMessage> = rx.try_iter().collect();
-        let has_complete = messages.iter().any(|m| matches!(m, TuiMessage::ScanComplete));
+        let has_complete = messages
+            .iter()
+            .any(|m| matches!(m, TuiMessage::ScanComplete));
         assert!(has_complete, "Worker should send ScanComplete");
     }
 
@@ -173,7 +178,10 @@ mod tests {
             .filter(|m| matches!(m, TuiMessage::ScanProgress { .. }))
             .collect();
 
-        assert!(!progress_msgs.is_empty(), "Worker should send ScanProgress messages");
+        assert!(
+            !progress_msgs.is_empty(),
+            "Worker should send ScanProgress messages"
+        );
     }
 
     #[test]
@@ -198,7 +206,10 @@ mod tests {
             .filter(|m| matches!(m, TuiMessage::VulnerabilityFound(_)))
             .collect();
 
-        assert!(!vuln_msgs.is_empty(), "Worker should send VulnerabilityFound messages");
+        assert!(
+            !vuln_msgs.is_empty(),
+            "Worker should send VulnerabilityFound messages"
+        );
     }
 
     #[test]
@@ -216,8 +227,13 @@ mod tests {
         handle.join().unwrap();
 
         let messages: Vec<TuiMessage> = rx.try_iter().collect();
-        let has_complete = messages.iter().any(|m| matches!(m, TuiMessage::ScanComplete));
-        assert!(has_complete, "Worker should send ScanComplete even with no files");
+        let has_complete = messages
+            .iter()
+            .any(|m| matches!(m, TuiMessage::ScanComplete));
+        assert!(
+            has_complete,
+            "Worker should send ScanComplete even with no files"
+        );
     }
 
     #[test]

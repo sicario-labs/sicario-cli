@@ -93,8 +93,9 @@ impl BaselineManager {
     fn baselines_dir(&self) -> Result<PathBuf> {
         let dir = self.project_root.join(".sicario").join("baselines");
         if !dir.exists() {
-            fs::create_dir_all(&dir)
-                .with_context(|| format!("Failed to create baselines directory: {}", dir.display()))?;
+            fs::create_dir_all(&dir).with_context(|| {
+                format!("Failed to create baselines directory: {}", dir.display())
+            })?;
         }
         Ok(dir)
     }
@@ -162,9 +163,10 @@ impl BaselineManager {
         let baselines = self.load_all_baselines()?;
 
         // Try matching by tag first
-        if let Some(b) = baselines.iter().find(|b| {
-            b.tag.as_deref() == Some(reference)
-        }) {
+        if let Some(b) = baselines
+            .iter()
+            .find(|b| b.tag.as_deref() == Some(reference))
+        {
             return Ok(b.clone());
         }
 
@@ -198,8 +200,8 @@ impl BaselineManagement for BaselineManager {
         let filename = Self::baseline_filename(&now, tag);
         let path = dir.join(&filename);
 
-        let json = serde_json::to_string_pretty(&baseline)
-            .context("Failed to serialize baseline")?;
+        let json =
+            serde_json::to_string_pretty(&baseline).context("Failed to serialize baseline")?;
         fs::write(&path, json)
             .with_context(|| format!("Failed to write baseline: {}", path.display()))?;
 
@@ -261,11 +263,31 @@ impl BaselineManagement for BaselineManager {
             .into_iter()
             .map(|b| {
                 let total = b.findings.len();
-                let critical_count = b.findings.iter().filter(|f| f.severity == Severity::Critical).count();
-                let high_count = b.findings.iter().filter(|f| f.severity == Severity::High).count();
-                let medium_count = b.findings.iter().filter(|f| f.severity == Severity::Medium).count();
-                let low_count = b.findings.iter().filter(|f| f.severity == Severity::Low).count();
-                let info_count = b.findings.iter().filter(|f| f.severity == Severity::Info).count();
+                let critical_count = b
+                    .findings
+                    .iter()
+                    .filter(|f| f.severity == Severity::Critical)
+                    .count();
+                let high_count = b
+                    .findings
+                    .iter()
+                    .filter(|f| f.severity == Severity::High)
+                    .count();
+                let medium_count = b
+                    .findings
+                    .iter()
+                    .filter(|f| f.severity == Severity::Medium)
+                    .count();
+                let low_count = b
+                    .findings
+                    .iter()
+                    .filter(|f| f.severity == Severity::Low)
+                    .count();
+                let info_count = b
+                    .findings
+                    .iter()
+                    .filter(|f| f.severity == Severity::Info)
+                    .count();
 
                 BaselineSummary {
                     timestamp: b.timestamp,
@@ -289,7 +311,13 @@ impl BaselineManagement for BaselineManager {
 /// Sanitize a tag for use in filenames (replace non-alphanumeric with dashes).
 fn sanitize_tag(tag: &str) -> String {
     tag.chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect()
 }
 
@@ -342,9 +370,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let mgr = BaselineManager::new(tmp.path());
 
-        let findings = vec![
-            make_finding("sql-injection", "src/db.rs", "query(input)"),
-        ];
+        let findings = vec![make_finding("sql-injection", "src/db.rs", "query(input)")];
 
         let path = mgr.save(&findings, Some("v1-release")).unwrap();
         assert!(path.exists());
@@ -361,9 +387,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let mgr = BaselineManager::new(tmp.path());
 
-        let findings = vec![
-            make_finding("xss", "src/view.js", "innerHTML = data"),
-        ];
+        let findings = vec![make_finding("xss", "src/view.js", "innerHTML = data")];
 
         let path = mgr.save(&findings, None).unwrap();
         assert!(path.exists());
@@ -380,7 +404,8 @@ mod tests {
         // Save a baseline with findings A and B
         let finding_a = make_finding("sql-injection", "src/db.rs", "query(input)");
         let finding_b = make_finding("xss", "src/view.js", "innerHTML = data");
-        mgr.save(&[finding_a.clone(), finding_b.clone()], Some("baseline1")).unwrap();
+        mgr.save(&[finding_a.clone(), finding_b.clone()], Some("baseline1"))
+            .unwrap();
 
         // Current scan has findings A and C (B resolved, C is new)
         let finding_c = make_finding("cmd-injection", "src/exec.rs", "Command::new(user_input)");
@@ -390,11 +415,17 @@ mod tests {
 
         // A is unchanged
         assert_eq!(delta.unchanged_findings.len(), 1);
-        assert_eq!(delta.unchanged_findings[0].fingerprint, finding_a.fingerprint);
+        assert_eq!(
+            delta.unchanged_findings[0].fingerprint,
+            finding_a.fingerprint
+        );
 
         // B is resolved
         assert_eq!(delta.resolved_findings.len(), 1);
-        assert_eq!(delta.resolved_findings[0].fingerprint, finding_b.fingerprint);
+        assert_eq!(
+            delta.resolved_findings[0].fingerprint,
+            finding_b.fingerprint
+        );
 
         // C is new
         assert_eq!(delta.new_findings.len(), 1);
@@ -410,14 +441,27 @@ mod tests {
         let finding_b = make_finding("rule-b", "b.rs", "snippet_b");
         let finding_c = make_finding("rule-c", "c.rs", "snippet_c");
 
-        mgr.save(&[finding_a.clone(), finding_b.clone()], Some("old")).unwrap();
+        mgr.save(&[finding_a.clone(), finding_b.clone()], Some("old"))
+            .unwrap();
 
         let current = vec![finding_b.clone(), finding_c.clone()];
         let delta = mgr.compare("old", &current).unwrap();
 
-        let new_fps: HashSet<&str> = delta.new_findings.iter().map(|f| f.fingerprint.as_str()).collect();
-        let resolved_fps: HashSet<&str> = delta.resolved_findings.iter().map(|f| f.fingerprint.as_str()).collect();
-        let unchanged_fps: HashSet<&str> = delta.unchanged_findings.iter().map(|f| f.fingerprint.as_str()).collect();
+        let new_fps: HashSet<&str> = delta
+            .new_findings
+            .iter()
+            .map(|f| f.fingerprint.as_str())
+            .collect();
+        let resolved_fps: HashSet<&str> = delta
+            .resolved_findings
+            .iter()
+            .map(|f| f.fingerprint.as_str())
+            .collect();
+        let unchanged_fps: HashSet<&str> = delta
+            .unchanged_findings
+            .iter()
+            .map(|f| f.fingerprint.as_str())
+            .collect();
 
         // Disjoint check
         assert!(new_fps.is_disjoint(&resolved_fps));
@@ -425,10 +469,20 @@ mod tests {
         assert!(resolved_fps.is_disjoint(&unchanged_fps));
 
         // Union equals union of old and new fingerprints
-        let old_fps: HashSet<&str> = [&finding_a, &finding_b].iter().map(|f| f.fingerprint.as_str()).collect();
-        let cur_fps: HashSet<&str> = [&finding_b, &finding_c].iter().map(|f| f.fingerprint.as_str()).collect();
+        let old_fps: HashSet<&str> = [&finding_a, &finding_b]
+            .iter()
+            .map(|f| f.fingerprint.as_str())
+            .collect();
+        let cur_fps: HashSet<&str> = [&finding_b, &finding_c]
+            .iter()
+            .map(|f| f.fingerprint.as_str())
+            .collect();
         let all_fps: HashSet<&str> = old_fps.union(&cur_fps).copied().collect();
-        let delta_union: HashSet<&str> = new_fps.union(&resolved_fps).copied().chain(unchanged_fps.iter().copied()).collect();
+        let delta_union: HashSet<&str> = new_fps
+            .union(&resolved_fps)
+            .copied()
+            .chain(unchanged_fps.iter().copied())
+            .collect();
         assert_eq!(all_fps, delta_union);
     }
 
@@ -477,8 +531,10 @@ mod tests {
     #[test]
     fn test_fingerprint_stability_line_change() {
         // Changing line/column should NOT change the fingerprint
-        let fp1 = Finding::compute_fingerprint("sql-injection", Path::new("src/db.rs"), "query(input)");
-        let fp2 = Finding::compute_fingerprint("sql-injection", Path::new("src/db.rs"), "query(input)");
+        let fp1 =
+            Finding::compute_fingerprint("sql-injection", Path::new("src/db.rs"), "query(input)");
+        let fp2 =
+            Finding::compute_fingerprint("sql-injection", Path::new("src/db.rs"), "query(input)");
         assert_eq!(fp1, fp2);
         // The fingerprint is based on rule_id + file_path + snippet_hash, not line/column
     }

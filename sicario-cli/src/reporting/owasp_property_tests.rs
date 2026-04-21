@@ -47,10 +47,7 @@ mod owasp_property_tests {
     }
 
     fn arb_optional_owasp() -> impl Strategy<Value = Option<OwaspCategory>> {
-        prop_oneof![
-            Just(None),
-            arb_owasp_category().prop_map(Some),
-        ]
+        prop_oneof![Just(None), arb_owasp_category().prop_map(Some),]
     }
 
     fn arb_vulnerability(owasp: Option<OwaspCategory>, severity: Severity) -> Vulnerability {

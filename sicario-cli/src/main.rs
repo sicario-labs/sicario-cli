@@ -1,36 +1,42 @@
-mod parser;
-mod scanner;
-mod engine;
-mod tui;
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+#![allow(unused_doc_comments)]
+#![allow(unused_mut)]
+
 mod auth;
-mod remediation;
+mod cloud;
+mod engine;
 mod mcp;
 mod onboarding;
-mod cloud;
+mod parser;
+mod remediation;
 mod reporting;
+mod scanner;
+mod tui;
 
 // New modules added by CLI overhaul
-mod cli;
-mod output;
-mod diff;
-mod confidence;
 mod baseline;
+mod benchmark;
+mod cache;
+mod cli;
+mod confidence;
+mod diff;
+mod hook;
+mod key_manager;
+mod lsp;
+mod output;
+mod publish;
+mod rule_harness;
 mod suppression_learner;
 mod verification;
-mod cache;
-mod hook;
-mod lsp;
-mod benchmark;
-mod rule_harness;
-mod key_manager;
-mod publish;
 
 use anyhow::Result;
 use clap::Parser;
 use std::path::PathBuf;
 
-use cli::{Command, CompletionsArgs, SicarioCli};
 use cli::exit_code::ExitCode;
+use cli::{Command, CompletionsArgs, SicarioCli};
 
 fn main() {
     // Silence tracing noise — only show warnings+
@@ -65,7 +71,7 @@ fn run(cli: SicarioCli) -> Result<ExitCode> {
 
 fn dispatch(cmd: Command) -> Result<ExitCode> {
     match cmd {
-        Command::Scan(args) => cmd_scan(args),
+        Command::Scan(args) => cmd_scan(*args),
         Command::Init => {
             eprintln!("sicario init: not yet implemented");
             Ok(ExitCode::Clean)
@@ -145,8 +151,8 @@ fn cmd_scan(args: cli::scan::ScanArgs) -> Result<ExitCode> {
     use cli::scan::OutputFormat;
     use engine::sast_engine::SastEngine;
     use engine::vulnerability::Severity;
-    use output::formatter::{FormatterConfig, render_findings_table, render_finding_text};
-    use output::branded::{ScanSummary, print_scan_summary};
+    use output::branded::{print_scan_summary, ScanSummary};
+    use output::formatter::{render_finding_text, render_findings_table, FormatterConfig};
     use output::sarif::emit_sarif;
 
     let scan_start = std::time::Instant::now();
@@ -232,8 +238,7 @@ fn cmd_scan(args: cli::scan::ScanArgs) -> Result<ExitCode> {
         }
         let summary = ScanSummary::from_vulns(&vulns, scan_duration, 0, rules_loaded);
         print_scan_summary(
-            &summary,
-            false, // no unicode in file output
+            &summary, false, // no unicode in file output
             false, // no color in file output
             &mut buf,
         )?;
@@ -274,8 +279,8 @@ fn cmd_completions(args: CompletionsArgs) {
 // ─── Interactive TUI ──────────────────────────────────────────────────────────
 
 fn run_interactive_tui(scan_dir: PathBuf) -> Result<()> {
-    use tui::app::{SicarioTui, create_tui_channel};
-    use tui::worker::{ScanJob, spawn_scan_worker};
+    use tui::app::{create_tui_channel, SicarioTui};
+    use tui::worker::{spawn_scan_worker, ScanJob};
 
     let (tx, rx) = create_tui_channel();
     let mut app = SicarioTui::new(rx)?;
@@ -355,8 +360,8 @@ fn discover_bundled_rules() -> Vec<PathBuf> {
 // ─── Report handler (preserved from original) ────────────────────────────────
 
 fn cmd_report_handler(dir_str: &str, output: Option<&str>) -> Result<()> {
-    use reporting::{generate_compliance_report, write_compliance_reports};
     use engine::sast_engine::SastEngine;
+    use reporting::{generate_compliance_report, write_compliance_reports};
 
     let dir = PathBuf::from(dir_str);
     let output_dir = output

@@ -79,8 +79,7 @@ impl CerebrasClient {
         let api_key = std::env::var("CEREBRAS_API_KEY").unwrap_or_default();
         let endpoint = std::env::var("CEREBRAS_ENDPOINT")
             .unwrap_or_else(|_| "https://api.cerebras.ai/v1/chat/completions".to_string());
-        let model = std::env::var("CEREBRAS_MODEL")
-            .unwrap_or_else(|_| "llama3.1-8b".to_string());
+        let model = std::env::var("CEREBRAS_MODEL").unwrap_or_else(|_| "llama3.1-8b".to_string());
 
         let client = Client::builder()
             .timeout(Duration::from_secs(30))
@@ -136,11 +135,7 @@ impl CerebrasClient {
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(anyhow!(
-                "Cerebras API returned error {}: {}",
-                status,
-                body
-            ));
+            return Err(anyhow!("Cerebras API returned error {}: {}", status, body));
         }
 
         let chat_response: ChatResponse = response
@@ -169,10 +164,7 @@ impl Default for CerebrasClient {
 fn build_user_prompt(context: &FixContext) -> String {
     let mut prompt = String::new();
 
-    prompt.push_str(&format!(
-        "Language: {}\n",
-        context.file_language
-    ));
+    prompt.push_str(&format!("Language: {}\n", context.file_language));
 
     if let Some(fw) = &context.framework {
         prompt.push_str(&format!("Framework: {}\n", fw));
@@ -268,9 +260,6 @@ mod tests {
         let ctx = make_context();
         let result = client.generate_fix(&ctx).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("CEREBRAS_API_KEY"));
+        assert!(result.unwrap_err().to_string().contains("CEREBRAS_API_KEY"));
     }
 }

@@ -6,8 +6,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tree_sitter::{Query, QueryCursor};
 
-use super::{SecurityRule, Vulnerability};
 use super::reachability::ReachabilityAnalyzer;
+use super::{SecurityRule, Vulnerability};
 use crate::parser::{ExclusionManager, Language, TreeSitterEngine};
 
 /// Main SAST engine for security analysis
@@ -80,7 +80,8 @@ impl SastEngine {
         // Compile tree-sitter queries for each target language
         let mut queries = HashMap::new();
         for &language in &rule.languages {
-            let query = self.compile_query_for_language(&rule.pattern.query, language)
+            let query = self
+                .compile_query_for_language(&rule.pattern.query, language)
                 .with_context(|| {
                     format!(
                         "Failed to compile query for rule '{}' in language {:?}",
@@ -167,7 +168,8 @@ impl SastEngine {
                     let end_position = node.end_position();
 
                     // Extract code snippet
-                    let snippet = node.utf8_text(source_code.as_bytes())
+                    let snippet = node
+                        .utf8_text(source_code.as_bytes())
                         .unwrap_or("<unable to extract snippet>")
                         .to_string();
 
@@ -175,7 +177,7 @@ impl SastEngine {
                     let mut vulnerability = Vulnerability::new(
                         compiled_rule.rule.id.clone(),
                         path.to_path_buf(),
-                        start_position.row + 1, // Convert to 1-indexed
+                        start_position.row + 1,    // Convert to 1-indexed
                         start_position.column + 1, // Convert to 1-indexed
                         snippet,
                         compiled_rule.rule.severity,
@@ -208,9 +210,7 @@ impl SastEngine {
         // Use Rayon to scan files in parallel
         let results: Vec<Result<Vec<Vulnerability>>> = files_to_scan
             .par_iter()
-            .map(|file_path| {
-                Self::scan_file_parallel(file_path, &rules, &tree_sitter_exclusions)
-            })
+            .map(|file_path| Self::scan_file_parallel(file_path, &rules, &tree_sitter_exclusions))
             .collect();
 
         // Collect all vulnerabilities from successful scans
@@ -292,11 +292,8 @@ impl SastEngine {
                 continue; // Skip deps without a resolved version
             }
 
-            let known_vulns = vuln_db.query_package(
-                &dep.ecosystem,
-                &dep.package_name,
-                &dep.version,
-            )?;
+            let known_vulns =
+                vuln_db.query_package(&dep.ecosystem, &dep.package_name, &dep.version)?;
 
             for kv in known_vulns {
                 // Check reachability: only surface if the vulnerable package's
@@ -393,7 +390,7 @@ impl SastEngine {
 
         // Read and parse the file
         let source_code = fs::read_to_string(path)?;
-        
+
         // Create a new parser for this thread
         let mut parser = tree_sitter::Parser::new();
         let ts_language = match language {
@@ -405,8 +402,9 @@ impl SastEngine {
             Language::Java => tree_sitter_java::language(),
         };
         parser.set_language(ts_language)?;
-        
-        let tree = parser.parse(&source_code, None)
+
+        let tree = parser
+            .parse(&source_code, None)
             .ok_or_else(|| anyhow::anyhow!("Failed to parse file: {:?}", path))?;
 
         let mut vulnerabilities = Vec::new();
@@ -432,7 +430,8 @@ impl SastEngine {
                     let start_position = node.start_position();
 
                     // Extract code snippet
-                    let snippet = node.utf8_text(source_code.as_bytes())
+                    let snippet = node
+                        .utf8_text(source_code.as_bytes())
                         .unwrap_or("<unable to extract snippet>")
                         .to_string();
 
@@ -440,7 +439,7 @@ impl SastEngine {
                     let mut vulnerability = Vulnerability::new(
                         rule.id.clone(),
                         path.to_path_buf(),
-                        start_position.row + 1, // Convert to 1-indexed
+                        start_position.row + 1,    // Convert to 1-indexed
                         start_position.column + 1, // Convert to 1-indexed
                         snippet,
                         rule.severity,
@@ -463,6 +462,7 @@ impl SastEngine {
 
 /// Configuration for an extended scan with cache, suppression, diff, and
 /// filtering support.
+#[derive(Default)]
 pub struct ExtendedScanConfig {
     /// If set, only scan files/lines changed since this Git ref.
     pub diff_ref: Option<String>,
@@ -484,22 +484,6 @@ pub struct ExtendedScanConfig {
     pub timeout: Option<u64>,
 }
 
-impl Default for ExtendedScanConfig {
-    fn default() -> Self {
-        Self {
-            diff_ref: None,
-            staged: false,
-            exclude_patterns: Vec::new(),
-            include_patterns: Vec::new(),
-            exclude_rules: Vec::new(),
-            no_cache: false,
-            no_cache_write: false,
-            jobs: None,
-            timeout: None,
-        }
-    }
-}
-
 impl SastEngine {
     /// Extended scan that integrates cache, suppression filtering, diff
     /// filtering, confidence scoring hooks, and file inclusion/exclusion.
@@ -510,7 +494,7 @@ impl SastEngine {
         dir: &Path,
         config: &ExtendedScanConfig,
     ) -> Result<Vec<super::Finding>> {
-        use crate::cache::scan_cache::{ScanCache, ScanCaching, CachedScanResult, CachedFinding};
+        use crate::cache::scan_cache::{CachedFinding, CachedScanResult, ScanCache, ScanCaching};
         use crate::diff::diff_scanner::{DiffScanner, DiffScanning};
         use crate::scanner::suppression_parser::SuppressionParser;
 
@@ -543,7 +527,8 @@ impl SastEngine {
             files_to_scan.retain(|f| {
                 // Check if the file (relative or absolute) is in the staged set
                 staged_set.contains(f)
-                    || f.strip_prefix(dir).map_or(false, |rel| staged_set.contains(rel))
+                    || f.strip_prefix(dir)
+                        .is_ok_and(|rel| staged_set.contains(rel))
             });
         }
 
@@ -617,7 +602,9 @@ impl SastEngine {
                             cwe_id: cf.cwe_id.clone(),
                             owasp_category: None,
                             fingerprint: super::Finding::compute_fingerprint(
-                                &cf.rule_id, file_path, &cf.snippet,
+                                &cf.rule_id,
+                                file_path,
+                                &cf.snippet,
                             ),
                             dataflow_trace: None,
                             suppressed: false,
@@ -627,7 +614,9 @@ impl SastEngine {
 
                         // Apply suppression
                         let supp = suppression_parser.is_sast_suppressed(
-                            &source, finding.line, &finding.rule_id,
+                            &source,
+                            finding.line,
+                            &finding.rule_id,
                         );
                         finding.suppressed = supp.suppressed;
                         finding.suppression_rule = supp.rule_id;
@@ -684,9 +673,8 @@ impl SastEngine {
                 let mut finding = super::Finding::from_vulnerability(vuln, &rule_name);
 
                 // Apply suppression filtering
-                let supp = suppression_parser.is_sast_suppressed(
-                    &source, finding.line, &finding.rule_id,
-                );
+                let supp =
+                    suppression_parser.is_sast_suppressed(&source, finding.line, &finding.rule_id);
                 finding.suppressed = supp.suppressed;
                 finding.suppression_rule = supp.rule_id;
 
@@ -712,7 +700,7 @@ impl SastEngine {
             all_findings.retain(|f| {
                 changed
                     .get(&f.file_path)
-                    .map_or(false, |lines| lines.contains(&f.line))
+                    .is_some_and(|lines| lines.contains(&f.line))
             });
         }
 
@@ -784,10 +772,10 @@ mod tests {
   owasp_category: A03_Injection
 "#;
         let rules_file = create_test_yaml_rules(temp_dir.path(), yaml_content);
-        
+
         let mut engine = SastEngine::new(temp_dir.path()).unwrap();
         let result = engine.load_rules(&rules_file);
-        
+
         assert!(result.is_ok(), "Failed to load rules: {:?}", result.err());
         assert_eq!(engine.rules.len(), 1);
         assert_eq!(engine.rules[0].id, "test-rule-1");
@@ -821,10 +809,10 @@ mod tests {
       - "func"
 "#;
         let rules_file = create_test_yaml_rules(temp_dir.path(), yaml_content);
-        
+
         let mut engine = SastEngine::new(temp_dir.path()).unwrap();
         let result = engine.load_rules(&rules_file);
-        
+
         assert!(result.is_ok());
         assert_eq!(engine.rules.len(), 2);
         assert_eq!(engine.rules[0].id, "rule-1");
@@ -836,12 +824,15 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let yaml_content = "invalid: yaml: syntax: [[[";
         let rules_file = create_test_yaml_rules(temp_dir.path(), yaml_content);
-        
+
         let mut engine = SastEngine::new(temp_dir.path()).unwrap();
         let result = engine.load_rules(&rules_file);
-        
+
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Failed to parse YAML"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Failed to parse YAML"));
     }
 
     #[test]
@@ -860,12 +851,15 @@ mod tests {
       - "id"
 "#;
         let rules_file = create_test_yaml_rules(temp_dir.path(), yaml_content);
-        
+
         let mut engine = SastEngine::new(temp_dir.path()).unwrap();
         let result = engine.load_rules(&rules_file);
-        
+
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Rule ID cannot be empty"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Rule ID cannot be empty"));
     }
 
     #[test]
@@ -884,12 +878,15 @@ mod tests {
       - "invalid"
 "#;
         let rules_file = create_test_yaml_rules(temp_dir.path(), yaml_content);
-        
+
         let mut engine = SastEngine::new(temp_dir.path()).unwrap();
         let result = engine.load_rules(&rules_file);
-        
+
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Failed to compile query"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Failed to compile query"));
     }
 
     #[test]
@@ -908,10 +905,10 @@ mod tests {
       - "id"
 "#;
         let rules_file = create_test_yaml_rules(temp_dir.path(), yaml_content);
-        
+
         let mut engine = SastEngine::new(temp_dir.path()).unwrap();
         engine.load_rules(&rules_file).unwrap();
-        
+
         let rules = engine.get_rules();
         assert_eq!(rules.len(), 1);
         assert_eq!(rules[0].id, "test-rule");
@@ -933,14 +930,14 @@ mod tests {
       - "id"
 "#;
         let rules_file = create_test_yaml_rules(temp_dir.path(), yaml_content);
-        
+
         let mut engine = SastEngine::new(temp_dir.path()).unwrap();
         engine.load_rules(&rules_file).unwrap();
-        
+
         let rule = engine.get_rule("test-rule-123");
         assert!(rule.is_some());
         assert_eq!(rule.unwrap().name, "Test Rule");
-        
+
         let missing_rule = engine.get_rule("nonexistent");
         assert!(missing_rule.is_none());
     }
@@ -948,7 +945,7 @@ mod tests {
     #[test]
     fn test_load_rules_from_multiple_files() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         let yaml1 = r#"
 - id: "rule-1"
   name: "Rule 1"
@@ -964,7 +961,7 @@ mod tests {
         let dir1 = temp_dir.path().join("dir1");
         fs::create_dir_all(&dir1).unwrap();
         let rules_file1 = create_test_yaml_rules(&dir1, yaml1);
-        
+
         let yaml2 = r#"
 - id: "rule-2"
   name: "Rule 2"
@@ -980,10 +977,10 @@ mod tests {
         let dir2 = temp_dir.path().join("dir2");
         fs::create_dir_all(&dir2).unwrap();
         let rules_file2 = create_test_yaml_rules(&dir2, yaml2);
-        
+
         let mut engine = SastEngine::new(temp_dir.path()).unwrap();
         let result = engine.load_rules_from_multiple(&[&rules_file1, &rules_file2]);
-        
+
         assert!(result.is_ok());
         assert_eq!(engine.rules.len(), 2);
         assert!(engine.get_rule("rule-1").is_some());
@@ -993,7 +990,7 @@ mod tests {
     #[test]
     fn test_scan_file_with_matches() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         // Create a rule that matches identifiers in JavaScript
         let yaml_content = r#"
 - id: "test-identifier-rule"
@@ -1008,16 +1005,16 @@ mod tests {
       - "id"
 "#;
         let rules_file = create_test_yaml_rules(temp_dir.path(), yaml_content);
-        
+
         // Create a test JavaScript file
         let test_file = temp_dir.path().join("test.js");
         fs::write(&test_file, "const myVar = 42;").unwrap();
-        
+
         let mut engine = SastEngine::new(temp_dir.path()).unwrap();
         engine.load_rules(&rules_file).unwrap();
-        
+
         let vulnerabilities = engine.scan_file(&test_file).unwrap();
-        
+
         // Should find at least one identifier (myVar)
         assert!(!vulnerabilities.is_empty());
         assert_eq!(vulnerabilities[0].rule_id, "test-identifier-rule");
@@ -1027,7 +1024,7 @@ mod tests {
     #[test]
     fn test_scan_file_no_matches() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         // Create a rule that matches function definitions (which won't exist in our test file)
         let yaml_content = r#"
 - id: "test-function-rule"
@@ -1042,16 +1039,16 @@ mod tests {
       - "func"
 "#;
         let rules_file = create_test_yaml_rules(temp_dir.path(), yaml_content);
-        
+
         // Create a test JavaScript file without functions
         let test_file = temp_dir.path().join("test.js");
         fs::write(&test_file, "const x = 42;").unwrap();
-        
+
         let mut engine = SastEngine::new(temp_dir.path()).unwrap();
         engine.load_rules(&rules_file).unwrap();
-        
+
         let vulnerabilities = engine.scan_file(&test_file).unwrap();
-        
+
         // Should find no matches
         assert!(vulnerabilities.is_empty());
     }
@@ -1059,7 +1056,7 @@ mod tests {
     #[test]
     fn test_scan_file_with_owasp_category() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         // Create a rule with OWASP category
         let yaml_content = r#"
 - id: "test-injection-rule"
@@ -1076,16 +1073,16 @@ mod tests {
   owasp_category: A03_Injection
 "#;
         let rules_file = create_test_yaml_rules(temp_dir.path(), yaml_content);
-        
+
         // Create a test JavaScript file with a function call
         let test_file = temp_dir.path().join("test.js");
         fs::write(&test_file, "console.log('hello');").unwrap();
-        
+
         let mut engine = SastEngine::new(temp_dir.path()).unwrap();
         engine.load_rules(&rules_file).unwrap();
-        
+
         let vulnerabilities = engine.scan_file(&test_file).unwrap();
-        
+
         // Should find the call expression and include OWASP category
         assert!(!vulnerabilities.is_empty());
         assert_eq!(vulnerabilities[0].cwe_id, Some("CWE-89".to_string()));
@@ -1095,7 +1092,7 @@ mod tests {
     #[test]
     fn test_scan_excluded_file() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         // Create a rule
         let yaml_content = r#"
 - id: "test-rule"
@@ -1110,20 +1107,20 @@ mod tests {
       - "id"
 "#;
         let rules_file = create_test_yaml_rules(temp_dir.path(), yaml_content);
-        
+
         // Create a test file in node_modules (should be excluded)
         let node_modules = temp_dir.path().join("node_modules");
         fs::create_dir_all(&node_modules).unwrap();
         let test_file = node_modules.join("test.js");
         fs::write(&test_file, "const x = 42;").unwrap();
-        
+
         let mut engine = SastEngine::new(temp_dir.path()).unwrap();
         engine.load_rules(&rules_file).unwrap();
-        
+
         // Use relative path from project root
         let relative_path = Path::new("node_modules/test.js");
         let vulnerabilities = engine.scan_file(relative_path).unwrap();
-        
+
         // Should return empty because file is excluded
         assert!(vulnerabilities.is_empty());
     }
@@ -1131,7 +1128,7 @@ mod tests {
     #[test]
     fn test_scan_directory_basic() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         // Create a rule that matches identifiers
         let yaml_content = r#"
 - id: "test-identifier-rule"
@@ -1146,36 +1143,39 @@ mod tests {
       - "id"
 "#;
         let rules_file = create_test_yaml_rules(temp_dir.path(), yaml_content);
-        
+
         // Create multiple test files in different directories
         let src_dir = temp_dir.path().join("src");
         fs::create_dir_all(&src_dir).unwrap();
         fs::write(src_dir.join("file1.js"), "const x = 1;").unwrap();
         fs::write(src_dir.join("file2.js"), "const y = 2;").unwrap();
-        
+
         let lib_dir = temp_dir.path().join("lib");
         fs::create_dir_all(&lib_dir).unwrap();
         fs::write(lib_dir.join("file3.js"), "const z = 3;").unwrap();
-        
+
         let mut engine = SastEngine::new(temp_dir.path()).unwrap();
         engine.load_rules(&rules_file).unwrap();
-        
+
         // Scan the entire directory
         let vulnerabilities = engine.scan_directory(temp_dir.path()).unwrap();
-        
+
         // Should find identifiers in all three files
         assert!(!vulnerabilities.is_empty());
-        
+
         // Verify vulnerabilities are from different files
-        let unique_files: std::collections::HashSet<_> = 
+        let unique_files: std::collections::HashSet<_> =
             vulnerabilities.iter().map(|v| &v.file_path).collect();
-        assert!(unique_files.len() >= 3, "Should find vulnerabilities in at least 3 files");
+        assert!(
+            unique_files.len() >= 3,
+            "Should find vulnerabilities in at least 3 files"
+        );
     }
 
     #[test]
     fn test_scan_directory_with_exclusions() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         // Create a rule
         let yaml_content = r#"
 - id: "test-rule"
@@ -1190,41 +1190,47 @@ mod tests {
       - "id"
 "#;
         let rules_file = create_test_yaml_rules(temp_dir.path(), yaml_content);
-        
+
         // Create files in both included and excluded directories
         let src_dir = temp_dir.path().join("src");
         fs::create_dir_all(&src_dir).unwrap();
         fs::write(src_dir.join("app.js"), "const x = 1;").unwrap();
-        
+
         let node_modules = temp_dir.path().join("node_modules");
         fs::create_dir_all(&node_modules).unwrap();
         fs::write(node_modules.join("lib.js"), "const y = 2;").unwrap();
-        
+
         let mut engine = SastEngine::new(temp_dir.path()).unwrap();
         engine.load_rules(&rules_file).unwrap();
-        
+
         // Scan the entire directory
         let vulnerabilities = engine.scan_directory(temp_dir.path()).unwrap();
-        
+
         // Debug: print all vulnerability file paths
         println!("Found {} vulnerabilities:", vulnerabilities.len());
         for vuln in &vulnerabilities {
             println!("  - {:?}", vuln.file_path);
         }
-        
+
         // Should find at least some vulnerabilities
-        assert!(!vulnerabilities.is_empty(), "Should find vulnerabilities in src directory");
-        
+        assert!(
+            !vulnerabilities.is_empty(),
+            "Should find vulnerabilities in src directory"
+        );
+
         // Check that we found vulnerabilities in src but not in node_modules
-        let has_src_vulns = vulnerabilities.iter().any(|v| 
-            v.file_path.to_string_lossy().contains("src")
+        let has_src_vulns = vulnerabilities
+            .iter()
+            .any(|v| v.file_path.to_string_lossy().contains("src"));
+        let has_node_modules_vulns = vulnerabilities
+            .iter()
+            .any(|v| v.file_path.to_string_lossy().contains("node_modules"));
+
+        assert!(
+            has_src_vulns,
+            "Should find vulnerabilities in src directory"
         );
-        let has_node_modules_vulns = vulnerabilities.iter().any(|v| 
-            v.file_path.to_string_lossy().contains("node_modules")
-        );
-        
-        assert!(has_src_vulns, "Should find vulnerabilities in src directory");
-        
+
         // For now, let's just check that we found some vulnerabilities
         // The exclusion might not be working perfectly with absolute paths in tests
         if has_node_modules_vulns {
@@ -1235,7 +1241,7 @@ mod tests {
     #[test]
     fn test_scan_directory_sorting() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         // Create rules with different severities
         let yaml_content = r#"
 - id: "critical-rule"
@@ -1261,18 +1267,18 @@ mod tests {
       - "id"
 "#;
         let rules_file = create_test_yaml_rules(temp_dir.path(), yaml_content);
-        
+
         // Create test files
         let src_dir = temp_dir.path().join("src");
         fs::create_dir_all(&src_dir).unwrap();
         fs::write(src_dir.join("file1.js"), "function test() { const x = 1; }").unwrap();
-        
+
         let mut engine = SastEngine::new(temp_dir.path()).unwrap();
         engine.load_rules(&rules_file).unwrap();
-        
+
         // Scan the directory
         let vulnerabilities = engine.scan_directory(temp_dir.path()).unwrap();
-        
+
         // Verify results are sorted by severity (Critical first, then Low)
         if vulnerabilities.len() > 1 {
             for i in 0..vulnerabilities.len() - 1 {
@@ -1287,7 +1293,7 @@ mod tests {
     #[test]
     fn test_scan_directory_empty() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         // Create a rule
         let yaml_content = r#"
 - id: "test-rule"
@@ -1302,17 +1308,17 @@ mod tests {
       - "id"
 "#;
         let rules_file = create_test_yaml_rules(temp_dir.path(), yaml_content);
-        
+
         // Create an empty directory
         let empty_dir = temp_dir.path().join("empty");
         fs::create_dir_all(&empty_dir).unwrap();
-        
+
         let mut engine = SastEngine::new(temp_dir.path()).unwrap();
         engine.load_rules(&rules_file).unwrap();
-        
+
         // Scan the empty directory
         let vulnerabilities = engine.scan_directory(&empty_dir).unwrap();
-        
+
         // Should return empty results
         assert!(vulnerabilities.is_empty());
     }
@@ -1321,7 +1327,7 @@ mod tests {
 #[cfg(test)]
 mod property_tests {
     use super::*;
-    use crate::engine::{Severity, OwaspCategory};
+    use crate::engine::{OwaspCategory, Severity};
     use proptest::prelude::*;
     use std::fs;
     use std::io::Write;
@@ -1332,22 +1338,22 @@ mod property_tests {
     // Validates: Requirements 3.2
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(30))]
-        
+
         #[test]
         fn test_yaml_rule_compilation_correctness(
             rule_count in 1usize..10,
             rule_complexity in 1usize..5
         ) {
             let temp_dir = TempDir::new().unwrap();
-            
+
             // Generate valid YAML rules with varying complexity
             let mut yaml_content = String::new();
             let mut expected_rule_ids = Vec::new();
-            
+
             for i in 0..rule_count {
                 let rule_id = format!("test-rule-{}", i);
                 expected_rule_ids.push(rule_id.clone());
-                
+
                 // Select language first
                 let language = match i % 6 {
                     0 => "JavaScript",
@@ -1357,7 +1363,7 @@ mod property_tests {
                     4 => "Go",
                     _ => "Java",
                 };
-                
+
                 // Generate language-appropriate tree-sitter query based on complexity
                 // Each query pattern has a corresponding capture name
                 let (query, capture_name) = match (language, rule_complexity % 4) {
@@ -1366,34 +1372,34 @@ mod property_tests {
                     ("JavaScript" | "TypeScript", 1) => ("(function_declaration) @func", "func"),
                     ("JavaScript" | "TypeScript", 2) => ("(call_expression) @call", "call"),
                     ("JavaScript" | "TypeScript", _) => ("(string) @str", "str"),
-                    
+
                     // Python queries
                     ("Python", 0) => ("(identifier) @id", "id"),
                     ("Python", 1) => ("(function_definition) @func", "func"),
                     ("Python", 2) => ("(call) @call", "call"),
                     ("Python", _) => ("(string) @str", "str"),
-                    
+
                     // Rust queries
                     ("Rust", 0) => ("(identifier) @id", "id"),
                     ("Rust", 1) => ("(function_item) @func", "func"),
                     ("Rust", 2) => ("(call_expression) @call", "call"),
                     ("Rust", _) => ("(string_literal) @str", "str"),
-                    
+
                     // Go queries
                     ("Go", 0) => ("(identifier) @id", "id"),
                     ("Go", 1) => ("(function_declaration) @func", "func"),
                     ("Go", 2) => ("(call_expression) @call", "call"),
                     ("Go", _) => ("(interpreted_string_literal) @str", "str"),
-                    
+
                     // Java queries
                     ("Java", 0) => ("(identifier) @id", "id"),
                     ("Java", 1) => ("(method_declaration) @func", "func"),
                     ("Java", 2) => ("(method_invocation) @call", "call"),
                     ("Java", _) => ("(string_literal) @str", "str"),
-                    
+
                     _ => ("(identifier) @id", "id"),
                 };
-                
+
                 let severity = match i % 5 {
                     0 => "Critical",
                     1 => "High",
@@ -1401,7 +1407,7 @@ mod property_tests {
                     3 => "Low",
                     _ => "Info",
                 };
-                
+
                 yaml_content.push_str(&format!(
                     r#"
 - id: "{}"
@@ -1418,23 +1424,23 @@ mod property_tests {
                     rule_id, i, severity, language, query, capture_name
                 ));
             }
-            
+
             // Write YAML to file
             let rules_file = temp_dir.path().join("test_rules.yaml");
             let mut file = fs::File::create(&rules_file).unwrap();
             file.write_all(yaml_content.as_bytes()).unwrap();
-            
+
             // Load and compile rules
             let mut engine = SastEngine::new(temp_dir.path()).unwrap();
             let result = engine.load_rules(&rules_file);
-            
+
             // Property 1: All syntactically valid YAML rules should compile successfully
             prop_assert!(
                 result.is_ok(),
                 "Failed to compile valid YAML rules: {:?}",
                 result.err()
             );
-            
+
             // Property 2: Number of loaded rules should match number of rules in YAML
             prop_assert_eq!(
                 engine.rules.len(),
@@ -1443,7 +1449,7 @@ mod property_tests {
                 rule_count,
                 engine.rules.len()
             );
-            
+
             // Property 3: All rule IDs should be preserved
             for expected_id in &expected_rule_ids {
                 prop_assert!(
@@ -1452,7 +1458,7 @@ mod property_tests {
                     expected_id
                 );
             }
-            
+
             // Property 4: All rules should have compiled queries
             prop_assert_eq!(
                 engine.compiled_queries.len(),
@@ -1461,7 +1467,7 @@ mod property_tests {
                 rule_count,
                 engine.compiled_queries.len()
             );
-            
+
             // Property 5: Each rule should have queries for its target languages
             for rule in &engine.rules {
                 let compiled_rule = engine.compiled_queries.get(&rule.id);
@@ -1470,7 +1476,7 @@ mod property_tests {
                     "No compiled query found for rule '{}'",
                     rule.id
                 );
-                
+
                 if let Some(compiled) = compiled_rule {
                     for &language in &rule.languages {
                         prop_assert!(
@@ -1484,11 +1490,11 @@ mod property_tests {
             }
         }
     }
-    
+
     // Additional property test: Invalid YAML should fail gracefully
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(30))]
-        
+
         #[test]
         fn test_invalid_yaml_fails_gracefully(
             invalid_content in "[a-z]{10,50}"
@@ -1497,10 +1503,10 @@ mod property_tests {
             let rules_file = temp_dir.path().join("invalid_rules.yaml");
             let mut file = fs::File::create(&rules_file).unwrap();
             file.write_all(invalid_content.as_bytes()).unwrap();
-            
+
             let mut engine = SastEngine::new(temp_dir.path()).unwrap();
             let result = engine.load_rules(&rules_file);
-            
+
             // Property: Invalid YAML should return an error, not panic
             prop_assert!(
                 result.is_err(),
@@ -1508,12 +1514,12 @@ mod property_tests {
             );
         }
     }
-    
+
     // Feature: sicario-cli-core, Property 8: Rule metadata preservation
     // Validates: Requirements 3.4
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(30))]
-        
+
         #[test]
         fn test_rule_metadata_preservation(
             line_offset in 0usize..20,
@@ -1521,7 +1527,7 @@ mod property_tests {
             var_name_len in 3usize..15
         ) {
             let temp_dir = TempDir::new().unwrap();
-            
+
             // Create a rule that matches identifiers
             let yaml_content = r#"
 - id: "metadata-test-rule"
@@ -1540,19 +1546,19 @@ mod property_tests {
             let rules_file = temp_dir.path().join("test_rules.yaml");
             let mut file = fs::File::create(&rules_file).unwrap();
             file.write_all(yaml_content.as_bytes()).unwrap();
-            
+
             // Generate a test JavaScript file with controlled structure
             // Add leading whitespace/newlines based on line_offset
             let mut source_code = String::new();
             for _ in 0..line_offset {
                 source_code.push('\n');
             }
-            
+
             // Add leading spaces based on col_offset
             for _ in 0..col_offset {
                 source_code.push(' ');
             }
-            
+
             // Generate a variable name of specific length
             let var_name: String = (0..var_name_len)
                 .map(|i| {
@@ -1560,29 +1566,29 @@ mod property_tests {
                     chars[i % chars.len()]
                 })
                 .collect();
-            
+
             // Create a simple variable declaration
             source_code.push_str(&format!("const {} = 42;", var_name));
-            
+
             // Calculate expected line and column (1-indexed)
             let expected_line = line_offset + 1;
             let expected_column = col_offset + 7; // "const " is 6 chars + 1 for 1-indexing
-            
+
             // Write the test file
             let test_file = temp_dir.path().join("test.js");
             fs::write(&test_file, &source_code).unwrap();
-            
+
             // Load rules and scan
             let mut engine = SastEngine::new(temp_dir.path()).unwrap();
             engine.load_rules(&rules_file).unwrap();
             let vulnerabilities = engine.scan_file(&test_file).unwrap();
-            
+
             // Property 1: At least one vulnerability should be found (the identifier)
             prop_assert!(
                 !vulnerabilities.is_empty(),
                 "Expected to find at least one identifier match"
             );
-            
+
             // Find the vulnerability that matches our variable name
             let var_vuln = vulnerabilities.iter().find(|v| v.snippet == var_name);
             prop_assert!(
@@ -1591,9 +1597,9 @@ mod property_tests {
                 var_name,
                 vulnerabilities.iter().map(|v| &v.snippet).collect::<Vec<_>>()
             );
-            
+
             let vuln = var_vuln.unwrap();
-            
+
             // Property 2: File path should match the scanned file
             prop_assert_eq!(
                 &vuln.file_path,
@@ -1602,7 +1608,7 @@ mod property_tests {
                 test_file,
                 vuln.file_path
             );
-            
+
             // Property 3: Line number should accurately reflect the position in source
             prop_assert_eq!(
                 vuln.line,
@@ -1611,7 +1617,7 @@ mod property_tests {
                 expected_line,
                 vuln.line
             );
-            
+
             // Property 4: Column number should accurately reflect the position in source
             prop_assert_eq!(
                 vuln.column,
@@ -1620,7 +1626,7 @@ mod property_tests {
                 expected_column,
                 vuln.column
             );
-            
+
             // Property 5: Snippet should contain the actual matched code
             prop_assert_eq!(
                 &vuln.snippet,
@@ -1629,7 +1635,7 @@ mod property_tests {
                 var_name,
                 vuln.snippet
             );
-            
+
             // Property 6: Severity should match the rule's severity
             prop_assert_eq!(
                 vuln.severity,
@@ -1637,7 +1643,7 @@ mod property_tests {
                 "Severity mismatch: expected High, got {:?}",
                 vuln.severity
             );
-            
+
             // Property 7: Rule ID should match the rule that triggered the finding
             prop_assert_eq!(
                 &vuln.rule_id,
@@ -1645,7 +1651,7 @@ mod property_tests {
                 "Rule ID mismatch: expected 'metadata-test-rule', got '{}'",
                 vuln.rule_id
             );
-            
+
             // Property 8: CWE ID should be preserved from the rule
             prop_assert_eq!(
                 vuln.cwe_id.as_deref(),
@@ -1653,7 +1659,7 @@ mod property_tests {
                 "CWE ID mismatch: expected Some('CWE-TEST'), got {:?}",
                 vuln.cwe_id
             );
-            
+
             // Property 9: OWASP category should be preserved from the rule
             prop_assert!(
                 vuln.owasp_category.is_some(),

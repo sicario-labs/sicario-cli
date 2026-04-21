@@ -45,21 +45,16 @@ impl DiffScanner {
         // Try as a direct revision first (SHA, tag, branch)
         self.repo
             .revparse_single(reference)
-            .with_context(|| {
-                format!(
-                    "Git reference '{}' does not exist. Exit code 2.",
-                    reference
-                )
-            })
+            .with_context(|| format!("Git reference '{}' does not exist. Exit code 2.", reference))
     }
 }
 
 impl DiffScanning for DiffScanner {
     fn changed_lines(&self, reference: &str) -> Result<HashMap<PathBuf, HashSet<usize>>> {
         let obj = self.resolve_reference(reference)?;
-        let commit = obj.peel_to_commit().with_context(|| {
-            format!("Reference '{}' does not point to a commit", reference)
-        })?;
+        let commit = obj
+            .peel_to_commit()
+            .with_context(|| format!("Reference '{}' does not point to a commit", reference))?;
         let old_tree = commit.tree()?;
 
         let mut diff_opts = DiffOptions::new();
@@ -127,7 +122,12 @@ impl DiffScanning for DiffScanner {
 /// `changed` maps file paths to sets of 1-indexed line numbers that were
 /// added or modified. Any finding whose `(file_path, line)` is not in the map
 /// is excluded.
-pub fn filter_findings_by_diff<F, P, L>(findings: Vec<F>, changed: &HashMap<PathBuf, HashSet<usize>>, file_path: P, line: L) -> Vec<F>
+pub fn filter_findings_by_diff<F, P, L>(
+    findings: Vec<F>,
+    changed: &HashMap<PathBuf, HashSet<usize>>,
+    file_path: P,
+    line: L,
+) -> Vec<F>
 where
     P: Fn(&F) -> &PathBuf,
     L: Fn(&F) -> usize,
@@ -137,7 +137,7 @@ where
         .filter(|f| {
             changed
                 .get(file_path(f))
-                .map_or(false, |lines| lines.contains(&line(f)))
+                .is_some_and(|lines| lines.contains(&line(f)))
         })
         .collect()
 }
@@ -162,10 +162,22 @@ mod tests {
         }
 
         let findings = vec![
-            FakeFinding { path: PathBuf::from("src/main.rs"), line: 10 },
-            FakeFinding { path: PathBuf::from("src/main.rs"), line: 15 },
-            FakeFinding { path: PathBuf::from("src/main.rs"), line: 20 },
-            FakeFinding { path: PathBuf::from("src/other.rs"), line: 10 },
+            FakeFinding {
+                path: PathBuf::from("src/main.rs"),
+                line: 10,
+            },
+            FakeFinding {
+                path: PathBuf::from("src/main.rs"),
+                line: 15,
+            },
+            FakeFinding {
+                path: PathBuf::from("src/main.rs"),
+                line: 20,
+            },
+            FakeFinding {
+                path: PathBuf::from("src/other.rs"),
+                line: 10,
+            },
         ];
 
         let filtered = filter_findings_by_diff(findings, &changed, |f| &f.path, |f| f.line);
@@ -183,9 +195,10 @@ mod tests {
             line: usize,
         }
 
-        let findings = vec![
-            FakeFinding { path: PathBuf::from("src/main.rs"), line: 10 },
-        ];
+        let findings = vec![FakeFinding {
+            path: PathBuf::from("src/main.rs"),
+            line: 10,
+        }];
 
         let filtered = filter_findings_by_diff(findings, &changed, |f| &f.path, |f| f.line);
         assert!(filtered.is_empty());

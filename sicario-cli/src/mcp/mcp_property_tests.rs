@@ -5,11 +5,14 @@
 
 #[cfg(test)]
 mod tests {
-    use proptest::prelude::*;
-    use crate::mcp::protocol::{parse_request, serialize_error, serialize_response, JsonRpcError, McpMethod, McpResponse, McpResponsePayload};
-    use crate::mcp::assistant_memory::AssistantMemory;
-    use crate::mcp::server::McpServer;
     use crate::engine::SastEngine;
+    use crate::mcp::assistant_memory::AssistantMemory;
+    use crate::mcp::protocol::{
+        parse_request, serialize_error, serialize_response, JsonRpcError, McpMethod, McpResponse,
+        McpResponsePayload,
+    };
+    use crate::mcp::server::McpServer;
+    use proptest::prelude::*;
     use tempfile::TempDir;
 
     // ── Generators ────────────────────────────────────────────────────────────
@@ -56,12 +59,15 @@ mod tests {
                 }
                 _ => serde_json::json!({}),
             };
-            Just(serde_json::json!({
-                "jsonrpc": "2.0",
-                "method": method,
-                "params": params,
-                "id": id
-            }).to_string())
+            Just(
+                serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "method": method,
+                    "params": params,
+                    "id": id
+                })
+                .to_string(),
+            )
         })
     }
 
@@ -326,12 +332,12 @@ mod tests {
 
 #[cfg(test)]
 mod non_blocking_tests {
+    use crate::mcp::server::McpServer;
     use proptest::prelude::*;
     use std::io::{BufRead, BufReader, Write};
     use std::net::TcpStream;
     use std::time::{Duration, Instant};
     use tempfile::TempDir;
-    use crate::mcp::server::McpServer;
 
     /// Property 17: For any number of concurrent MCP requests, each individual
     /// request should complete within a reasonable time bound, demonstrating

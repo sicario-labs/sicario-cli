@@ -34,7 +34,9 @@ pub struct AwsVerifier {
 
 impl AwsVerifier {
     pub fn new() -> Result<Self> {
-        Ok(Self { client: build_client()? })
+        Ok(Self {
+            client: build_client()?,
+        })
     }
 }
 
@@ -70,16 +72,12 @@ impl SecretVerifier for AwsVerifier {
                 if status == 403 {
                     // If the error is about the token being invalid (not about signing),
                     // the key itself is not valid
-                    let is_auth_failure = body.contains("AuthFailure")
-                        || body.contains("InvalidClientTokenId");
                     let is_signature_issue = body.contains("InvalidSignatureException")
                         || body.contains("MissingAuthenticationToken");
                     if is_signature_issue {
                         // Key format is recognized; would need full signing to confirm
                         // Mark as potentially valid (conservative approach)
                         Ok(true)
-                    } else if is_auth_failure {
-                        Ok(false)
                     } else {
                         Ok(false)
                     }
@@ -107,7 +105,9 @@ pub struct GithubVerifier {
 
 impl GithubVerifier {
     pub fn new() -> Result<Self> {
-        Ok(Self { client: build_client()? })
+        Ok(Self {
+            client: build_client()?,
+        })
     }
 }
 
@@ -163,7 +163,9 @@ pub struct StripeVerifier {
 
 impl StripeVerifier {
     pub fn new() -> Result<Self> {
-        Ok(Self { client: build_client()? })
+        Ok(Self {
+            client: build_client()?,
+        })
     }
 }
 

@@ -52,11 +52,7 @@ impl SecretPattern {
         vec![
             // AWS Access Key ID: AKIA followed by 16 uppercase alphanumeric chars.
             // No word boundary — keys can appear inside quotes or concatenated strings.
-            SecretPattern::new(
-                SecretType::AwsAccessKey,
-                r"(?i)(AKIA[0-9A-Z]{16})",
-                3.0,
-            ),
+            SecretPattern::new(SecretType::AwsAccessKey, r"(?i)(AKIA[0-9A-Z]{16})", 3.0),
             // AWS Secret Access Key: 40-char base64-like string often near "aws_secret"
             SecretPattern::new(
                 SecretType::AwsSecretKey,
@@ -64,29 +60,13 @@ impl SecretPattern {
                 4.5,
             ),
             // GitHub Personal Access Token (classic): ghp_ prefix
-            SecretPattern::new(
-                SecretType::GithubPat,
-                r"(ghp_[A-Za-z0-9]{36})",
-                3.5,
-            ),
+            SecretPattern::new(SecretType::GithubPat, r"(ghp_[A-Za-z0-9]{36})", 3.5),
             // GitHub Fine-grained PAT: github_pat_ prefix
-            SecretPattern::new(
-                SecretType::GithubPat,
-                r"(github_pat_[A-Za-z0-9_]{82})",
-                3.5,
-            ),
+            SecretPattern::new(SecretType::GithubPat, r"(github_pat_[A-Za-z0-9_]{82})", 3.5),
             // Stripe live secret key — no word boundary, keys appear in various contexts
-            SecretPattern::new(
-                SecretType::StripeKey,
-                r"(sk_test_[A-Za-z0-9]{24,})",
-                3.5,
-            ),
+            SecretPattern::new(SecretType::StripeKey, r"(sk_test_[A-Za-z0-9]{24,})", 3.5),
             // Stripe test secret key
-            SecretPattern::new(
-                SecretType::StripeKey,
-                r"(sk_test_[A-Za-z0-9]{24,})",
-                3.5,
-            ),
+            SecretPattern::new(SecretType::StripeKey, r"(sk_test_[A-Za-z0-9]{24,})", 3.5),
             // Database connection URLs (postgres, mysql, mongodb, redis)
             SecretPattern::new(
                 SecretType::DatabaseUrl,
@@ -257,10 +237,13 @@ mod tests {
             .collect();
 
         assert!(!gh_patterns.is_empty());
-        let classic = gh_patterns.iter().find(|p| {
-            p.regex.as_str().contains("ghp_")
-        }).unwrap();
-        assert!(classic.regex.is_match("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij"));
+        let classic = gh_patterns
+            .iter()
+            .find(|p| p.regex.as_str().contains("ghp_"))
+            .unwrap();
+        assert!(classic
+            .regex
+            .is_match("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij"));
         assert!(!classic.regex.is_match("ghp_short"));
     }
 
@@ -273,7 +256,10 @@ mod tests {
             .collect();
 
         assert!(!stripe_patterns.is_empty());
-        let live = stripe_patterns.iter().find(|p| p.regex.as_str().contains("sk_test")).unwrap();
+        let live = stripe_patterns
+            .iter()
+            .find(|p| p.regex.as_str().contains("sk_test"))
+            .unwrap();
         assert!(live.regex.is_match("sk_test_ABCDEFGHIJKLMNOPQRSTUVWXYZ"));
     }
 
@@ -285,9 +271,15 @@ mod tests {
             .find(|p| p.secret_type == SecretType::DatabaseUrl)
             .unwrap();
 
-        assert!(db_pattern.regex.is_match("postgres://user:password@localhost:5432/mydb"));
-        assert!(db_pattern.regex.is_match("mysql://admin:secret@db.example.com/app"));
-        assert!(db_pattern.regex.is_match("mongodb://user:pass@cluster.mongodb.net/db"));
+        assert!(db_pattern
+            .regex
+            .is_match("postgres://user:password@localhost:5432/mydb"));
+        assert!(db_pattern
+            .regex
+            .is_match("mysql://admin:secret@db.example.com/app"));
+        assert!(db_pattern
+            .regex
+            .is_match("mongodb://user:pass@cluster.mongodb.net/db"));
         assert!(!db_pattern.regex.is_match("https://example.com/api"));
     }
 
@@ -302,7 +294,9 @@ mod tests {
         assert!(pk_pattern.regex.is_match("-----BEGIN RSA PRIVATE KEY-----"));
         assert!(pk_pattern.regex.is_match("-----BEGIN PRIVATE KEY-----"));
         assert!(pk_pattern.regex.is_match("-----BEGIN EC PRIVATE KEY-----"));
-        assert!(pk_pattern.regex.is_match("-----BEGIN OPENSSH PRIVATE KEY-----"));
+        assert!(pk_pattern
+            .regex
+            .is_match("-----BEGIN OPENSSH PRIVATE KEY-----"));
     }
 
     #[test]

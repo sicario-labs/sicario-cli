@@ -7,11 +7,11 @@
 use anyhow::Result;
 use std::path::Path;
 
-pub mod tree_sitter_engine;
 pub mod exclusion_manager;
+pub mod tree_sitter_engine;
 
-pub use tree_sitter_engine::TreeSitterEngine;
 pub use exclusion_manager::ExclusionManager;
+pub use tree_sitter_engine::TreeSitterEngine;
 
 /// Supported programming languages for parsing
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]

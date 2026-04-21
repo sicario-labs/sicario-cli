@@ -49,7 +49,9 @@ impl TokenStore {
     pub fn store_access_token(&self, token: &str) -> Result<()> {
         #[cfg(test)]
         if let Some(ref mem) = self.memory {
-            mem.lock().unwrap().insert("access_token".to_string(), token.to_string());
+            mem.lock()
+                .unwrap()
+                .insert("access_token".to_string(), token.to_string());
             return Ok(());
         }
         let entry = Entry::new(&self.service_name, "access_token")?;
@@ -76,7 +78,9 @@ impl TokenStore {
     pub fn store_refresh_token(&self, token: &str) -> Result<()> {
         #[cfg(test)]
         if let Some(ref mem) = self.memory {
-            mem.lock().unwrap().insert("refresh_token".to_string(), token.to_string());
+            mem.lock()
+                .unwrap()
+                .insert("refresh_token".to_string(), token.to_string());
             return Ok(());
         }
         let entry = Entry::new(&self.service_name, "refresh_token")?;

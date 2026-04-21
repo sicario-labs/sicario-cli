@@ -3,13 +3,13 @@
 //! Groups vulnerabilities by OWASP Top 10 category, generates compliance
 //! reports in JSON and Markdown formats.
 
-pub mod owasp_report;
 #[cfg(test)]
 pub mod owasp_property_tests;
+pub mod owasp_report;
 
 pub use owasp_report::{
-    ComplianceReport, OwaspCategoryReport, generate_compliance_report,
-    group_by_owasp, report_to_json, report_to_markdown,
+    generate_compliance_report, group_by_owasp, report_to_json, report_to_markdown,
+    ComplianceReport, OwaspCategoryReport,
 };
 
 use anyhow::Result;

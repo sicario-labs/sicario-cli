@@ -73,8 +73,9 @@ impl ScanCache {
     /// The cache directory is `<project_root>/.sicario/cache/`.
     pub fn new(project_root: &Path) -> Result<Self> {
         let cache_dir = project_root.join(".sicario").join("cache");
-        fs::create_dir_all(&cache_dir)
-            .with_context(|| format!("Failed to create cache directory: {}", cache_dir.display()))?;
+        fs::create_dir_all(&cache_dir).with_context(|| {
+            format!("Failed to create cache directory: {}", cache_dir.display())
+        })?;
         Ok(Self { cache_dir })
     }
 
@@ -145,7 +146,7 @@ impl ScanCaching for ScanCache {
         if let Ok(entries) = fs::read_dir(&self.cache_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().map_or(false, |e| e == "json") {
+                if path.extension().is_some_and(|e| e == "json") {
                     if let Ok(data) = fs::read_to_string(&path) {
                         if let Ok(cached) = serde_json::from_str::<CachedScanResult>(&data) {
                             if cached.language.as_deref() == Some(&lang_str) {
@@ -167,7 +168,7 @@ impl ScanCaching for ScanCache {
         if let Ok(entries) = fs::read_dir(&self.cache_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().map_or(false, |e| e == "json") {
+                if path.extension().is_some_and(|e| e == "json") {
                     fs::remove_file(&path)?;
                     removed += 1;
                 }
@@ -185,7 +186,7 @@ impl ScanCaching for ScanCache {
         if let Ok(entries) = fs::read_dir(&self.cache_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().map_or(false, |e| e == "json") {
+                if path.extension().is_some_and(|e| e == "json") {
                     if let Ok(meta) = fs::metadata(&path) {
                         size_bytes += meta.len();
                         cached_files += 1;

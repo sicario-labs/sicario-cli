@@ -227,11 +227,7 @@ fn connect_and_run(
     event_tx: &Sender<ClientEvent>,
     state: &Arc<Mutex<ConnectionState>>,
 ) -> Result<bool> {
-    use tungstenite::{
-        client::IntoClientRequest,
-        connect,
-        Message,
-    };
+    use tungstenite::{client::IntoClientRequest, connect, Message};
 
     // Build the WebSocket request with the Authorization header
     let mut request = config
@@ -273,8 +269,8 @@ fn connect_and_run(
                     return Ok(true);
                 }
                 Ok(ClientCommand::SendTelemetry(event)) => {
-                    let payload = serde_json::to_string(&event)
-                        .unwrap_or_else(|_| "{}".to_string());
+                    let payload =
+                        serde_json::to_string(&event).unwrap_or_else(|_| "{}".to_string());
                     let msg = build_mutation_message("pushTelemetry", &payload);
                     if let Err(e) = ws.send(Message::Text(msg)) {
                         warn!("ConvexClient: failed to send telemetry: {}", e);

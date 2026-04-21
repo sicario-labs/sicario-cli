@@ -90,14 +90,16 @@ impl TreeSitterEngine {
             .ok_or_else(|| anyhow::anyhow!("Unsupported file type: {:?}", path))?;
 
         // Get the appropriate parser
-        let parser = self.parsers.get_mut(&language)
-            .ok_or_else(|| anyhow::anyhow!("Parser not initialized for language: {:?}", language))?;
+        let parser = self.parsers.get_mut(&language).ok_or_else(|| {
+            anyhow::anyhow!("Parser not initialized for language: {:?}", language)
+        })?;
 
         // Read file content
         let source_code = std::fs::read_to_string(path)?;
 
         // Parse the file
-        let tree = parser.parse(&source_code, None)
+        let tree = parser
+            .parse(&source_code, None)
             .ok_or_else(|| anyhow::anyhow!("Failed to parse file: {:?}", path))?;
 
         // Cache the AST
@@ -126,7 +128,7 @@ impl TreeSitterEngine {
         // Get a parser for the language - we need to clone it for thread safety
         // Since Parser is not Clone, we'll need to create a new one
         let mut parser = Parser::new();
-        
+
         let ts_language = match language {
             Language::JavaScript => tree_sitter_javascript::language(),
             Language::TypeScript => tree_sitter_typescript::language_typescript(),
@@ -135,13 +137,14 @@ impl TreeSitterEngine {
             Language::Go => tree_sitter_go::language(),
             Language::Java => tree_sitter_java::language(),
         };
-        
+
         parser.set_language(ts_language)?;
-        
+
         // Parse the source code
-        let tree = parser.parse(source_code, None)
-            .ok_or_else(|| anyhow::anyhow!("Failed to parse source code for language: {:?}", language))?;
-        
+        let tree = parser.parse(source_code, None).ok_or_else(|| {
+            anyhow::anyhow!("Failed to parse source code for language: {:?}", language)
+        })?;
+
         Ok(tree)
     }
 }
@@ -162,7 +165,7 @@ mod tests {
     fn test_parser_initialization() {
         let temp_dir = std::env::temp_dir();
         let engine = TreeSitterEngine::new(&temp_dir).unwrap();
-        
+
         // Verify all parsers are initialized
         assert_eq!(engine.parsers.len(), 6);
         assert!(engine.parsers.contains_key(&Language::JavaScript));
@@ -177,17 +180,17 @@ mod tests {
     fn test_parse_javascript_file() {
         let temp_dir = std::env::temp_dir().join("sicario_test_js");
         fs::create_dir_all(&temp_dir).unwrap();
-        
+
         let test_file = temp_dir.join("test.js");
         fs::write(&test_file, "function hello() { return 'world'; }").unwrap();
-        
+
         let mut engine = TreeSitterEngine::new(&temp_dir).unwrap();
         let result = engine.parse_file(&test_file);
-        
+
         assert!(result.is_ok());
         let tree = result.unwrap();
         assert!(tree.root_node().child_count() > 0);
-        
+
         // Cleanup
         fs::remove_dir_all(&temp_dir).ok();
     }
@@ -196,17 +199,17 @@ mod tests {
     fn test_parse_python_file() {
         let temp_dir = std::env::temp_dir().join("sicario_test_py");
         fs::create_dir_all(&temp_dir).unwrap();
-        
+
         let test_file = temp_dir.join("test.py");
         fs::write(&test_file, "def hello():\n    return 'world'").unwrap();
-        
+
         let mut engine = TreeSitterEngine::new(&temp_dir).unwrap();
         let result = engine.parse_file(&test_file);
-        
+
         assert!(result.is_ok());
         let tree = result.unwrap();
         assert!(tree.root_node().child_count() > 0);
-        
+
         // Cleanup
         fs::remove_dir_all(&temp_dir).ok();
     }
@@ -215,17 +218,17 @@ mod tests {
     fn test_parse_rust_file() {
         let temp_dir = std::env::temp_dir().join("sicario_test_rs");
         fs::create_dir_all(&temp_dir).unwrap();
-        
+
         let test_file = temp_dir.join("test.rs");
         fs::write(&test_file, "fn hello() -> &'static str { \"world\" }").unwrap();
-        
+
         let mut engine = TreeSitterEngine::new(&temp_dir).unwrap();
         let result = engine.parse_file(&test_file);
-        
+
         assert!(result.is_ok());
         let tree = result.unwrap();
         assert!(tree.root_node().child_count() > 0);
-        
+
         // Cleanup
         fs::remove_dir_all(&temp_dir).ok();
     }
@@ -234,24 +237,24 @@ mod tests {
     fn test_ast_caching() {
         let temp_dir = std::env::temp_dir().join("sicario_test_cache");
         fs::create_dir_all(&temp_dir).unwrap();
-        
+
         let test_file = temp_dir.join("test.js");
         fs::write(&test_file, "const x = 42;").unwrap();
-        
+
         let mut engine = TreeSitterEngine::new(&temp_dir).unwrap();
-        
+
         // First parse - should cache
         let tree1 = engine.parse_file(&test_file).unwrap();
-        
+
         // Second parse - should retrieve from cache
         let tree2 = engine.parse_file(&test_file).unwrap();
-        
+
         // Trees should be equivalent
         assert_eq!(tree1.root_node().to_sexp(), tree2.root_node().to_sexp());
-        
+
         // Verify cache contains the file
         assert!(engine.get_cached_ast(&test_file).is_some());
-        
+
         // Cleanup
         fs::remove_dir_all(&temp_dir).ok();
     }
@@ -260,20 +263,20 @@ mod tests {
     fn test_cache_clear() {
         let temp_dir = std::env::temp_dir().join("sicario_test_clear");
         fs::create_dir_all(&temp_dir).unwrap();
-        
+
         let test_file = temp_dir.join("test.js");
         fs::write(&test_file, "const x = 42;").unwrap();
-        
+
         let mut engine = TreeSitterEngine::new(&temp_dir).unwrap();
-        
+
         // Parse and cache
         engine.parse_file(&test_file).unwrap();
         assert!(engine.get_cached_ast(&test_file).is_some());
-        
+
         // Clear cache
         engine.clear_cache();
         assert!(engine.get_cached_ast(&test_file).is_none());
-        
+
         // Cleanup
         fs::remove_dir_all(&temp_dir).ok();
     }
@@ -282,16 +285,19 @@ mod tests {
     fn test_unsupported_file_type() {
         let temp_dir = std::env::temp_dir().join("sicario_test_unsupported");
         fs::create_dir_all(&temp_dir).unwrap();
-        
+
         let test_file = temp_dir.join("test.txt");
         fs::write(&test_file, "some text").unwrap();
-        
+
         let mut engine = TreeSitterEngine::new(&temp_dir).unwrap();
         let result = engine.parse_file(&test_file);
-        
+
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Unsupported file type"));
-        
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Unsupported file type"));
+
         // Cleanup
         fs::remove_dir_all(&temp_dir).ok();
     }
@@ -300,19 +306,22 @@ mod tests {
     fn test_excluded_file() {
         let temp_dir = std::env::temp_dir().join("sicario_test_excluded");
         fs::create_dir_all(&temp_dir.join("node_modules")).unwrap();
-        
+
         let test_file = temp_dir.join("node_modules/test.js");
         fs::write(&test_file, "const x = 42;").unwrap();
-        
+
         let mut engine = TreeSitterEngine::new(&temp_dir).unwrap();
-        
+
         // Use relative path from project root
         let relative_path = Path::new("node_modules/test.js");
         let result = engine.parse_file(relative_path);
-        
+
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("excluded from scanning"));
-        
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("excluded from scanning"));
+
         // Cleanup
         fs::remove_dir_all(&temp_dir).ok();
     }
@@ -321,7 +330,7 @@ mod tests {
     fn test_should_scan_file() {
         let temp_dir = std::env::temp_dir();
         let engine = TreeSitterEngine::new(&temp_dir).unwrap();
-        
+
         assert!(engine.should_scan_file(Path::new("src/main.rs")));
         assert!(!engine.should_scan_file(Path::new("node_modules/package/index.js")));
         assert!(!engine.should_scan_file(Path::new("dist/bundle.min.js")));
@@ -332,7 +341,7 @@ mod tests {
     fn test_custom_cache_size() {
         let temp_dir = std::env::temp_dir();
         let engine = TreeSitterEngine::with_cache_size(&temp_dir, 50);
-        
+
         assert!(engine.is_ok());
     }
 }
@@ -349,7 +358,7 @@ mod property_tests {
     // Validates: Requirements 2.3
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(30))]
-        
+
         #[test]
         fn test_parallel_parsing_correctness(
             file_count in 1usize..20,
@@ -357,7 +366,7 @@ mod property_tests {
         ) {
             let temp_dir = std::env::temp_dir().join(format!("sicario_prop_test_{}", uuid::Uuid::new_v4()));
             fs::create_dir_all(&temp_dir).unwrap();
-            
+
             // Generate test files with varying complexity
             let mut test_files = Vec::new();
             for i in 0..file_count {
@@ -366,7 +375,7 @@ mod property_tests {
                 fs::write(&file_path, code).unwrap();
                 test_files.push(file_path);
             }
-            
+
             // Parse sequentially
             let mut engine_seq = TreeSitterEngine::new(&temp_dir).unwrap();
             let mut sequential_results = Vec::new();
@@ -376,7 +385,7 @@ mod property_tests {
                     Err(_) => {}
                 }
             }
-            
+
             // Parse in parallel using Rayon
             let engine_par = Arc::new(Mutex::new(TreeSitterEngine::new(&temp_dir).unwrap()));
             let parallel_results: Vec<_> = test_files.par_iter()
@@ -388,33 +397,33 @@ mod property_tests {
                     }
                 })
                 .collect();
-            
+
             // Sort both results by file path for comparison
             let mut seq_sorted = sequential_results.clone();
             seq_sorted.sort_by(|a, b| a.0.cmp(&b.0));
-            
+
             let mut par_sorted = parallel_results.clone();
             par_sorted.sort_by(|a, b| a.0.cmp(&b.0));
-            
+
             // Verify same number of successful parses
             prop_assert_eq!(seq_sorted.len(), par_sorted.len());
-            
+
             // Verify ASTs are identical
             for (seq, par) in seq_sorted.iter().zip(par_sorted.iter()) {
                 prop_assert_eq!(&seq.0, &par.0, "File paths should match");
                 prop_assert_eq!(&seq.1, &par.1, "AST s-expressions should match for file {:?}", &seq.0);
             }
-            
+
             // Cleanup
             fs::remove_dir_all(&temp_dir).ok();
         }
     }
-    
+
     // Feature: sicario-cli-core, Property 6: AST cache consistency
     // Validates: Requirements 2.4
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(30))]
-        
+
         #[test]
         fn test_ast_cache_consistency(
             code_complexity in 1usize..15,
@@ -422,14 +431,14 @@ mod property_tests {
         ) {
             let temp_dir = std::env::temp_dir().join(format!("sicario_cache_test_{}", uuid::Uuid::new_v4()));
             fs::create_dir_all(&temp_dir).unwrap();
-            
+
             // Generate a test file
             let test_file = temp_dir.join("test.js");
             let code = generate_js_code(code_complexity);
             fs::write(&test_file, &code).unwrap();
-            
+
             let mut engine = TreeSitterEngine::new(&temp_dir).unwrap();
-            
+
             // Parse the file multiple times
             let mut ast_results = Vec::new();
             for _ in 0..parse_count {
@@ -438,7 +447,7 @@ mod property_tests {
                     Err(e) => prop_assert!(false, "Parse failed: {}", e),
                 }
             }
-            
+
             // Verify all ASTs are identical (cache consistency)
             let first_ast = &ast_results[0];
             for (i, ast) in ast_results.iter().enumerate().skip(1) {
@@ -447,13 +456,13 @@ mod property_tests {
                     "AST from parse {} should match first parse (cached)", i
                 );
             }
-            
+
             // Verify the file is in cache
             prop_assert!(
                 engine.get_cached_ast(&test_file).is_some(),
                 "File should be in cache after parsing"
             );
-            
+
             // Verify cached AST matches parsed AST
             if let Some(cached_tree) = engine.get_cached_ast(&test_file) {
                 prop_assert_eq!(
@@ -461,24 +470,24 @@ mod property_tests {
                     "Cached AST should match parsed AST"
                 );
             }
-            
+
             // Cleanup
             fs::remove_dir_all(&temp_dir).ok();
         }
     }
-    
+
     // Helper function to generate JavaScript code with varying complexity
     fn generate_js_code(complexity: usize) -> String {
         let mut code = String::new();
         code.push_str("// Generated test code\n");
-        
+
         for i in 0..complexity {
             code.push_str(&format!("function func{}() {{\n", i));
             code.push_str(&format!("  const x{} = {};\n", i, i * 10));
             code.push_str(&format!("  return x{} + 1;\n", i));
             code.push_str("}\n\n");
         }
-        
+
         code.push_str("module.exports = { ");
         for i in 0..complexity {
             if i > 0 {
@@ -487,7 +496,7 @@ mod property_tests {
             code.push_str(&format!("func{}", i));
         }
         code.push_str(" };\n");
-        
+
         code
     }
 }

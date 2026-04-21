@@ -1,0 +1,194 @@
+# SQL Injection Rules for Python (non-Django)
+# Covers: f-string/%-format in cursor.execute, sqlalchemy.text, engine.execute
+#
+# CWE-89: Improper Neutralization of Special Elements used in an SQL Command
+# OWASP A03:2021 - Injection
+
+- id: "py-sqlalchemy-text-fstring"
+  name: "SQLAlchemy text() with f-string"
+  description: "Using f-strings in SQLAlchemy text() allows SQL injection. Use bound parameters with :param syntax instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"text\") arguments: (argument_list (string (interpolation) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.sqlalchemy.org/en/20/core/sqlelement.html#sqlalchemy.sql.expression.text"
+  test_cases:
+    - code: "text(f\"SELECT * FROM users WHERE id = {user_id}\")"
+      expected: TruePositive
+    - code: "text(f\"DELETE FROM sessions WHERE token = '{token}'\")"
+      expected: TruePositive
+    - code: "text(f\"UPDATE users SET name = '{name}'\")"
+      expected: TruePositive
+    - code: "text(\"SELECT * FROM users WHERE id = :id\")"
+      expected: TrueNegative
+    - code: "text(\"SELECT * FROM users\")"
+      expected: TrueNegative
+    - code: "text(\"SELECT * FROM users WHERE id = :id\").bindparams(id=user_id)"
+      expected: TrueNegative
+
+- id: "py-sqlalchemy-text-format"
+  name: "SQLAlchemy text() with .format()"
+  description: "Using .format() in SQLAlchemy text() allows SQL injection. Use bound parameters with :param syntax instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"text\") arguments: (argument_list (call function: (attribute attribute: (identifier) @fmt (#eq? @fmt \"format\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.sqlalchemy.org/en/20/core/sqlelement.html#sqlalchemy.sql.expression.text"
+  test_cases:
+    - code: "text(\"SELECT * FROM users WHERE id = {}\".format(user_id))"
+      expected: TruePositive
+    - code: "text(\"DELETE FROM sessions WHERE token = '{}'\".format(token))"
+      expected: TruePositive
+    - code: "text(\"UPDATE users SET name = '{}'\".format(name))"
+      expected: TruePositive
+    - code: "text(\"SELECT * FROM users WHERE id = :id\")"
+      expected: TrueNegative
+    - code: "msg = \"text {}\".format(val)"
+      expected: TrueNegative
+    - code: "text(\"SELECT 1\")"
+      expected: TrueNegative
+
+- id: "py-sqlalchemy-text-percent"
+  name: "SQLAlchemy text() with % String Interpolation"
+  description: "Using % string interpolation in SQLAlchemy text() allows SQL injection. Use bound parameters instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"text\") arguments: (argument_list (binary_expression left: (string) @sql right: (_) @params operator: \"%\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.sqlalchemy.org/en/20/core/sqlelement.html#sqlalchemy.sql.expression.text"
+  test_cases:
+    - code: "text(\"SELECT * FROM users WHERE id = %s\" % user_id)"
+      expected: TruePositive
+    - code: "text(\"DELETE FROM sessions WHERE token = '%s'\" % token)"
+      expected: TruePositive
+    - code: "text(\"UPDATE users SET name = '%s'\" % name)"
+      expected: TruePositive
+    - code: "text(\"SELECT * FROM users WHERE id = :id\")"
+      expected: TrueNegative
+    - code: "msg = \"text %s\" % val"
+      expected: TrueNegative
+    - code: "text(\"SELECT 1\")"
+      expected: TrueNegative
+
+- id: "py-engine-execute-fstring"
+  name: "SQLAlchemy engine.execute() with f-string"
+  description: "Using f-strings in engine.execute() allows SQL injection. Use parameterized queries instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @obj (#match? @obj \"^(engine|conn|connection|session|db)$\") attribute: (identifier) @method (#eq? @method \"execute\")) arguments: (argument_list (string (interpolation) @interp) .)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.sqlalchemy.org/en/20/core/connections.html"
+  test_cases:
+    - code: "engine.execute(f\"SELECT * FROM users WHERE id = {user_id}\")"
+      expected: TruePositive
+    - code: "conn.execute(f\"DELETE FROM sessions WHERE token = '{token}'\")"
+      expected: TruePositive
+    - code: "session.execute(f\"UPDATE users SET name = '{name}'\")"
+      expected: TruePositive
+    - code: "engine.execute(text(\"SELECT * FROM users WHERE id = :id\"), {\"id\": user_id})"
+      expected: TrueNegative
+    - code: "conn.execute(text(\"SELECT 1\"))"
+      expected: TrueNegative
+    - code: "session.execute(select(User).where(User.id == user_id))"
+      expected: TrueNegative
+
+- id: "py-engine-execute-format"
+  name: "SQLAlchemy engine.execute() with .format()"
+  description: "Using .format() in engine.execute() allows SQL injection. Use parameterized queries instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @obj (#match? @obj \"^(engine|conn|connection|session|db)$\") attribute: (identifier) @method (#eq? @method \"execute\")) arguments: (argument_list (call function: (attribute attribute: (identifier) @fmt (#eq? @fmt \"format\"))) .)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.sqlalchemy.org/en/20/core/connections.html"
+  test_cases:
+    - code: "engine.execute(\"SELECT * FROM users WHERE id = {}\".format(user_id))"
+      expected: TruePositive
+    - code: "conn.execute(\"DELETE FROM sessions WHERE token = '{}'\".format(token))"
+      expected: TruePositive
+    - code: "session.execute(\"UPDATE users SET name = '{}'\".format(name))"
+      expected: TruePositive
+    - code: "engine.execute(text(\"SELECT * FROM users WHERE id = :id\"), {\"id\": user_id})"
+      expected: TrueNegative
+    - code: "conn.execute(text(\"SELECT 1\"))"
+      expected: TrueNegative
+    - code: "msg = \"execute {}\".format(val)"
+      expected: TrueNegative
+
+- id: "py-engine-execute-percent"
+  name: "SQLAlchemy engine.execute() with % Interpolation"
+  description: "Using % string interpolation in engine.execute() allows SQL injection. Use parameterized queries instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @obj (#match? @obj \"^(engine|conn|connection|session|db)$\") attribute: (identifier) @method (#eq? @method \"execute\")) arguments: (argument_list (binary_expression left: (string) @sql right: (_) @params operator: \"%\") .)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.sqlalchemy.org/en/20/core/connections.html"
+  test_cases:
+    - code: "engine.execute(\"SELECT * FROM users WHERE id = %s\" % user_id)"
+      expected: TruePositive
+    - code: "conn.execute(\"DELETE FROM sessions WHERE token = '%s'\" % token)"
+      expected: TruePositive
+    - code: "session.execute(\"UPDATE users SET name = '%s'\" % name)"
+      expected: TruePositive
+    - code: "engine.execute(text(\"SELECT * FROM users WHERE id = :id\"), {\"id\": user_id})"
+      expected: TrueNegative
+    - code: "conn.execute(text(\"SELECT 1\"))"
+      expected: TrueNegative
+    - code: "msg = \"execute %s\" % val"
+      expected: TrueNegative
+
+- id: "py-sqlite3-execute-fstring"
+  name: "sqlite3 cursor.execute() with f-string"
+  description: "Using f-strings in sqlite3 cursor.execute() allows SQL injection. Use ? placeholders instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute attribute: (identifier) @method (#match? @method \"^(execute|executemany|executescript)$\")) arguments: (argument_list (string (interpolation) @interp) .)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.python.org/3/library/sqlite3.html#sqlite3.Cursor.execute"
+  test_cases:
+    - code: "cursor.execute(f\"SELECT * FROM users WHERE id = {user_id}\")"
+      expected: TruePositive
+    - code: "cur.execute(f\"DELETE FROM sessions WHERE token = '{token}'\")"
+      expected: TruePositive
+    - code: "c.executemany(f\"INSERT INTO logs VALUES ('{msg}')\")"
+      expected: TruePositive
+    - code: "cursor.execute(\"SELECT * FROM users WHERE id = ?\", (user_id,))"
+      expected: TrueNegative
+    - code: "cursor.execute(\"SELECT * FROM users\")"
+      expected: TrueNegative
+    - code: "cursor.execute(\"INSERT INTO logs VALUES (?, ?)\", (msg, ts))"
+      expected: TrueNegative

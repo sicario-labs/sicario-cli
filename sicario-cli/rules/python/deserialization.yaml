@@ -1,0 +1,248 @@
+# Insecure Deserialization Rules for Python
+# Covers: yaml.load without SafeLoader, pickle.loads, marshal.loads, shelve.open, jsonpickle.decode
+#
+# CWE-502: Deserialization of Untrusted Data
+# OWASP A08:2021 - Software and Data Integrity Failures
+
+- id: "py-yaml-unsafe-load"
+  name: "yaml.load() without SafeLoader"
+  description: "Using yaml.load() without specifying SafeLoader allows arbitrary code execution. Use yaml.safe_load() or yaml.load(data, Loader=yaml.SafeLoader)."
+  severity: Critical
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"yaml\") attribute: (identifier) @fn (#eq? @fn \"load\")) arguments: (argument_list (_) .)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareDataIntegrityFailures
+  help_uri: "https://pyyaml.org/wiki/PyYAMLDocumentation"
+  test_cases:
+    - code: "yaml.load(data)"
+      expected: TruePositive
+    - code: "yaml.load(request.body)"
+      expected: TruePositive
+    - code: "yaml.load(open('config.yaml').read())"
+      expected: TruePositive
+    - code: "yaml.safe_load(data)"
+      expected: TrueNegative
+    - code: "yaml.load(data, Loader=yaml.SafeLoader)"
+      expected: TrueNegative
+    - code: "yaml.dump(data)"
+      expected: TrueNegative
+
+- id: "py-yaml-full-loader"
+  name: "yaml.load() with FullLoader"
+  description: "yaml.FullLoader can still execute some Python objects. Use yaml.SafeLoader for untrusted data."
+  severity: Medium
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"yaml\") attribute: (identifier) @fn (#eq? @fn \"load\")) arguments: (argument_list (_) (keyword_argument name: (identifier) @kw (#eq? @kw \"Loader\") value: (attribute attribute: (identifier) @loader (#eq? @loader \"FullLoader\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareDataIntegrityFailures
+  help_uri: "https://pyyaml.org/wiki/PyYAMLDocumentation"
+  test_cases:
+    - code: "yaml.load(data, Loader=yaml.FullLoader)"
+      expected: TruePositive
+    - code: "yaml.load(request.body, Loader=yaml.FullLoader)"
+      expected: TruePositive
+    - code: "yaml.load(content, Loader=yaml.FullLoader)"
+      expected: TruePositive
+    - code: "yaml.load(data, Loader=yaml.SafeLoader)"
+      expected: TrueNegative
+    - code: "yaml.safe_load(data)"
+      expected: TrueNegative
+    - code: "yaml.dump(data)"
+      expected: TrueNegative
+
+- id: "py-yaml-unsafe-loader"
+  name: "yaml.load() with UnsafeLoader"
+  description: "yaml.UnsafeLoader allows arbitrary Python object instantiation. Use yaml.SafeLoader instead."
+  severity: Critical
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"yaml\") attribute: (identifier) @fn (#eq? @fn \"load\")) arguments: (argument_list (_) (keyword_argument name: (identifier) @kw (#eq? @kw \"Loader\") value: (attribute attribute: (identifier) @loader (#eq? @loader \"UnsafeLoader\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareDataIntegrityFailures
+  help_uri: "https://pyyaml.org/wiki/PyYAMLDocumentation"
+  test_cases:
+    - code: "yaml.load(data, Loader=yaml.UnsafeLoader)"
+      expected: TruePositive
+    - code: "yaml.load(request.body, Loader=yaml.UnsafeLoader)"
+      expected: TruePositive
+    - code: "yaml.load(content, Loader=yaml.UnsafeLoader)"
+      expected: TruePositive
+    - code: "yaml.load(data, Loader=yaml.SafeLoader)"
+      expected: TrueNegative
+    - code: "yaml.safe_load(data)"
+      expected: TrueNegative
+    - code: "yaml.dump(data)"
+      expected: TrueNegative
+
+- id: "py-pickle-loads"
+  name: "pickle.loads() Usage"
+  description: "Deserializing untrusted data with pickle.loads() can execute arbitrary code. Use JSON or a safe serialization format instead."
+  severity: Critical
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"pickle\") attribute: (identifier) @fn (#eq? @fn \"loads\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareDataIntegrityFailures
+  help_uri: "https://docs.python.org/3/library/pickle.html"
+  test_cases:
+    - code: "pickle.loads(data)"
+      expected: TruePositive
+    - code: "pickle.loads(request.body)"
+      expected: TruePositive
+    - code: "pickle.loads(base64.b64decode(encoded))"
+      expected: TruePositive
+    - code: "json.loads(data)"
+      expected: TrueNegative
+    - code: "pickle.dumps(obj)"
+      expected: TrueNegative
+    - code: "msgpack.loads(data)"
+      expected: TrueNegative
+
+- id: "py-pickle-load-file"
+  name: "pickle.load() from File"
+  description: "Deserializing untrusted data with pickle.load() can execute arbitrary code. Use JSON or a safe serialization format instead."
+  severity: Critical
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"pickle\") attribute: (identifier) @fn (#eq? @fn \"load\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareDataIntegrityFailures
+  help_uri: "https://docs.python.org/3/library/pickle.html"
+  test_cases:
+    - code: "pickle.load(open('data.pkl', 'rb'))"
+      expected: TruePositive
+    - code: "pickle.load(file_handle)"
+      expected: TruePositive
+    - code: "pickle.load(uploaded_file)"
+      expected: TruePositive
+    - code: "json.load(open('data.json'))"
+      expected: TrueNegative
+    - code: "pickle.dump(obj, f)"
+      expected: TrueNegative
+    - code: "yaml.safe_load(f)"
+      expected: TrueNegative
+
+- id: "py-marshal-loads"
+  name: "marshal.loads() Usage"
+  description: "Deserializing untrusted data with marshal.loads() can execute arbitrary code. Use JSON or a safe serialization format instead."
+  severity: Critical
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"marshal\") attribute: (identifier) @fn (#eq? @fn \"loads\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareDataIntegrityFailures
+  help_uri: "https://docs.python.org/3/library/marshal.html"
+  test_cases:
+    - code: "marshal.loads(data)"
+      expected: TruePositive
+    - code: "marshal.loads(request.body)"
+      expected: TruePositive
+    - code: "marshal.loads(raw_bytes)"
+      expected: TruePositive
+    - code: "json.loads(data)"
+      expected: TrueNegative
+    - code: "marshal.dumps(obj)"
+      expected: TrueNegative
+    - code: "struct.unpack('i', data)"
+      expected: TrueNegative
+
+- id: "py-marshal-load"
+  name: "marshal.load() from File"
+  description: "Deserializing untrusted data with marshal.load() can execute arbitrary code. Use JSON or a safe serialization format instead."
+  severity: Critical
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"marshal\") attribute: (identifier) @fn (#eq? @fn \"load\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareDataIntegrityFailures
+  help_uri: "https://docs.python.org/3/library/marshal.html"
+  test_cases:
+    - code: "marshal.load(open('data.bin', 'rb'))"
+      expected: TruePositive
+    - code: "marshal.load(file_handle)"
+      expected: TruePositive
+    - code: "marshal.load(uploaded_file)"
+      expected: TruePositive
+    - code: "json.load(open('data.json'))"
+      expected: TrueNegative
+    - code: "marshal.dump(obj, f)"
+      expected: TrueNegative
+    - code: "yaml.safe_load(f)"
+      expected: TrueNegative
+
+- id: "py-shelve-open"
+  name: "shelve.open() Usage"
+  description: "shelve uses pickle internally and can execute arbitrary code when opening untrusted shelf files. Use a safe storage format instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"shelve\") attribute: (identifier) @fn (#eq? @fn \"open\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareDataIntegrityFailures
+  help_uri: "https://docs.python.org/3/library/shelve.html"
+  test_cases:
+    - code: "shelve.open('user_data')"
+      expected: TruePositive
+    - code: "shelve.open(filename)"
+      expected: TruePositive
+    - code: "db = shelve.open('/tmp/cache')"
+      expected: TruePositive
+    - code: "sqlite3.connect('data.db')"
+      expected: TrueNegative
+    - code: "json.load(open('data.json'))"
+      expected: TrueNegative
+    - code: "open('data.txt', 'r')"
+      expected: TrueNegative
+
+- id: "py-jsonpickle-decode"
+  name: "jsonpickle.decode() Usage"
+  description: "jsonpickle.decode() can instantiate arbitrary Python objects from JSON. Use json.loads() for untrusted data instead."
+  severity: Critical
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"jsonpickle\") attribute: (identifier) @fn (#eq? @fn \"decode\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareDataIntegrityFailures
+  help_uri: "https://jsonpickle.github.io/"
+  test_cases:
+    - code: "jsonpickle.decode(data)"
+      expected: TruePositive
+    - code: "jsonpickle.decode(request.body)"
+      expected: TruePositive
+    - code: "jsonpickle.decode(json_string)"
+      expected: TruePositive
+    - code: "json.loads(data)"
+      expected: TrueNegative
+    - code: "jsonpickle.encode(obj)"
+      expected: TrueNegative
+    - code: "orjson.loads(data)"
+      expected: TrueNegative

@@ -1,0 +1,13 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 8aa5cf27537e351b9fd3b8d2cd747dfee769c96f3d31a00e68c3f0b3afe596cc # shrinks to token = "..wC_-4lPGQ24-1Ran-0Aj-._2-0yL.mP_-mb-S..FslF-1YF_j2B47JJkLbhwIX___qdEC_Aml__b43Lv"
+cc 33c630742bf97df37ae2ec4a1e7d7c8b07ebcf268898e9484a0fe860986b6dfa # shrinks to token = ".7_-nQ2-_B86.RM4-_3_wA3_--Pwc2f._8MH...IRO1RivsE53V_-1D_4uIp25gb_-BtIJxp"
+cc 01a4c868090dae1ea1e5595a6651af00867a213b45ec79bc85eb725e6b4aa862 # shrinks to suffix = "Fn3c0613", token = "d9e_G28_9seN-_W-NZ-m2oN5___Eab-G_-UlEx._m_faw_1t.6.h.lNA-8__h8-.r495nG-j4.55-__bm4W4G-W.x.-ft7W_s.p382E_SBy.wS..aaY_"
+cc ca84d86595e64b9d3d7c7604658d2503ff94530e7b82db52b8232607e8d06652 # shrinks to suffix = "Ijqo2341", token = "C..o-_2-2_4a36206sYs_-aWpP1_-q-_.8Y__..92Gsr"
+cc ccd732cec23ee7590f10ba3e79cd43f491c6b651e3b2c2d26122ef7f62354276 # shrinks to token = "ho_e6Go-r3G.5-_.TZZ_P-rGWK_jhq_y5DSCP1C_xZrxjt_e.qrTbS.t_TGp-0hX_1z_5gZt6"
+cc 218750e1f000aac313dfe092cf02fab5d8bf43b3c6f1d9492372a054d4f587c0 # shrinks to token = "_v_7_F._yWaRIaw5b_JdZwf-nw0-Il75kd4U_7COx_2K_-_-tqN-IYBw0ZyAH5"
+cc d0472cc0847adce055ff7f12190676127ddf6e5f35c000375a850ecd5f52521a # shrinks to token = "P.._M4xe..XZP._.A._S_D0y3_X92E_uz___wW.2S.XV_ayZ2w_EL12f.eT5-M-.._D_.1Q4g.a.20QZHe5uwVl_Y__-01V-95fE-JJ.TM_"

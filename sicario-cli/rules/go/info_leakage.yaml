@@ -1,0 +1,338 @@
+# Information Leakage Rules for Go
+# Covers: sensitive data in log.Printf/fmt.Printf, verbose HTTP error messages,
+# panic with sensitive data, debug endpoints, stack traces in responses,
+# database errors in responses, env vars logged, internal IPs in response,
+# verbose error wrapping
+#
+# CWE-209: Generation of Error Message Containing Sensitive Information
+# CWE-532: Insertion of Sensitive Information into Log File
+# CWE-200: Exposure of Sensitive Information to an Unauthorized Actor
+# OWASP A09:2021 - Security Logging and Monitoring Failures
+
+# ============================================================================
+# INFORMATION LEAKAGE RULES (12 rules)
+# ============================================================================
+
+- id: "go-log-printf-sensitive"
+  name: "Sensitive Data in log.Printf"
+  description: "Logging sensitive data (passwords, tokens, secrets, keys) exposes them in log files. Mask or redact sensitive values before logging."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"log\") field: (field_identifier) @fn (#match? @fn \"^(Printf|Println|Print|Fatalf|Panicf)$\")) arguments: (argument_list (interpreted_string_literal) @fmt (#match? @fmt \"(?i)(password|token|secret|api.?key|credential|bearer|authorization)\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingAndMonitoringFailures
+  help_uri: "https://cwe.mitre.org/data/definitions/532.html"
+  test_cases:
+    - code: "log.Printf(\"User password: %s\", password)"
+      expected: TruePositive
+    - code: "log.Printf(\"API token: %s\", token)"
+      expected: TruePositive
+    - code: "log.Printf(\"secret key = %s\", secretKey)"
+      expected: TruePositive
+    - code: "log.Printf(\"User %s logged in\", username)"
+      expected: TrueNegative
+    - code: "log.Printf(\"Request processed in %dms\", duration)"
+      expected: TrueNegative
+    - code: "log.Printf(\"Server started on port %d\", port)"
+      expected: TrueNegative
+
+- id: "go-fmt-fprintf-response-error"
+  name: "fmt.Fprintf to ResponseWriter with Error Details"
+  description: "Writing error details directly to HTTP ResponseWriter exposes internal information. Return generic error messages to clients."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"fmt\") field: (field_identifier) @fn (#eq? @fn \"Fprintf\")) arguments: (argument_list (identifier) @writer (#eq? @writer \"w\") (interpreted_string_literal) @fmt (#match? @fmt \"(?i)(error|fail|exception|internal|stack|trace|panic)\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-209"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/209.html"
+  test_cases:
+    - code: "fmt.Fprintf(w, \"Internal error: %v\", err)"
+      expected: TruePositive
+    - code: "fmt.Fprintf(w, \"Database error: %s\", dbErr)"
+      expected: TruePositive
+    - code: "fmt.Fprintf(w, \"Stack trace: %v\", stackTrace)"
+      expected: TruePositive
+    - code: "fmt.Fprintf(w, \"Hello, %s!\", name)"
+      expected: TrueNegative
+    - code: "fmt.Fprintf(w, \"Request processed successfully\")"
+      expected: TrueNegative
+    - code: "log.Printf(\"Internal error: %v\", err)"
+      expected: TrueNegative
+
+- id: "go-http-error-internal-message"
+  name: "http.Error with Internal Error Message"
+  description: "Passing internal error messages to http.Error exposes implementation details. Return generic error messages to clients."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"http\") field: (field_identifier) @fn (#eq? @fn \"Error\")) arguments: (argument_list (_) (call_expression function: (selector_expression field: (field_identifier) @method (#eq? @method \"Error\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-209"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/209.html"
+  test_cases:
+    - code: "http.Error(w, err.Error(), 500)"
+      expected: TruePositive
+    - code: "http.Error(w, dbErr.Error(), http.StatusInternalServerError)"
+      expected: TruePositive
+    - code: "http.Error(w, connErr.Error(), 503)"
+      expected: TruePositive
+    - code: "http.Error(w, \"internal server error\", 500)"
+      expected: TrueNegative
+    - code: "http.Error(w, \"not found\", 404)"
+      expected: TrueNegative
+    - code: "http.Error(w, \"bad request\", 400)"
+      expected: TrueNegative
+
+- id: "go-panic-sensitive-data"
+  name: "Panic Message with Sensitive Data"
+  description: "Including sensitive data in panic messages can expose it in stack traces and error logs. Use generic messages in panics."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (identifier) @fn (#eq? @fn \"panic\") arguments: (argument_list (interpreted_string_literal) @msg (#match? @msg \"(?i)(password|token|secret|key|credential|bearer|authorization)\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-209"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/209.html"
+  test_cases:
+    - code: "panic(\"invalid password: \" + password)"
+      expected: TruePositive
+    - code: "panic(\"token expired: \" + token)"
+      expected: TruePositive
+    - code: "panic(\"secret key mismatch\")"
+      expected: TruePositive
+    - code: "panic(\"unexpected state\")"
+      expected: TrueNegative
+    - code: "panic(\"index out of range\")"
+      expected: TrueNegative
+    - code: "log.Fatal(\"startup failed\")"
+      expected: TrueNegative
+
+- id: "go-debug-endpoint-exposed"
+  name: "Debug Endpoint Exposed"
+  description: "Exposing pprof or debug endpoints in production allows attackers to profile the application and extract sensitive runtime information. Restrict debug endpoints to internal networks."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"http\") field: (field_identifier) @fn (#eq? @fn \"Handle\")) arguments: (argument_list (interpreted_string_literal) @path (#match? @path \"(?i)(debug|pprof|metrics|healthz/debug)\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-200"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/200.html"
+  test_cases:
+    - code: "http.Handle(\"/debug/pprof/\", http.DefaultServeMux)"
+      expected: TruePositive
+    - code: "http.Handle(\"/debug/vars\", expvar.Handler())"
+      expected: TruePositive
+    - code: "http.Handle(\"/pprof/\", handler)"
+      expected: TruePositive
+    - code: "http.Handle(\"/api/users\", usersHandler)"
+      expected: TrueNegative
+    - code: "http.Handle(\"/health\", healthHandler)"
+      expected: TrueNegative
+    - code: "http.Handle(\"/\", rootHandler)"
+      expected: TrueNegative
+
+- id: "go-stack-trace-in-response"
+  name: "Stack Trace in HTTP Response"
+  description: "Including stack traces in HTTP responses exposes internal code structure. Log stack traces server-side and return generic error messages."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"fmt\") field: (field_identifier) @fn (#eq? @fn \"Fprintf\")) arguments: (argument_list (identifier) @writer (#eq? @writer \"w\") (interpreted_string_literal) (call_expression function: (selector_expression operand: (identifier) @debugpkg (#eq? @debugpkg \"debug\") field: (field_identifier) @debugfn (#eq? @debugfn \"Stack\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-209"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/209.html"
+  test_cases:
+    - code: "fmt.Fprintf(w, \"Error: %s\\n%s\", err, debug.Stack())"
+      expected: TruePositive
+    - code: "fmt.Fprintf(w, \"Stack: %s\", debug.Stack())"
+      expected: TruePositive
+    - code: "fmt.Fprintf(w, \"Panic recovered: %s\", debug.Stack())"
+      expected: TruePositive
+    - code: "log.Printf(\"Stack: %s\", debug.Stack())"
+      expected: TrueNegative
+    - code: "fmt.Fprintf(w, \"OK\")"
+      expected: TrueNegative
+    - code: "debug.PrintStack()"
+      expected: TrueNegative
+
+- id: "go-database-error-in-response"
+  name: "Database Error in HTTP Response"
+  description: "Returning database error messages in HTTP responses exposes database schema, table names, and query details. Return generic error messages."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"http\") field: (field_identifier) @fn (#eq? @fn \"Error\")) arguments: (argument_list (_) (interpreted_string_literal) @msg (#match? @msg \"(?i)(sql|database|query|table|column|row|postgres|mysql|sqlite)\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-209"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/209.html"
+  test_cases:
+    - code: "http.Error(w, \"SQL error: table not found\", 500)"
+      expected: TruePositive
+    - code: "http.Error(w, \"database connection failed\", 503)"
+      expected: TruePositive
+    - code: "http.Error(w, \"query execution error: column 'email' not found\", 500)"
+      expected: TruePositive
+    - code: "http.Error(w, \"internal server error\", 500)"
+      expected: TrueNegative
+    - code: "http.Error(w, \"service unavailable\", 503)"
+      expected: TrueNegative
+    - code: "http.Error(w, \"not found\", 404)"
+      expected: TrueNegative
+
+- id: "go-env-vars-logged"
+  name: "Environment Variables Logged"
+  description: "Logging environment variables can expose secrets, API keys, and database credentials. Avoid logging environment variable values."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"log\") field: (field_identifier) @fn (#match? @fn \"^(Printf|Println|Print)$\")) arguments: (argument_list (_) (call_expression function: (selector_expression operand: (identifier) @ospkg (#eq? @ospkg \"os\") field: (field_identifier) @osfn (#eq? @osfn \"Getenv\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingAndMonitoringFailures
+  help_uri: "https://cwe.mitre.org/data/definitions/532.html"
+  test_cases:
+    - code: "log.Printf(\"DB_URL: %s\", os.Getenv(\"DATABASE_URL\"))"
+      expected: TruePositive
+    - code: "log.Println(\"API Key:\", os.Getenv(\"API_KEY\"))"
+      expected: TruePositive
+    - code: "log.Printf(\"Config: %s\", os.Getenv(\"SECRET_KEY\"))"
+      expected: TruePositive
+    - code: "dbURL := os.Getenv(\"DATABASE_URL\")"
+      expected: TrueNegative
+    - code: "log.Printf(\"Server started on port %d\", port)"
+      expected: TrueNegative
+    - code: "log.Println(\"Environment loaded\")"
+      expected: TrueNegative
+
+- id: "go-internal-ip-in-response"
+  name: "Internal IP Address in HTTP Response"
+  description: "Including internal IP addresses in HTTP responses exposes network topology. Remove internal addresses from client-facing responses."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"fmt\") field: (field_identifier) @fn (#eq? @fn \"Fprintf\")) arguments: (argument_list (identifier) @writer (#eq? @writer \"w\") (interpreted_string_literal) @msg (#match? @msg \"(10\\\\.|172\\\\.(1[6-9]|2[0-9]|3[01])\\\\.|192\\\\.168\\\\.|127\\\\.0\\\\.)\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-200"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/200.html"
+  test_cases:
+    - code: "fmt.Fprintf(w, \"Server: 10.0.1.5:8080\")"
+      expected: TruePositive
+    - code: "fmt.Fprintf(w, \"Backend: 192.168.1.100\")"
+      expected: TruePositive
+    - code: "fmt.Fprintf(w, \"Upstream: 172.16.0.1\")"
+      expected: TruePositive
+    - code: "fmt.Fprintf(w, \"OK\")"
+      expected: TrueNegative
+    - code: "fmt.Fprintf(w, \"Server: api.example.com\")"
+      expected: TrueNegative
+    - code: "log.Printf(\"Connected to 10.0.1.5\")"
+      expected: TrueNegative
+
+- id: "go-verbose-error-wrap-sensitive"
+  name: "Verbose Error Wrapping with Sensitive Context"
+  description: "Wrapping errors with sensitive context (connection strings, credentials, internal paths) can leak information if the error reaches the client. Use generic context in error wrapping."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"fmt\") field: (field_identifier) @fn (#eq? @fn \"Errorf\")) arguments: (argument_list (interpreted_string_literal) @msg (#match? @msg \"(?i)(password|token|secret|key|credential|connection.?string|dsn)\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-209"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/209.html"
+  test_cases:
+    - code: "return fmt.Errorf(\"failed to connect with password %s: %w\", password, err)"
+      expected: TruePositive
+    - code: "return fmt.Errorf(\"token validation failed for token %s: %w\", token, err)"
+      expected: TruePositive
+    - code: "return fmt.Errorf(\"connection string error: dsn=%s: %w\", dsn, err)"
+      expected: TruePositive
+    - code: "return fmt.Errorf(\"failed to process request: %w\", err)"
+      expected: TrueNegative
+    - code: "return fmt.Errorf(\"user %s not found: %w\", userID, err)"
+      expected: TrueNegative
+    - code: "return fmt.Errorf(\"invalid input: %w\", err)"
+      expected: TrueNegative
+
+- id: "go-fmt-printf-sensitive"
+  name: "Sensitive Data in fmt.Printf"
+  description: "Printing sensitive data (passwords, tokens, secrets) to stdout can expose them in logs and terminal history. Mask or redact sensitive values."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"fmt\") field: (field_identifier) @fn (#match? @fn \"^(Printf|Println|Print)$\")) arguments: (argument_list (interpreted_string_literal) @fmt (#match? @fmt \"(?i)(password|token|secret|api.?key|credential|bearer)\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingAndMonitoringFailures
+  help_uri: "https://cwe.mitre.org/data/definitions/532.html"
+  test_cases:
+    - code: "fmt.Printf(\"User password: %s\\n\", password)"
+      expected: TruePositive
+    - code: "fmt.Printf(\"API token: %s\\n\", token)"
+      expected: TruePositive
+    - code: "fmt.Println(\"secret key:\", secretKey)"
+      expected: TruePositive
+    - code: "fmt.Printf(\"User %s logged in\\n\", username)"
+      expected: TrueNegative
+    - code: "fmt.Printf(\"Processing %d items\\n\", count)"
+      expected: TrueNegative
+    - code: "fmt.Println(\"Server started\")"
+      expected: TrueNegative
+
+- id: "go-slog-sensitive-data"
+  name: "Sensitive Data in Structured Logging (slog)"
+  description: "Logging sensitive data in structured logging fields exposes them in log aggregation systems. Mask or redact sensitive values."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"slog\") field: (field_identifier) @fn (#match? @fn \"^(Info|Debug|Warn|Error)$\")) arguments: (argument_list (_) (interpreted_string_literal) @key (#match? @key \"(?i)(password|token|secret|api.?key|credential|bearer)\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingAndMonitoringFailures
+  help_uri: "https://pkg.go.dev/log/slog"
+  test_cases:
+    - code: "slog.Info(\"auth\", \"password\", password)"
+      expected: TruePositive
+    - code: "slog.Debug(\"request\", \"token\", bearerToken)"
+      expected: TruePositive
+    - code: "slog.Error(\"failed\", \"api_key\", apiKey)"
+      expected: TruePositive
+    - code: "slog.Info(\"request\", \"method\", r.Method, \"path\", r.URL.Path)"
+      expected: TrueNegative
+    - code: "slog.Error(\"failed\", \"error\", err)"
+      expected: TrueNegative
+    - code: "slog.Info(\"user\", \"id\", userID)"
+      expected: TrueNegative

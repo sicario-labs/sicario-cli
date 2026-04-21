@@ -1,0 +1,456 @@
+# Cross-Site Scripting (XSS) Rules for JavaScript/TypeScript
+# Covers: dangerouslySetInnerHTML in React/JSX, innerHTML/outerHTML assignment,
+# document.write/writeln, EJS/Handlebars/Pug unescaped output,
+# Vue v-html directive, jQuery .html()/.append(), insertAdjacentHTML,
+# DOMParser with user-controlled HTML, React ref.current.innerHTML
+#
+# CWE-79: Improper Neutralization of Input During Web Page Generation
+# OWASP A03:2021 - Injection
+
+- id: "js-xss-dangerously-set-inner-html"
+  name: "dangerouslySetInnerHTML with Dynamic Content"
+  description: "Using dangerouslySetInnerHTML with dynamic content in React/JSX allows XSS. Sanitize HTML with DOMPurify or use safe rendering methods instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(jsx_attribute (property_identifier) @attr (#eq? @attr \"dangerouslySetInnerHTML\") (jsx_expression (object (pair key: (property_identifier) @key (#eq? @key \"__html\") value: (_) @val)))) @xss"
+    captures:
+      - "xss"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://react.dev/reference/react-dom/components/common#dangerously-setting-the-inner-html"
+  test_cases:
+    - code: "<div dangerouslySetInnerHTML={{ __html: userContent }} />"
+      expected: TruePositive
+    - code: "<span dangerouslySetInnerHTML={{ __html: data.body }} />"
+      expected: TruePositive
+    - code: "<p dangerouslySetInnerHTML={{ __html: getMarkup() }} />"
+      expected: TruePositive
+    - code: "<div>{sanitizedContent}</div>"
+      expected: TrueNegative
+    - code: "<span>{DOMPurify.sanitize(content)}</span>"
+      expected: TrueNegative
+    - code: "<p className=\"content\">{text}</p>"
+      expected: TrueNegative
+
+- id: "js-xss-dangerously-set-inner-html-props"
+  name: "dangerouslySetInnerHTML with Props Input"
+  description: "Passing component props directly to dangerouslySetInnerHTML allows XSS if props contain user-controlled data. Sanitize before rendering."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(jsx_attribute (property_identifier) @attr (#eq? @attr \"dangerouslySetInnerHTML\") (jsx_expression (object (pair key: (property_identifier) @key (#eq? @key \"__html\") value: (member_expression object: (identifier) @obj (#eq? @obj \"props\")))))) @xss"
+    captures:
+      - "xss"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://react.dev/reference/react-dom/components/common#dangerously-setting-the-inner-html"
+  test_cases:
+    - code: "<div dangerouslySetInnerHTML={{ __html: props.content }} />"
+      expected: TruePositive
+    - code: "<span dangerouslySetInnerHTML={{ __html: props.htmlBody }} />"
+      expected: TruePositive
+    - code: "<article dangerouslySetInnerHTML={{ __html: props.richText }} />"
+      expected: TruePositive
+    - code: "<div>{props.content}</div>"
+      expected: TrueNegative
+    - code: "<div dangerouslySetInnerHTML={{ __html: '<b>static</b>' }} />"
+      expected: TrueNegative
+    - code: "<span>{props.text}</span>"
+      expected: TrueNegative
+
+- id: "js-xss-dangerously-set-inner-html-state"
+  name: "dangerouslySetInnerHTML with State Variables"
+  description: "Using React state variables in dangerouslySetInnerHTML can lead to XSS if state is populated from user input. Sanitize HTML before setting state."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(jsx_attribute (property_identifier) @attr (#eq? @attr \"dangerouslySetInnerHTML\") (jsx_expression (object (pair key: (property_identifier) @key (#eq? @key \"__html\") value: (member_expression object: (member_expression object: (this) property: (property_identifier) @stateObj (#eq? @stateObj \"state\"))))))) @xss"
+    captures:
+      - "xss"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://react.dev/reference/react-dom/components/common#dangerously-setting-the-inner-html"
+  test_cases:
+    - code: "<div dangerouslySetInnerHTML={{ __html: this.state.htmlContent }} />"
+      expected: TruePositive
+    - code: "<span dangerouslySetInnerHTML={{ __html: this.state.body }} />"
+      expected: TruePositive
+    - code: "<p dangerouslySetInnerHTML={{ __html: this.state.richText }} />"
+      expected: TruePositive
+    - code: "<div>{this.state.content}</div>"
+      expected: TrueNegative
+    - code: "<span>{this.state.text}</span>"
+      expected: TrueNegative
+    - code: "this.setState({ content: DOMPurify.sanitize(input) });"
+      expected: TrueNegative
+
+- id: "js-xss-innerhtml-assignment"
+  name: "innerHTML Assignment with Dynamic Content"
+  description: "Assigning dynamic content to innerHTML allows XSS. Use textContent for plain text or sanitize HTML with DOMPurify before assignment."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(assignment_expression left: (member_expression property: (property_identifier) @prop (#eq? @prop \"innerHTML\")) right: (_) @val) @xss"
+    captures:
+      - "xss"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://developer.mozilla.org/en-US/docs/Web/API/Element/innerHTML#security_considerations"
+  test_cases:
+    - code: "element.innerHTML = userInput;"
+      expected: TruePositive
+    - code: "document.getElementById('output').innerHTML = data;"
+      expected: TruePositive
+    - code: "container.innerHTML = '<div>' + message + '</div>';"
+      expected: TruePositive
+    - code: "element.textContent = userInput;"
+      expected: TrueNegative
+    - code: "element.innerHTML = '';"
+      expected: TrueNegative
+    - code: "element.innerText = data;"
+      expected: TrueNegative
+
+- id: "js-xss-outerhtml-assignment"
+  name: "outerHTML Assignment with Dynamic Content"
+  description: "Assigning dynamic content to outerHTML allows XSS. Use safe DOM manipulation methods instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(assignment_expression left: (member_expression property: (property_identifier) @prop (#eq? @prop \"outerHTML\")) right: (_) @val) @xss"
+    captures:
+      - "xss"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://developer.mozilla.org/en-US/docs/Web/API/Element/outerHTML"
+  test_cases:
+    - code: "element.outerHTML = userInput;"
+      expected: TruePositive
+    - code: "node.outerHTML = '<div>' + content + '</div>';"
+      expected: TruePositive
+    - code: "document.querySelector('.target').outerHTML = htmlString;"
+      expected: TruePositive
+    - code: "element.textContent = userInput;"
+      expected: TrueNegative
+    - code: "const html = element.outerHTML;"
+      expected: TrueNegative
+    - code: "element.setAttribute('class', value);"
+      expected: TrueNegative
+
+- id: "js-xss-document-write"
+  name: "document.write with Dynamic Content"
+  description: "Using document.write with dynamic content allows XSS. Use safe DOM manipulation methods like textContent or createElement instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"document\") property: (property_identifier) @prop (#eq? @prop \"write\")) arguments: (arguments (_) @arg)) @xss"
+    captures:
+      - "xss"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://developer.mozilla.org/en-US/docs/Web/API/Document/write"
+  test_cases:
+    - code: "document.write(userInput);"
+      expected: TruePositive
+    - code: "document.write('<div>' + data + '</div>');"
+      expected: TruePositive
+    - code: "document.write(response.body);"
+      expected: TruePositive
+    - code: "document.createElement('div');"
+      expected: TrueNegative
+    - code: "console.log('document.write is deprecated');"
+      expected: TrueNegative
+    - code: "fs.writeFileSync('output.txt', data);"
+      expected: TrueNegative
+
+- id: "js-xss-document-writeln"
+  name: "document.writeln with Dynamic Content"
+  description: "Using document.writeln with dynamic content allows XSS. Use safe DOM manipulation methods instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"document\") property: (property_identifier) @prop (#eq? @prop \"writeln\")) arguments: (arguments (_) @arg)) @xss"
+    captures:
+      - "xss"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://developer.mozilla.org/en-US/docs/Web/API/Document/writeln"
+  test_cases:
+    - code: "document.writeln(userInput);"
+      expected: TruePositive
+    - code: "document.writeln('<p>' + message + '</p>');"
+      expected: TruePositive
+    - code: "document.writeln(htmlContent);"
+      expected: TruePositive
+    - code: "document.createElement('p');"
+      expected: TrueNegative
+    - code: "console.log('writeln called');"
+      expected: TrueNegative
+    - code: "process.stdout.write(data);"
+      expected: TrueNegative
+
+- id: "js-xss-ejs-unescaped"
+  name: "EJS Unescaped Output with User Data"
+  description: "Using EJS unescaped output tag <%- %> with user-controlled data allows XSS. Use escaped output tag <%= %> or sanitize data before rendering."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(template_string) @tpl (#match? @tpl \"<%- *[a-zA-Z]\")"
+    captures:
+      - "tpl"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://ejs.co/#docs"
+  test_cases:
+    - code: "const html = `<%- userInput %>`;"
+      expected: TruePositive
+    - code: "const template = `<%- body %>`;"
+      expected: TruePositive
+    - code: "const page = `<%- content %>`;"
+      expected: TruePositive
+    - code: "const html = `<%= userInput %>`;"
+      expected: TrueNegative
+    - code: "const msg = `Hello ${name}`;"
+      expected: TrueNegative
+    - code: "const code = `<% if (show) { %>`;"
+      expected: TrueNegative
+
+- id: "js-xss-handlebars-triple-stash"
+  name: "Handlebars Triple-Stash Unescaped Output"
+  description: "Using Handlebars triple-stash {{{ }}} renders content without HTML escaping, allowing XSS. Use double-stash {{ }} for auto-escaped output."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(template_string) @tpl (#match? @tpl \"\\{\\{\\{ *[a-zA-Z]\")"
+    captures:
+      - "tpl"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://handlebarsjs.com/guide/expressions.html#html-escaping"
+  test_cases:
+    - code: "const tpl = `{{{userContent}}}`;"
+      expected: TruePositive
+    - code: "const html = `{{{ body }}}`;"
+      expected: TruePositive
+    - code: "const page = `<div>{{{richText}}}</div>`;"
+      expected: TruePositive
+    - code: "const tpl = `{{userContent}}`;"
+      expected: TrueNegative
+    - code: "const tpl = `{{ body }}`;"
+      expected: TrueNegative
+    - code: "const msg = `Hello ${name}`;"
+      expected: TrueNegative
+
+- id: "js-xss-pug-unescaped"
+  name: "Pug Unescaped Interpolation"
+  description: "Using Pug unescaped interpolation !{} renders content without HTML escaping, allowing XSS. Use escaped interpolation #{} instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(template_string) @tpl (#match? @tpl \"!\\{[a-zA-Z]\")"
+    captures:
+      - "tpl"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://pugjs.org/language/interpolation.html"
+  test_cases:
+    - code: "const tpl = `p !{userContent}`;"
+      expected: TruePositive
+    - code: "const html = `div !{body}`;"
+      expected: TruePositive
+    - code: "const page = `span !{htmlData}`;"
+      expected: TruePositive
+    - code: "const tpl = `p #{userContent}`;"
+      expected: TrueNegative
+    - code: "const msg = `Hello ${name}`;"
+      expected: TrueNegative
+    - code: "const tpl = `p= escapedContent`;"
+      expected: TrueNegative
+
+- id: "js-xss-vue-v-html"
+  name: "Vue v-html Directive with Dynamic Binding"
+  description: "Using Vue v-html directive renders raw HTML without escaping, allowing XSS if bound to user-controlled data. Use v-text or {{ }} interpolation for safe rendering."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(template_string) @tpl (#match? @tpl \"v-html\")"
+    captures:
+      - "tpl"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://vuejs.org/api/built-in-directives.html#v-html"
+  test_cases:
+    - code: "const template = `<div v-html=\"userContent\"></div>`;"
+      expected: TruePositive
+    - code: "const tpl = `<span v-html=\"message\"></span>`;"
+      expected: TruePositive
+    - code: "const html = `<p v-html=\"richText\"></p>`;"
+      expected: TruePositive
+    - code: "const template = `<div v-text=\"userContent\"></div>`;"
+      expected: TrueNegative
+    - code: "const tpl = `<span>{{ message }}</span>`;"
+      expected: TrueNegative
+    - code: "const html = `<div v-bind:class=\"active\"></div>`;"
+      expected: TrueNegative
+
+- id: "js-xss-jquery-html"
+  name: "jQuery .html() with User Input"
+  description: "Using jQuery .html() with user-controlled data allows XSS. Use .text() for plain text content or sanitize HTML before insertion."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression property: (property_identifier) @prop (#eq? @prop \"html\")) arguments: (arguments (_) @arg)) @xss"
+    captures:
+      - "xss"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://api.jquery.com/html/"
+  test_cases:
+    - code: "$('#output').html(userInput);"
+      expected: TruePositive
+    - code: "$(element).html(response.data);"
+      expected: TruePositive
+    - code: "$('.content').html('<div>' + message + '</div>');"
+      expected: TruePositive
+    - code: "$('#output').text(userInput);"
+      expected: TrueNegative
+    - code: "$('#output').html();"
+      expected: TrueNegative
+    - code: "element.getAttribute('html');"
+      expected: TrueNegative
+
+- id: "js-xss-jquery-append"
+  name: "jQuery .append() with Unsanitized HTML"
+  description: "Using jQuery .append() with unsanitized HTML strings allows XSS. Sanitize HTML content or use DOM manipulation methods instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression property: (property_identifier) @prop (#eq? @prop \"append\")) arguments: (arguments (binary_expression left: (string) @str operator: \"+\" right: (_) @input (#match? @str \"<\")))) @xss"
+    captures:
+      - "xss"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://api.jquery.com/append/"
+  test_cases:
+    - code: "$('#list').append('<li>' + userInput + '</li>');"
+      expected: TruePositive
+    - code: "$(container).append('<div class=\"item\">' + data + '</div>');"
+      expected: TruePositive
+    - code: "$('body').append('<script>' + code + '</script>');"
+      expected: TruePositive
+    - code: "$('#list').append(document.createElement('li'));"
+      expected: TrueNegative
+    - code: "array.append(item);"
+      expected: TrueNegative
+    - code: "$('#list').append($('<li>').text(userInput));"
+      expected: TrueNegative
+
+- id: "js-xss-insert-adjacent-html"
+  name: "insertAdjacentHTML with Dynamic Content"
+  description: "Using insertAdjacentHTML with dynamic content allows XSS. Use insertAdjacentText for plain text or sanitize HTML before insertion."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression property: (property_identifier) @prop (#eq? @prop \"insertAdjacentHTML\")) arguments: (arguments (string) @position (_) @content)) @xss"
+    captures:
+      - "xss"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://developer.mozilla.org/en-US/docs/Web/API/Element/insertAdjacentHTML"
+  test_cases:
+    - code: "element.insertAdjacentHTML('beforeend', userInput);"
+      expected: TruePositive
+    - code: "container.insertAdjacentHTML('afterbegin', htmlContent);"
+      expected: TruePositive
+    - code: "node.insertAdjacentHTML('beforeend', '<div>' + data + '</div>');"
+      expected: TruePositive
+    - code: "element.insertAdjacentText('beforeend', userInput);"
+      expected: TrueNegative
+    - code: "element.insertAdjacentElement('beforeend', childNode);"
+      expected: TrueNegative
+    - code: "element.appendChild(document.createTextNode(text));"
+      expected: TrueNegative
+
+- id: "js-xss-domparser-user-html"
+  name: "DOMParser with User-Controlled HTML String"
+  description: "Parsing user-controlled HTML strings with DOMParser can lead to XSS if the parsed DOM is inserted into the page. Sanitize input before parsing or use a sanitization library."
+  severity: Medium
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (new_expression constructor: (identifier) @ctor (#eq? @ctor \"DOMParser\")) property: (property_identifier) @method (#eq? @method \"parseFromString\")) arguments: (arguments (identifier) @input (string) @mime)) @xss"
+    captures:
+      - "xss"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://developer.mozilla.org/en-US/docs/Web/API/DOMParser/parseFromString"
+  test_cases:
+    - code: "new DOMParser().parseFromString(userInput, 'text/html');"
+      expected: TruePositive
+    - code: "new DOMParser().parseFromString(htmlContent, 'text/html');"
+      expected: TruePositive
+    - code: "new DOMParser().parseFromString(responseBody, 'text/html');"
+      expected: TruePositive
+    - code: "new DOMParser().parseFromString('<div>safe</div>', 'text/html');"
+      expected: TrueNegative
+    - code: "JSON.parse(userInput);"
+      expected: TrueNegative
+    - code: "new DOMParser().parseFromString(xmlString, 'text/xml');"
+      expected: TrueNegative
+
+- id: "js-xss-react-ref-innerhtml"
+  name: "React ref.current.innerHTML Assignment"
+  description: "Assigning to ref.current.innerHTML in React bypasses React's XSS protections. Use React state and JSX rendering or sanitize with DOMPurify."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(assignment_expression left: (member_expression object: (member_expression property: (property_identifier) @current (#eq? @current \"current\")) property: (property_identifier) @prop (#eq? @prop \"innerHTML\")) right: (_) @val) @xss"
+    captures:
+      - "xss"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://react.dev/reference/react/useRef"
+  test_cases:
+    - code: "divRef.current.innerHTML = userInput;"
+      expected: TruePositive
+    - code: "containerRef.current.innerHTML = '<div>' + data + '</div>';"
+      expected: TruePositive
+    - code: "ref.current.innerHTML = htmlContent;"
+      expected: TruePositive
+    - code: "divRef.current.textContent = userInput;"
+      expected: TrueNegative
+    - code: "divRef.current.innerHTML = '';"
+      expected: TrueNegative
+    - code: "divRef.current.style.display = 'none';"
+      expected: TrueNegative

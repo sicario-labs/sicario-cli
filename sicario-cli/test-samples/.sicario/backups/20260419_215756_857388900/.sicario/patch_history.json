@@ -1,0 +1,8 @@
+[
+  {
+    "patch_id": "780fac72-efdf-4569-9a08-7b1490cb53cd",
+    "applied_at": "2026-04-19T22:01:21.583790700+00:00",
+    "file_path": "C:\\Sicario-OS\\sicario-cli\\test-samples\\.sicario\\backups\\20260419_215756_857388900\\vulnerable.py",
+    "backup_path": "C:\\Sicario-OS\\sicario-cli\\test-samples\\.sicario\\backups\\20260419_215756_857388900\\.sicario\\backups\\20260419_220121_581743700\\vulnerable.py"
+  }
+]

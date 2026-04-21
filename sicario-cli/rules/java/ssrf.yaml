@@ -1,0 +1,328 @@
+# Server-Side Request Forgery (SSRF) Rules for Java
+# Covers: HttpURLConnection, HttpClient, RestTemplate, WebClient,
+# URL.openConnection, URL.openStream, URLConnection, OkHttpClient, Apache HttpClient
+#
+# CWE-918: Server-Side Request Forgery
+# OWASP A10:2021 - Server-Side Request Forgery
+
+# ============================================================================
+# HttpURLConnection SSRF (2 rules)
+# ============================================================================
+
+- id: "java-ssrf-httpurlconnection-concat"
+  name: "HttpURLConnection with Concatenated URL"
+  description: "Constructing URLs from user input for HttpURLConnection enables SSRF. Validate URLs against an allowlist of permitted hosts."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(object_creation_expression type: (type_identifier) @type (#eq? @type \"URL\") arguments: (argument_list (binary_expression))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "new URL(\"http://\" + userHost + \"/api\");"
+      expected: TruePositive
+    - code: "new URL(baseUrl + request.getParameter(\"url\"));"
+      expected: TruePositive
+    - code: "new URL(\"https://\" + hostname + \":\" + port + \"/path\");"
+      expected: TruePositive
+    - code: "new URL(\"https://api.example.com/v1/data\");"
+      expected: TrueNegative
+    - code: "new URL(\"https://localhost:8080/health\");"
+      expected: TrueNegative
+    - code: "new File(\"/tmp/test\");"
+      expected: TrueNegative
+
+- id: "java-ssrf-httpurlconnection-variable"
+  name: "HttpURLConnection with Variable URL"
+  description: "Passing a variable URL to HttpURLConnection may enable SSRF if the variable is user-controlled. Validate URLs against an allowlist."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (parenthesized_expression (cast_expression type: (type_identifier) @cast (#eq? @cast \"HttpURLConnection\") value: (method_invocation object: (object_creation_expression type: (type_identifier) @type (#eq? @type \"URL\") arguments: (argument_list (identifier) @url)) name: (identifier) @method (#eq? @method \"openConnection\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "((HttpURLConnection) new URL(targetUrl).openConnection()).getResponseCode();"
+      expected: TruePositive
+    - code: "((HttpURLConnection) new URL(userUrl).openConnection()).getInputStream();"
+      expected: TruePositive
+    - code: "((HttpURLConnection) new URL(endpoint).openConnection()).connect();"
+      expected: TruePositive
+    - code: "((HttpURLConnection) new URL(\"https://api.example.com\").openConnection()).getResponseCode();"
+      expected: TrueNegative
+    - code: "connection.getResponseCode();"
+      expected: TrueNegative
+    - code: "connection.disconnect();"
+      expected: TrueNegative
+
+# ============================================================================
+# URL.openStream / URL.openConnection (2 rules)
+# ============================================================================
+
+- id: "java-ssrf-url-openstream-variable"
+  name: "URL.openStream with Variable URL"
+  description: "Calling openStream() on a URL constructed from user input enables SSRF. Validate URLs against an allowlist of permitted hosts."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (object_creation_expression type: (type_identifier) @type (#eq? @type \"URL\") arguments: (argument_list (identifier) @url)) name: (identifier) @method (#eq? @method \"openStream\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "new URL(userUrl).openStream();"
+      expected: TruePositive
+    - code: "new URL(targetUrl).openStream();"
+      expected: TruePositive
+    - code: "new URL(endpoint).openStream();"
+      expected: TruePositive
+    - code: "new URL(\"https://api.example.com/data\").openStream();"
+      expected: TrueNegative
+    - code: "inputStream.read();"
+      expected: TrueNegative
+    - code: "new URL(\"https://localhost/health\").openStream();"
+      expected: TrueNegative
+
+- id: "java-ssrf-url-openconnection-variable"
+  name: "URL.openConnection with Variable URL"
+  description: "Calling openConnection() on a URL constructed from user input enables SSRF. Validate URLs against an allowlist of permitted hosts."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (object_creation_expression type: (type_identifier) @type (#eq? @type \"URL\") arguments: (argument_list (identifier) @url)) name: (identifier) @method (#eq? @method \"openConnection\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "new URL(userUrl).openConnection();"
+      expected: TruePositive
+    - code: "new URL(targetUrl).openConnection();"
+      expected: TruePositive
+    - code: "new URL(endpoint).openConnection();"
+      expected: TruePositive
+    - code: "new URL(\"https://api.example.com\").openConnection();"
+      expected: TrueNegative
+    - code: "connection.getInputStream();"
+      expected: TrueNegative
+    - code: "new URL(\"https://localhost:8080\").openConnection();"
+      expected: TrueNegative
+
+# ============================================================================
+# RestTemplate SSRF (2 rules)
+# ============================================================================
+
+- id: "java-ssrf-resttemplate-concat"
+  name: "RestTemplate with Concatenated URL"
+  description: "Concatenating user input into RestTemplate URLs enables SSRF. Validate URLs against an allowlist of permitted hosts."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#match? @obj \"(?i)(restTemplate|rest|template)\") name: (identifier) @method (#match? @method \"^(getForObject|getForEntity|postForObject|postForEntity|exchange|execute)$\") arguments: (argument_list (binary_expression))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "restTemplate.getForObject(\"http://\" + userHost + \"/api\", String.class);"
+      expected: TruePositive
+    - code: "restTemplate.exchange(baseUrl + request.getParameter(\"url\"), HttpMethod.GET, null, String.class);"
+      expected: TruePositive
+    - code: "restTemplate.postForEntity(\"https://\" + host + \"/data\", body, String.class);"
+      expected: TruePositive
+    - code: "restTemplate.getForObject(\"https://api.example.com/data\", String.class);"
+      expected: TrueNegative
+    - code: "restTemplate.getForObject(validatedUrl, String.class);"
+      expected: TrueNegative
+    - code: "restTemplate.setErrorHandler(handler);"
+      expected: TrueNegative
+
+- id: "java-ssrf-resttemplate-variable"
+  name: "RestTemplate with Variable URL"
+  description: "Passing a variable URL to RestTemplate may enable SSRF if the variable is user-controlled. Validate URLs against an allowlist."
+  severity: Medium
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#match? @obj \"(?i)(restTemplate|rest|template)\") name: (identifier) @method (#match? @method \"^(getForObject|getForEntity|postForObject|postForEntity|exchange|execute)$\") arguments: (argument_list . (identifier) @url)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "restTemplate.getForObject(userUrl, String.class);"
+      expected: TruePositive
+    - code: "restTemplate.exchange(targetUrl, HttpMethod.GET, null, String.class);"
+      expected: TruePositive
+    - code: "restTemplate.postForEntity(endpoint, body, String.class);"
+      expected: TruePositive
+    - code: "restTemplate.getForObject(\"https://api.example.com/data\", String.class);"
+      expected: TrueNegative
+    - code: "restTemplate.setErrorHandler(handler);"
+      expected: TrueNegative
+    - code: "restTemplate.setInterceptors(interceptors);"
+      expected: TrueNegative
+
+
+# ============================================================================
+# WebClient SSRF (2 rules)
+# ============================================================================
+
+- id: "java-ssrf-webclient-concat"
+  name: "WebClient with Concatenated URL"
+  description: "Concatenating user input into WebClient URLs enables SSRF. Validate URLs against an allowlist of permitted hosts."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (method_invocation object: (identifier) @obj name: (identifier) @method (#match? @method \"^(get|post|put|delete|patch)$\")) name: (identifier) @uri (#eq? @uri \"uri\") arguments: (argument_list (binary_expression))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "webClient.get().uri(\"http://\" + userHost + \"/api\").retrieve();"
+      expected: TruePositive
+    - code: "webClient.post().uri(baseUrl + request.getParameter(\"url\")).retrieve();"
+      expected: TruePositive
+    - code: "webClient.get().uri(\"https://\" + host + \"/data\").retrieve();"
+      expected: TruePositive
+    - code: "webClient.get().uri(\"https://api.example.com/data\").retrieve();"
+      expected: TrueNegative
+    - code: "webClient.get().uri(validatedUrl).retrieve();"
+      expected: TrueNegative
+    - code: "webClient.mutate().baseUrl(\"https://api.example.com\").build();"
+      expected: TrueNegative
+
+- id: "java-ssrf-webclient-variable"
+  name: "WebClient with Variable URL"
+  description: "Passing a variable URL to WebClient may enable SSRF if the variable is user-controlled. Validate URLs against an allowlist."
+  severity: Medium
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (method_invocation object: (identifier) @obj name: (identifier) @method (#match? @method \"^(get|post|put|delete|patch)$\")) name: (identifier) @uri (#eq? @uri \"uri\") arguments: (argument_list . (identifier) @url)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "webClient.get().uri(userUrl).retrieve();"
+      expected: TruePositive
+    - code: "webClient.post().uri(targetUrl).retrieve();"
+      expected: TruePositive
+    - code: "webClient.get().uri(endpoint).retrieve();"
+      expected: TruePositive
+    - code: "webClient.get().uri(\"https://api.example.com/data\").retrieve();"
+      expected: TrueNegative
+    - code: "webClient.mutate().build();"
+      expected: TrueNegative
+    - code: "webClient.get().uri(\"/api/data\").retrieve();"
+      expected: TrueNegative
+
+# ============================================================================
+# HttpClient / OkHttp / Apache HttpClient SSRF (2 rules)
+# ============================================================================
+
+- id: "java-ssrf-httpclient-variable"
+  name: "HttpClient.send with Variable URI"
+  description: "Passing a variable URI to HttpClient.send may enable SSRF if the URI is user-controlled. Validate URIs against an allowlist."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"send\") arguments: (argument_list (identifier) @req)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "httpClient.send(userRequest, HttpResponse.BodyHandlers.ofString());"
+      expected: TruePositive
+    - code: "client.send(request, HttpResponse.BodyHandlers.ofInputStream());"
+      expected: TruePositive
+    - code: "httpClient.send(req, HttpResponse.BodyHandlers.ofByteArray());"
+      expected: TruePositive
+    - code: "httpClient.send(HttpRequest.newBuilder(URI.create(\"https://api.example.com\")).build(), HttpResponse.BodyHandlers.ofString());"
+      expected: TrueNegative
+    - code: "httpClient.version();"
+      expected: TrueNegative
+    - code: "httpClient.connectTimeout();"
+      expected: TrueNegative
+
+- id: "java-ssrf-okhttp-request-variable"
+  name: "OkHttp Request with Variable URL"
+  description: "Building OkHttp requests with user-controlled URLs enables SSRF. Validate URLs against an allowlist of permitted hosts."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (method_invocation object: (object_creation_expression type: (type_identifier) @builder) name: (identifier) @url_method (#eq? @url_method \"url\") arguments: (argument_list (identifier) @url)) name: (identifier) @build (#eq? @build \"build\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "new Request.Builder().url(userUrl).build();"
+      expected: TruePositive
+    - code: "new Request.Builder().url(targetUrl).build();"
+      expected: TruePositive
+    - code: "new Request.Builder().url(endpoint).build();"
+      expected: TruePositive
+    - code: "new Request.Builder().url(\"https://api.example.com\").build();"
+      expected: TrueNegative
+    - code: "new Request.Builder().addHeader(\"Accept\", \"application/json\").build();"
+      expected: TrueNegative
+    - code: "client.newCall(request).execute();"
+      expected: TrueNegative
+
+# ============================================================================
+# Apache HttpClient SSRF (1 rule)
+# ============================================================================
+
+- id: "java-ssrf-apache-httpclient-variable"
+  name: "Apache HttpClient with Variable URI"
+  description: "Passing a variable URI to Apache HttpClient methods enables SSRF if the URI is user-controlled. Validate URIs against an allowlist."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(object_creation_expression type: (type_identifier) @type (#match? @type \"^(HttpGet|HttpPost|HttpPut|HttpDelete|HttpPatch)$\") arguments: (argument_list (identifier) @url)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "new HttpGet(userUrl);"
+      expected: TruePositive
+    - code: "new HttpPost(targetUrl);"
+      expected: TruePositive
+    - code: "new HttpPut(endpoint);"
+      expected: TruePositive
+    - code: "new HttpGet(\"https://api.example.com/data\");"
+      expected: TrueNegative
+    - code: "new HttpPost(\"https://localhost:8080/api\");"
+      expected: TrueNegative
+    - code: "httpClient.execute(request);"
+      expected: TrueNegative

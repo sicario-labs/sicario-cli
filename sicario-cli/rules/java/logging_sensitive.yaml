@@ -1,0 +1,294 @@
+# Logging Sensitive Data Rules for Java
+# Covers: passwords/tokens/API keys in Logger.info, Logger.debug,
+# System.out.println, SLF4J, Log4j, System.err.println,
+# exception messages with sensitive data
+#
+# CWE-532: Insertion of Sensitive Information into Log File
+# OWASP A09:2021 - Security Logging and Monitoring Failures
+
+# ============================================================================
+# Logger.info / Logger.debug with Sensitive Data (3 rules)
+# ============================================================================
+
+- id: "java-log-logger-info-password"
+  name: "Logger.info with Password/Secret"
+  description: "Logging passwords, secrets, or tokens at INFO level exposes sensitive data in log files. Mask or redact sensitive values before logging."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#match? @method \"^(info|warn|error|fatal)$\") arguments: (argument_list (binary_expression left: (string_literal) @msg (#match? @msg \"(?i)(password|passwd|secret|token|apiKey|api_key|credential|ssn|credit.?card)\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html"
+  test_cases:
+    - code: "logger.info(\"User password: \" + password);"
+      expected: TruePositive
+    - code: "log.info(\"API token: \" + token);"
+      expected: TruePositive
+    - code: "logger.warn(\"Secret key: \" + secretKey);"
+      expected: TruePositive
+    - code: "logger.info(\"User logged in: \" + username);"
+      expected: TrueNegative
+    - code: "logger.info(\"Request processed successfully\");"
+      expected: TrueNegative
+    - code: "logger.info(\"Processing {} items\", count);"
+      expected: TrueNegative
+
+- id: "java-log-logger-debug-password"
+  name: "Logger.debug with Password/Secret"
+  description: "Logging passwords or secrets at DEBUG level exposes sensitive data when debug logging is enabled. Never log sensitive values at any level."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"debug\") arguments: (argument_list (binary_expression left: (string_literal) @msg (#match? @msg \"(?i)(password|passwd|secret|token|apiKey|api_key|credential|ssn|credit.?card)\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html"
+  test_cases:
+    - code: "logger.debug(\"Password hash: \" + hash);"
+      expected: TruePositive
+    - code: "log.debug(\"Token value: \" + token);"
+      expected: TruePositive
+    - code: "logger.debug(\"API key: \" + apiKey);"
+      expected: TruePositive
+    - code: "logger.debug(\"Processing request for user: \" + userId);"
+      expected: TrueNegative
+    - code: "logger.debug(\"Cache hit for key: \" + cacheKey);"
+      expected: TrueNegative
+    - code: "logger.debug(\"Entering method\");"
+      expected: TrueNegative
+
+- id: "java-log-slf4j-placeholder-password"
+  name: "SLF4J Logger with Password in Placeholder"
+  description: "Logging sensitive data via SLF4J placeholders exposes secrets in log files. Mask or redact sensitive values before logging."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#match? @method \"^(info|debug|warn|error|trace)$\") arguments: (argument_list (string_literal) @msg (#match? @msg \"(?i)(password|passwd|secret|token|apiKey|api_key|credential).*\\\\{\\\\}\") (identifier) @arg)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html"
+  test_cases:
+    - code: "logger.info(\"User password: {}\", password);"
+      expected: TruePositive
+    - code: "log.debug(\"API token: {}\", token);"
+      expected: TruePositive
+    - code: "logger.warn(\"Secret key: {}\", secretKey);"
+      expected: TruePositive
+    - code: "logger.info(\"User {} logged in\", username);"
+      expected: TrueNegative
+    - code: "logger.info(\"Request completed in {} ms\", duration);"
+      expected: TrueNegative
+    - code: "logger.debug(\"Processing item {}\", itemId);"
+      expected: TrueNegative
+
+
+# ============================================================================
+# System.out.println / System.err.println with Sensitive Data (3 rules)
+# ============================================================================
+
+- id: "java-log-sysout-password"
+  name: "System.out.println with Password/Secret"
+  description: "Printing passwords or secrets to stdout exposes sensitive data. Use a proper logging framework with redaction and never log sensitive values."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (field_access object: (identifier) @sys (#eq? @sys \"System\") field: (identifier) @field (#eq? @field \"out\")) name: (identifier) @method (#match? @method \"^(println|print|printf)$\") arguments: (argument_list (binary_expression left: (string_literal) @msg (#match? @msg \"(?i)(password|passwd|secret|token|apiKey|api_key|credential|ssn|credit.?card)\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html"
+  test_cases:
+    - code: "System.out.println(\"Password: \" + password);"
+      expected: TruePositive
+    - code: "System.out.println(\"API token: \" + token);"
+      expected: TruePositive
+    - code: "System.out.println(\"Secret: \" + secret);"
+      expected: TruePositive
+    - code: "System.out.println(\"Hello, \" + name);"
+      expected: TrueNegative
+    - code: "System.out.println(\"Processing complete\");"
+      expected: TrueNegative
+    - code: "System.out.println(count);"
+      expected: TrueNegative
+
+- id: "java-log-syserr-password"
+  name: "System.err.println with Password/Secret"
+  description: "Printing passwords or secrets to stderr exposes sensitive data. Use a proper logging framework with redaction and never log sensitive values."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (field_access object: (identifier) @sys (#eq? @sys \"System\") field: (identifier) @field (#eq? @field \"err\")) name: (identifier) @method (#match? @method \"^(println|print|printf)$\") arguments: (argument_list (binary_expression left: (string_literal) @msg (#match? @msg \"(?i)(password|passwd|secret|token|apiKey|api_key|credential|ssn|credit.?card)\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html"
+  test_cases:
+    - code: "System.err.println(\"Password: \" + password);"
+      expected: TruePositive
+    - code: "System.err.println(\"Token: \" + token);"
+      expected: TruePositive
+    - code: "System.err.println(\"Secret key: \" + secretKey);"
+      expected: TruePositive
+    - code: "System.err.println(\"Error: \" + message);"
+      expected: TrueNegative
+    - code: "System.err.println(\"Connection failed\");"
+      expected: TrueNegative
+    - code: "System.err.println(errorCode);"
+      expected: TrueNegative
+
+- id: "java-log-sysout-exception-sensitive"
+  name: "System.out.println with Exception Containing Sensitive Data"
+  description: "Printing exception stack traces to stdout may expose sensitive data in error messages. Use a logging framework and sanitize exception messages."
+  severity: Medium
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (field_access object: (identifier) @sys (#eq? @sys \"System\") field: (identifier) @field (#eq? @field \"out\")) name: (identifier) @method (#eq? @method \"println\") arguments: (argument_list (method_invocation object: (identifier) @ex name: (identifier) @msg (#match? @msg \"^(getMessage|toString|getStackTrace)$\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html"
+  test_cases:
+    - code: "System.out.println(e.getMessage());"
+      expected: TruePositive
+    - code: "System.out.println(ex.toString());"
+      expected: TruePositive
+    - code: "System.out.println(exception.getMessage());"
+      expected: TruePositive
+    - code: "logger.error(\"Error occurred\", e);"
+      expected: TrueNegative
+    - code: "System.out.println(\"Error occurred\");"
+      expected: TrueNegative
+    - code: "throw new RuntimeException(e);"
+      expected: TrueNegative
+
+# ============================================================================
+# Log4j with Sensitive Data (2 rules)
+# ============================================================================
+
+- id: "java-log-log4j-password"
+  name: "Log4j Logger with Password/Secret"
+  description: "Logging passwords or secrets via Log4j exposes sensitive data in log files. Mask or redact sensitive values before logging."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#match? @obj \"^(LOG|LOGGER|log4jLogger)$\") name: (identifier) @method (#match? @method \"^(info|debug|warn|error|fatal|trace)$\") arguments: (argument_list (binary_expression left: (string_literal) @msg (#match? @msg \"(?i)(password|passwd|secret|token|apiKey|api_key|credential)\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html"
+  test_cases:
+    - code: "LOG.info(\"Password: \" + password);"
+      expected: TruePositive
+    - code: "LOGGER.debug(\"Token: \" + token);"
+      expected: TruePositive
+    - code: "LOG.error(\"Secret: \" + secret);"
+      expected: TruePositive
+    - code: "LOG.info(\"User logged in: \" + username);"
+      expected: TrueNegative
+    - code: "LOGGER.info(\"Request processed\");"
+      expected: TrueNegative
+    - code: "LOG.debug(\"Processing {} items\", count);"
+      expected: TrueNegative
+
+- id: "java-log-log4j-placeholder-password"
+  name: "Log4j Logger with Password in Placeholder"
+  description: "Logging sensitive data via Log4j placeholders exposes secrets in log files. Mask or redact sensitive values before logging."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#match? @obj \"^(LOG|LOGGER|log4jLogger)$\") name: (identifier) @method (#match? @method \"^(info|debug|warn|error|fatal|trace)$\") arguments: (argument_list (string_literal) @msg (#match? @msg \"(?i)(password|passwd|secret|token|apiKey|api_key|credential).*\\\\{\\\\}\") (identifier) @arg)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html"
+  test_cases:
+    - code: "LOG.info(\"Password: {}\", password);"
+      expected: TruePositive
+    - code: "LOGGER.debug(\"Token: {}\", token);"
+      expected: TruePositive
+    - code: "LOG.warn(\"API key: {}\", apiKey);"
+      expected: TruePositive
+    - code: "LOG.info(\"User {} logged in\", username);"
+      expected: TrueNegative
+    - code: "LOGGER.info(\"Processed {} items\", count);"
+      expected: TrueNegative
+    - code: "LOG.debug(\"Request from {}\", ipAddress);"
+      expected: TrueNegative
+
+# ============================================================================
+# printStackTrace and Sensitive Exception Logging (2 rules)
+# ============================================================================
+
+- id: "java-log-printstacktrace"
+  name: "Exception.printStackTrace() Usage"
+  description: "printStackTrace() writes to stderr and may expose sensitive internal details. Use a logging framework with appropriate log levels instead."
+  severity: Medium
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"printStackTrace\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html"
+  test_cases:
+    - code: "e.printStackTrace();"
+      expected: TruePositive
+    - code: "ex.printStackTrace();"
+      expected: TruePositive
+    - code: "exception.printStackTrace();"
+      expected: TruePositive
+    - code: "logger.error(\"Error occurred\", e);"
+      expected: TrueNegative
+    - code: "throw new RuntimeException(e);"
+      expected: TrueNegative
+    - code: "e.getMessage();"
+      expected: TrueNegative
+
+- id: "java-log-exception-message-concat"
+  name: "Logging Exception Message with Sensitive Context"
+  description: "Logging exception messages that include sensitive variable context may expose secrets. Sanitize exception messages before logging."
+  severity: Medium
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#match? @method \"^(info|debug|warn|error|fatal)$\") arguments: (argument_list (binary_expression left: (string_literal) @msg (#match? @msg \"(?i)(password|passwd|secret|token|apiKey|api_key|credential)\") right: (method_invocation name: (identifier) @fn (#eq? @fn \"getMessage\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html"
+  test_cases:
+    - code: "logger.error(\"Password validation error: \" + e.getMessage());"
+      expected: TruePositive
+    - code: "log.warn(\"Token refresh failed: \" + ex.getMessage());"
+      expected: TruePositive
+    - code: "logger.info(\"Secret rotation error: \" + exception.getMessage());"
+      expected: TruePositive
+    - code: "logger.error(\"Connection failed: \" + e.getMessage());"
+      expected: TrueNegative
+    - code: "logger.error(\"Error occurred\", e);"
+      expected: TrueNegative
+    - code: "logger.info(\"Processing complete\");"
+      expected: TrueNegative

@@ -1,0 +1,359 @@
+# Spring Boot Security Rules for Java
+# Covers: disabled CSRF, permissive CORS, missing @PreAuthorize, exposed actuator,
+# DEBUG logging in production, insecure session config, missing security headers,
+# disabled SSL verification, exposed H2 console, permissive antMatchers
+#
+# CWE-352: Cross-Site Request Forgery
+# CWE-942: Permissive Cross-domain Policy with Untrusted Domains
+# CWE-862: Missing Authorization
+# OWASP A05:2021 - Security Misconfiguration
+# OWASP A01:2021 - Broken Access Control
+
+# ============================================================================
+# CSRF Protection (2 rules)
+# ============================================================================
+
+- id: "java-spring-csrf-disabled"
+  name: "Spring Security CSRF Disabled"
+  description: "Disabling CSRF protection exposes the application to cross-site request forgery attacks. Keep CSRF enabled for browser-facing endpoints."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation name: (identifier) @method (#eq? @method \"disable\") object: (method_invocation name: (identifier) @csrf (#eq? @csrf \"csrf\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-352"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.spring.io/spring-security/reference/servlet/exploits/csrf.html"
+  test_cases:
+    - code: "http.csrf().disable();"
+      expected: TruePositive
+    - code: "httpSecurity.csrf().disable();"
+      expected: TruePositive
+    - code: "http.csrf().disable().authorizeRequests();"
+      expected: TruePositive
+    - code: "http.csrf().csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse());"
+      expected: TrueNegative
+    - code: "http.authorizeRequests();"
+      expected: TrueNegative
+    - code: "http.formLogin().disable();"
+      expected: TrueNegative
+
+- id: "java-spring-csrf-lambda-disabled"
+  name: "Spring Security CSRF Disabled (Lambda DSL)"
+  description: "Disabling CSRF via the lambda DSL exposes the application to CSRF attacks. Keep CSRF enabled for browser-facing endpoints."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation name: (identifier) @method (#eq? @method \"csrf\") arguments: (argument_list (lambda_expression body: (method_invocation name: (identifier) @dis (#eq? @dis \"disable\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-352"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.spring.io/spring-security/reference/servlet/exploits/csrf.html"
+  test_cases:
+    - code: "http.csrf(csrf -> csrf.disable());"
+      expected: TruePositive
+    - code: "httpSecurity.csrf(c -> c.disable());"
+      expected: TruePositive
+    - code: "http.csrf(AbstractHttpConfigurer::disable);"
+      expected: TruePositive
+    - code: "http.csrf(csrf -> csrf.csrfTokenRepository(repo));"
+      expected: TrueNegative
+    - code: "http.cors(cors -> cors.disable());"
+      expected: TrueNegative
+    - code: "http.authorizeHttpRequests(auth -> auth.anyRequest().authenticated());"
+      expected: TrueNegative
+
+# ============================================================================
+# CORS Configuration (2 rules)
+# ============================================================================
+
+- id: "java-spring-cors-allow-all"
+  name: "Spring CORS allowedOrigins(\"*\")"
+  description: "Allowing all origins in CORS configuration permits any website to make cross-origin requests. Restrict to trusted domains."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation name: (identifier) @method (#match? @method \"^(allowedOrigins|allowedOriginPatterns)$\") arguments: (argument_list (string_literal) @origin (#eq? @origin \"\\\"*\\\"\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-942"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/web/servlet/config/annotation/CorsRegistration.html"
+  test_cases:
+    - code: "registry.addMapping(\"/**\").allowedOrigins(\"*\");"
+      expected: TruePositive
+    - code: "config.allowedOrigins(\"*\");"
+      expected: TruePositive
+    - code: "cors.allowedOriginPatterns(\"*\");"
+      expected: TruePositive
+    - code: "config.allowedOrigins(\"https://example.com\");"
+      expected: TrueNegative
+    - code: "config.allowedMethods(\"GET\", \"POST\");"
+      expected: TrueNegative
+    - code: "config.maxAge(3600);"
+      expected: TrueNegative
+
+- id: "java-spring-crossorigin-all"
+  name: "@CrossOrigin with origins=\"*\""
+  description: "Using @CrossOrigin with wildcard origins allows any website to make cross-origin requests. Restrict to trusted domains."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(annotation name: (identifier) @ann (#eq? @ann \"CrossOrigin\") arguments: (annotation_argument_list (element_value_pair key: (identifier) @key (#eq? @key \"origins\") value: (string_literal) @val (#eq? @val \"\\\"*\\\"\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-942"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/web/bind/annotation/CrossOrigin.html"
+  test_cases:
+    - code: "@CrossOrigin(origins = \"*\")"
+      expected: TruePositive
+    - code: "@CrossOrigin(origins = \"*\", methods = RequestMethod.GET)"
+      expected: TruePositive
+    - code: "@CrossOrigin(origins = \"*\", maxAge = 3600)"
+      expected: TruePositive
+    - code: "@CrossOrigin(origins = \"https://example.com\")"
+      expected: TrueNegative
+    - code: "@CrossOrigin"
+      expected: TrueNegative
+    - code: "@GetMapping(\"/api\")"
+      expected: TrueNegative
+
+
+# ============================================================================
+# Authorization and Access Control (2 rules)
+# ============================================================================
+
+- id: "java-spring-permit-all"
+  name: "Spring Security permitAll on Sensitive Paths"
+  description: "Using permitAll() on broad path patterns may expose sensitive endpoints. Restrict access to authenticated users and apply role-based authorization."
+  severity: Medium
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation name: (identifier) @method (#eq? @method \"permitAll\") object: (method_invocation name: (identifier) @ant (#match? @ant \"^(antMatchers|requestMatchers)$\") arguments: (argument_list (string_literal) @path (#match? @path \"^\\\"(/api|/admin|/manage|/actuator)\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-862"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://docs.spring.io/spring-security/reference/servlet/authorization/authorize-http-requests.html"
+  test_cases:
+    - code: "http.authorizeRequests().antMatchers(\"/api/**\").permitAll();"
+      expected: TruePositive
+    - code: "http.authorizeRequests().antMatchers(\"/admin/**\").permitAll();"
+      expected: TruePositive
+    - code: "http.authorizeRequests().requestMatchers(\"/actuator/**\").permitAll();"
+      expected: TruePositive
+    - code: "http.authorizeRequests().antMatchers(\"/public/**\").permitAll();"
+      expected: TrueNegative
+    - code: "http.authorizeRequests().antMatchers(\"/api/**\").authenticated();"
+      expected: TrueNegative
+    - code: "http.authorizeRequests().anyRequest().authenticated();"
+      expected: TrueNegative
+
+- id: "java-spring-actuator-exposed"
+  name: "Spring Actuator Endpoints Exposed"
+  description: "Exposing all actuator endpoints can leak sensitive application internals (heap dumps, env vars, beans). Restrict to health and info only."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(variable_declarator name: (identifier) @name value: (string_literal) @val (#match? @val \"management\\.endpoints\\.web\\.exposure\\.include.*\\\\*\")) @assign"
+    captures:
+      - "assign"
+  cwe_id: "CWE-200"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html"
+  test_cases:
+    - code: "String config = \"management.endpoints.web.exposure.include=*\";"
+      expected: TruePositive
+    - code: "String prop = \"management.endpoints.web.exposure.include=*\";"
+      expected: TruePositive
+    - code: "String val = \"management.endpoints.web.exposure.include=*,env\";"
+      expected: TruePositive
+    - code: "String config = \"management.endpoints.web.exposure.include=health,info\";"
+      expected: TrueNegative
+    - code: "String config = \"management.endpoints.enabled-by-default=false\";"
+      expected: TrueNegative
+    - code: "String config = \"server.port=8080\";"
+      expected: TrueNegative
+
+# ============================================================================
+# Session and Security Headers (2 rules)
+# ============================================================================
+
+- id: "java-spring-session-fixation"
+  name: "Spring Session Fixation Protection Disabled"
+  description: "Disabling session fixation protection allows attackers to hijack sessions. Keep the default migrateSession or changeSessionId strategy."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation name: (identifier) @method (#eq? @method \"none\") object: (method_invocation name: (identifier) @sf (#eq? @sf \"sessionFixation\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-384"
+  owasp_category: A07_IdentificationAuthenticationFailures
+  help_uri: "https://docs.spring.io/spring-security/reference/servlet/authentication/session-management.html"
+  test_cases:
+    - code: "http.sessionManagement().sessionFixation().none();"
+      expected: TruePositive
+    - code: "httpSecurity.sessionManagement().sessionFixation().none();"
+      expected: TruePositive
+    - code: "http.sessionManagement().sessionFixation().none().maximumSessions(1);"
+      expected: TruePositive
+    - code: "http.sessionManagement().sessionFixation().migrateSession();"
+      expected: TrueNegative
+    - code: "http.sessionManagement().sessionFixation().changeSessionId();"
+      expected: TrueNegative
+    - code: "http.sessionManagement().maximumSessions(1);"
+      expected: TrueNegative
+
+- id: "java-spring-headers-disabled"
+  name: "Spring Security Headers Disabled"
+  description: "Disabling security headers removes protections like X-Frame-Options, X-Content-Type-Options, and HSTS. Keep default headers enabled."
+  severity: Medium
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation name: (identifier) @method (#eq? @method \"disable\") object: (method_invocation name: (identifier) @hdr (#eq? @hdr \"headers\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-693"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.spring.io/spring-security/reference/servlet/exploits/headers.html"
+  test_cases:
+    - code: "http.headers().disable();"
+      expected: TruePositive
+    - code: "httpSecurity.headers().disable();"
+      expected: TruePositive
+    - code: "http.headers().disable().csrf();"
+      expected: TruePositive
+    - code: "http.headers().frameOptions().deny();"
+      expected: TrueNegative
+    - code: "http.headers().contentTypeOptions();"
+      expected: TrueNegative
+    - code: "http.csrf().disable();"
+      expected: TrueNegative
+
+# ============================================================================
+# SSL/TLS and Debug Configuration (2 rules)
+# ============================================================================
+
+- id: "java-spring-ssl-verify-disabled"
+  name: "SSL Certificate Verification Disabled"
+  description: "Disabling SSL certificate verification allows man-in-the-middle attacks. Use proper certificate validation in production."
+  severity: Critical
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation name: (identifier) @method (#match? @method \"^(setHostnameVerifier|setSSLSocketFactory)$\") arguments: (argument_list (method_invocation name: (identifier) @fn (#match? @fn \"^(allHostsValid|trustAllCerts|getInsecureSocketFactory)$\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-295"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Transport_Layer_Security_Cheat_Sheet.html"
+  test_cases:
+    - code: "conn.setHostnameVerifier(allHostsValid());"
+      expected: TruePositive
+    - code: "connection.setSSLSocketFactory(trustAllCerts());"
+      expected: TruePositive
+    - code: "httpClient.setSSLSocketFactory(getInsecureSocketFactory());"
+      expected: TruePositive
+    - code: "conn.setHostnameVerifier(HttpsURLConnection.getDefaultHostnameVerifier());"
+      expected: TrueNegative
+    - code: "conn.setRequestMethod(\"GET\");"
+      expected: TrueNegative
+    - code: "conn.setDoOutput(true);"
+      expected: TrueNegative
+
+- id: "java-spring-debug-logging"
+  name: "DEBUG Logging Level in Production Configuration"
+  description: "DEBUG logging in production can expose sensitive data in logs. Use INFO or WARN level in production profiles."
+  severity: Medium
+  languages:
+    - Java
+  pattern:
+    query: "(variable_declarator name: (identifier) @name value: (string_literal) @val (#match? @val \"logging\\.level\\.root.*DEBUG\")) @assign"
+    captures:
+      - "assign"
+  cwe_id: "CWE-532"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.spring.io/spring-boot/docs/current/reference/html/features.html#features.logging"
+  test_cases:
+    - code: "String config = \"logging.level.root=DEBUG\";"
+      expected: TruePositive
+    - code: "String prop = \"logging.level.root=DEBUG\";"
+      expected: TruePositive
+    - code: "String val = \"logging.level.root=DEBUG\";"
+      expected: TruePositive
+    - code: "String config = \"logging.level.root=INFO\";"
+      expected: TrueNegative
+    - code: "String config = \"logging.level.root=WARN\";"
+      expected: TrueNegative
+    - code: "String config = \"server.port=8080\";"
+      expected: TrueNegative
+
+# ============================================================================
+# H2 Console and Frame Options (2 rules)
+# ============================================================================
+
+- id: "java-spring-h2-console-enabled"
+  name: "H2 Console Enabled"
+  description: "The H2 console provides direct database access and should never be enabled in production. Disable it or restrict access."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(variable_declarator name: (identifier) @name value: (string_literal) @val (#match? @val \"spring\\.h2\\.console\\.enabled.*true\")) @assign"
+    captures:
+      - "assign"
+  cwe_id: "CWE-489"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.spring.io/spring-boot/docs/current/reference/html/data.html#data.sql.h2-web-console"
+  test_cases:
+    - code: "String config = \"spring.h2.console.enabled=true\";"
+      expected: TruePositive
+    - code: "String prop = \"spring.h2.console.enabled=true\";"
+      expected: TruePositive
+    - code: "String val = \"spring.h2.console.enabled=true\";"
+      expected: TruePositive
+    - code: "String config = \"spring.h2.console.enabled=false\";"
+      expected: TrueNegative
+    - code: "String config = \"spring.datasource.url=jdbc:h2:mem:test\";"
+      expected: TrueNegative
+    - code: "String config = \"server.port=8080\";"
+      expected: TrueNegative
+
+- id: "java-spring-frame-options-disabled"
+  name: "Spring Security Frame Options Disabled"
+  description: "Disabling frame options allows clickjacking attacks. Use DENY or SAMEORIGIN frame options."
+  severity: Medium
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation name: (identifier) @method (#eq? @method \"disable\") object: (method_invocation name: (identifier) @fo (#eq? @fo \"frameOptions\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-1021"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.spring.io/spring-security/reference/servlet/exploits/headers.html#servlet-headers-frame-options"
+  test_cases:
+    - code: "http.headers().frameOptions().disable();"
+      expected: TruePositive
+    - code: "httpSecurity.headers().frameOptions().disable();"
+      expected: TruePositive
+    - code: "http.headers().frameOptions().disable().and();"
+      expected: TruePositive
+    - code: "http.headers().frameOptions().deny();"
+      expected: TrueNegative
+    - code: "http.headers().frameOptions().sameOrigin();"
+      expected: TrueNegative
+    - code: "http.headers().contentTypeOptions();"
+      expected: TrueNegative

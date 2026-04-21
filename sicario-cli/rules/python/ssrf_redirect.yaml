@@ -1,0 +1,330 @@
+# SSRF and Open Redirect Rules for Python
+# Covers: unvalidated URL in requests, urllib; open redirect in Flask/Django
+#
+# CWE-918: Server-Side Request Forgery
+# CWE-601: URL Redirection to Untrusted Site
+# OWASP A10:2021 - Server-Side Request Forgery
+
+- id: "py-requests-get-fstring"
+  name: "requests.get() with f-string URL"
+  description: "Using f-strings to construct URLs in requests.get() allows SSRF. Validate and allowlist URLs before making requests."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"requests\") attribute: (identifier) @fn (#match? @fn \"^(get|post|put|delete|patch|head|options)$\")) arguments: (argument_list (string (interpolation) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/"
+  test_cases:
+    - code: "requests.get(f\"http://{user_host}/api\")"
+      expected: TruePositive
+    - code: "requests.post(f\"{base_url}/endpoint\")"
+      expected: TruePositive
+    - code: "requests.get(f\"https://api.example.com/{user_path}\")"
+      expected: TruePositive
+    - code: "requests.get('https://api.example.com/data')"
+      expected: TrueNegative
+    - code: "requests.get(ALLOWED_URL)"
+      expected: TrueNegative
+    - code: "msg = f\"requesting {url}\""
+      expected: TrueNegative
+
+- id: "py-requests-get-concat"
+  name: "requests.get() with Concatenated URL"
+  description: "Concatenating user input into URLs for requests allows SSRF. Validate and allowlist URLs before making requests."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"requests\") attribute: (identifier) @fn (#match? @fn \"^(get|post|put|delete|patch|head|options)$\")) arguments: (argument_list (binary_expression left: (string) @url right: (_) @input operator: \"+\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/"
+  test_cases:
+    - code: "requests.get(\"http://\" + user_host + \"/api\")"
+      expected: TruePositive
+    - code: "requests.post(base_url + \"/endpoint\")"
+      expected: TruePositive
+    - code: "requests.get(\"https://api.example.com/\" + user_path)"
+      expected: TruePositive
+    - code: "requests.get('https://api.example.com/data')"
+      expected: TrueNegative
+    - code: "requests.get(ALLOWED_URL)"
+      expected: TrueNegative
+    - code: "msg = \"url: \" + url"
+      expected: TrueNegative
+
+- id: "py-urllib-open-fstring"
+  name: "urllib.request.urlopen() with f-string URL"
+  description: "Using f-strings to construct URLs in urllib.request.urlopen() allows SSRF. Validate and allowlist URLs."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (attribute object: (identifier) @pkg (#eq? @pkg \"urllib\") attribute: (identifier) @sub (#eq? @sub \"request\")) attribute: (identifier) @fn (#eq? @fn \"urlopen\")) arguments: (argument_list (string (interpolation) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://docs.python.org/3/library/urllib.request.html"
+  test_cases:
+    - code: "urllib.request.urlopen(f\"http://{user_host}/api\")"
+      expected: TruePositive
+    - code: "urllib.request.urlopen(f\"{base_url}/data\")"
+      expected: TruePositive
+    - code: "urllib.request.urlopen(f\"https://api.example.com/{path}\")"
+      expected: TruePositive
+    - code: "urllib.request.urlopen('https://api.example.com/data')"
+      expected: TrueNegative
+    - code: "urllib.parse.urlparse(url)"
+      expected: TrueNegative
+    - code: "urllib.request.urlopen(ALLOWED_URL)"
+      expected: TrueNegative
+
+- id: "py-flask-redirect-user-input"
+  name: "Flask redirect() with User Input"
+  description: "Passing user-controlled input to redirect() allows open redirect attacks. Validate the URL against an allowlist."
+  severity: Medium
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"redirect\") arguments: (argument_list (call function: (attribute object: (identifier) @req (#match? @req \"^(request|req)$\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-601"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html"
+  test_cases:
+    - code: "redirect(request.args.get('next'))"
+      expected: TruePositive
+    - code: "redirect(request.form.get('redirect_url'))"
+      expected: TruePositive
+    - code: "redirect(request.args.get('url'))"
+      expected: TruePositive
+    - code: "redirect(url_for('index'))"
+      expected: TrueNegative
+    - code: "redirect('/dashboard')"
+      expected: TrueNegative
+    - code: "redirect(url_for('login'))"
+      expected: TrueNegative
+
+- id: "py-django-redirect-user-input"
+  name: "Django redirect() with User Input"
+  description: "Passing user-controlled input to Django's redirect() allows open redirect attacks. Validate the URL against an allowlist."
+  severity: Medium
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"redirect\") arguments: (argument_list (subscript value: (attribute object: (identifier) @req (#eq? @req \"request\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-601"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html"
+  test_cases:
+    - code: "redirect(request.GET['next'])"
+      expected: TruePositive
+    - code: "redirect(request.POST['redirect_url'])"
+      expected: TruePositive
+    - code: "redirect(request.GET['url'])"
+      expected: TruePositive
+    - code: "redirect('/')"
+      expected: TrueNegative
+    - code: "redirect(reverse('home'))"
+      expected: TrueNegative
+    - code: "redirect('/dashboard')"
+      expected: TrueNegative
+
+- id: "py-httpx-fstring"
+  name: "httpx Request with f-string URL"
+  description: "Using f-strings to construct URLs in httpx requests allows SSRF. Validate and allowlist URLs."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"httpx\") attribute: (identifier) @fn (#match? @fn \"^(get|post|put|delete|patch|head|options)$\")) arguments: (argument_list (string (interpolation) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://www.python-httpx.org/"
+  test_cases:
+    - code: "httpx.get(f\"http://{user_host}/api\")"
+      expected: TruePositive
+    - code: "httpx.post(f\"{base_url}/endpoint\")"
+      expected: TruePositive
+    - code: "httpx.get(f\"https://api.example.com/{user_path}\")"
+      expected: TruePositive
+    - code: "httpx.get('https://api.example.com/data')"
+      expected: TrueNegative
+    - code: "httpx.get(ALLOWED_URL)"
+      expected: TrueNegative
+    - code: "msg = f\"requesting {url}\""
+      expected: TrueNegative
+
+- id: "py-aiohttp-fstring"
+  name: "aiohttp Request with f-string URL"
+  description: "Using f-strings to construct URLs in aiohttp requests allows SSRF. Validate and allowlist URLs."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @obj (#match? @obj \"^(session|client)$\") attribute: (identifier) @fn (#match? @fn \"^(get|post|put|delete|patch|head|options)$\")) arguments: (argument_list (string (interpolation) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://docs.aiohttp.org/en/stable/"
+  test_cases:
+    - code: "session.get(f\"http://{user_host}/api\")"
+      expected: TruePositive
+    - code: "client.post(f\"{base_url}/endpoint\")"
+      expected: TruePositive
+    - code: "session.get(f\"https://api.example.com/{user_path}\")"
+      expected: TruePositive
+    - code: "session.get('https://api.example.com/data')"
+      expected: TrueNegative
+    - code: "session.get(ALLOWED_URL)"
+      expected: TrueNegative
+    - code: "msg = f\"requesting {url}\""
+      expected: TrueNegative
+
+- id: "py-ssl-unverified"
+  name: "SSL Verification Disabled"
+  description: "Disabling SSL verification with verify=False allows man-in-the-middle attacks. Always verify SSL certificates."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#match? @mod \"^(requests|httpx|session|client)$\") attribute: (identifier) @fn (#match? @fn \"^(get|post|put|delete|patch|head|options|request)$\")) arguments: (argument_list (keyword_argument name: (identifier) @kw (#eq? @kw \"verify\") value: (false) @val))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-295"
+  owasp_category: A07_IdentificationAuthenticationFailures
+  help_uri: "https://requests.readthedocs.io/en/latest/user/advanced/#ssl-cert-verification"
+  test_cases:
+    - code: "requests.get(url, verify=False)"
+      expected: TruePositive
+    - code: "requests.post(url, data=payload, verify=False)"
+      expected: TruePositive
+    - code: "session.get(url, verify=False)"
+      expected: TruePositive
+    - code: "requests.get(url, verify=True)"
+      expected: TrueNegative
+    - code: "requests.get(url)"
+      expected: TrueNegative
+    - code: "requests.get(url, verify='/path/to/cert.pem')"
+      expected: TrueNegative
+
+- id: "py-ssl-context-no-verify"
+  name: "SSL Context with Disabled Verification"
+  description: "Creating an unverified SSL context disables certificate validation. Use ssl.create_default_context() instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"ssl\") attribute: (identifier) @fn (#eq? @fn \"_create_unverified_context\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-295"
+  owasp_category: A07_IdentificationAuthenticationFailures
+  help_uri: "https://docs.python.org/3/library/ssl.html"
+  test_cases:
+    - code: "ssl._create_unverified_context()"
+      expected: TruePositive
+    - code: "ctx = ssl._create_unverified_context()"
+      expected: TruePositive
+    - code: "context = ssl._create_unverified_context()"
+      expected: TruePositive
+    - code: "ssl.create_default_context()"
+      expected: TrueNegative
+    - code: "ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)"
+      expected: TrueNegative
+    - code: "ssl.wrap_socket(sock)"
+      expected: TrueNegative
+
+- id: "py-flask-debug-true"
+  name: "Flask app.run() with debug=True"
+  description: "Running Flask with debug=True in production exposes the Werkzeug debugger, which allows remote code execution. Disable debug mode in production."
+  severity: Critical
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute attribute: (identifier) @method (#eq? @method \"run\")) arguments: (argument_list (keyword_argument name: (identifier) @kw (#eq? @kw \"debug\") value: (true) @val))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-215"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://flask.palletsprojects.com/en/2.3.x/debugging/"
+  test_cases:
+    - code: "app.run(debug=True)"
+      expected: TruePositive
+    - code: "app.run(host='0.0.0.0', debug=True)"
+      expected: TruePositive
+    - code: "application.run(debug=True, port=5000)"
+      expected: TruePositive
+    - code: "app.run(debug=False)"
+      expected: TrueNegative
+    - code: "app.run()"
+      expected: TrueNegative
+    - code: "app.run(host='0.0.0.0', port=5000)"
+      expected: TrueNegative
+
+- id: "py-jwt-no-verify"
+  name: "JWT Decode without Verification"
+  description: "Decoding JWT tokens without verification allows token forgery. Always verify the signature with algorithms and key parameters."
+  severity: Critical
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"jwt\") attribute: (identifier) @fn (#eq? @fn \"decode\")) arguments: (argument_list (_) (keyword_argument name: (identifier) @kw (#match? @kw \"^(options|verify)$\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-347"
+  owasp_category: A07_IdentificationAuthenticationFailures
+  help_uri: "https://pyjwt.readthedocs.io/en/stable/usage.html"
+  test_cases:
+    - code: "jwt.decode(token, options={\"verify_signature\": False})"
+      expected: TruePositive
+    - code: "jwt.decode(token, verify=False)"
+      expected: TruePositive
+    - code: "jwt.decode(token, options={\"verify_exp\": False})"
+      expected: TruePositive
+    - code: "jwt.decode(token, key, algorithms=['HS256'])"
+      expected: TrueNegative
+    - code: "jwt.encode(payload, key, algorithm='HS256')"
+      expected: TrueNegative
+    - code: "jwt.decode(token, SECRET_KEY, algorithms=['RS256'])"
+      expected: TrueNegative
+
+- id: "py-jwt-none-algorithm"
+  name: "JWT with 'none' Algorithm"
+  description: "Using 'none' as JWT algorithm disables signature verification entirely. Always specify a secure algorithm like HS256 or RS256."
+  severity: Critical
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"jwt\") attribute: (identifier) @fn (#eq? @fn \"decode\")) arguments: (argument_list (_) (_) (keyword_argument name: (identifier) @kw (#eq? @kw \"algorithms\") value: (list (string) @algo (#match? @algo \"'none'\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-347"
+  owasp_category: A07_IdentificationAuthenticationFailures
+  help_uri: "https://pyjwt.readthedocs.io/en/stable/usage.html"
+  test_cases:
+    - code: "jwt.decode(token, key, algorithms=['none'])"
+      expected: TruePositive
+    - code: "jwt.decode(token, '', algorithms=['none'])"
+      expected: TruePositive
+    - code: "jwt.decode(token, None, algorithms=['none'])"
+      expected: TruePositive
+    - code: "jwt.decode(token, key, algorithms=['HS256'])"
+      expected: TrueNegative
+    - code: "jwt.decode(token, key, algorithms=['RS256'])"
+      expected: TrueNegative
+    - code: "jwt.encode(payload, key, algorithm='HS256')"
+      expected: TrueNegative

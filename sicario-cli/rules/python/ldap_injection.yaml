@@ -1,0 +1,140 @@
+# LDAP Injection Rules for Python
+# Covers: unsanitized input in ldap.search_s, ldap3 filter construction
+#
+# CWE-90: Improper Neutralization of Special Elements used in an LDAP Query
+# OWASP A03:2021 - Injection
+
+- id: "py-ldap-search-fstring"
+  name: "LDAP search_s() with f-string Filter"
+  description: "Using f-strings to construct LDAP filters allows LDAP injection. Use ldap.filter.escape_filter_chars() to sanitize input."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute attribute: (identifier) @method (#eq? @method \"search_s\")) arguments: (argument_list (_) (_) (string (interpolation) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-90"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/www-community/attacks/LDAP_Injection"
+  test_cases:
+    - code: "conn.search_s(base_dn, ldap.SCOPE_SUBTREE, f\"(uid={username})\")"
+      expected: TruePositive
+    - code: "conn.search_s(base, scope, f\"(&(cn={name})(mail={email}))\")"
+      expected: TruePositive
+    - code: "ldap_conn.search_s(dn, ldap.SCOPE_ONELEVEL, f\"(sn={surname})\")"
+      expected: TruePositive
+    - code: "conn.search_s(base_dn, ldap.SCOPE_SUBTREE, \"(uid=%s)\" % ldap.filter.escape_filter_chars(username))"
+      expected: TrueNegative
+    - code: "conn.search_s(base_dn, ldap.SCOPE_SUBTREE, \"(objectClass=*)\")"
+      expected: TrueNegative
+    - code: "conn.search_s(base_dn, ldap.SCOPE_SUBTREE, filter_str)"
+      expected: TrueNegative
+
+- id: "py-ldap-search-format"
+  name: "LDAP search_s() with .format() Filter"
+  description: "Using .format() to construct LDAP filters allows LDAP injection. Use ldap.filter.escape_filter_chars() to sanitize input."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute attribute: (identifier) @method (#eq? @method \"search_s\")) arguments: (argument_list (_) (_) (call function: (attribute attribute: (identifier) @fmt (#eq? @fmt \"format\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-90"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/www-community/attacks/LDAP_Injection"
+  test_cases:
+    - code: "conn.search_s(base_dn, ldap.SCOPE_SUBTREE, \"(uid={})\".format(username))"
+      expected: TruePositive
+    - code: "conn.search_s(base, scope, \"(&(cn={})(mail={}))\".format(name, email))"
+      expected: TruePositive
+    - code: "ldap_conn.search_s(dn, ldap.SCOPE_ONELEVEL, \"(sn={})\".format(surname))"
+      expected: TruePositive
+    - code: "conn.search_s(base_dn, ldap.SCOPE_SUBTREE, \"(objectClass=*)\")"
+      expected: TrueNegative
+    - code: "conn.search_s(base_dn, ldap.SCOPE_SUBTREE, filter_str)"
+      expected: TrueNegative
+    - code: "msg = \"filter {}\".format(name)"
+      expected: TrueNegative
+
+- id: "py-ldap-search-percent"
+  name: "LDAP search_s() with % String Interpolation"
+  description: "Using % string interpolation to construct LDAP filters allows LDAP injection. Use ldap.filter.escape_filter_chars() to sanitize input."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute attribute: (identifier) @method (#eq? @method \"search_s\")) arguments: (argument_list (_) (_) (binary_expression left: (string) @filter right: (_) @params operator: \"%\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-90"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/www-community/attacks/LDAP_Injection"
+  test_cases:
+    - code: "conn.search_s(base_dn, ldap.SCOPE_SUBTREE, \"(uid=%s)\" % username)"
+      expected: TruePositive
+    - code: "conn.search_s(base, scope, \"(&(cn=%s)(mail=%s))\" % (name, email))"
+      expected: TruePositive
+    - code: "ldap_conn.search_s(dn, ldap.SCOPE_ONELEVEL, \"(sn=%s)\" % surname)"
+      expected: TruePositive
+    - code: "conn.search_s(base_dn, ldap.SCOPE_SUBTREE, \"(objectClass=*)\")"
+      expected: TrueNegative
+    - code: "conn.search_s(base_dn, ldap.SCOPE_SUBTREE, filter_str)"
+      expected: TrueNegative
+    - code: "msg = \"filter %s\" % name"
+      expected: TrueNegative
+
+- id: "py-ldap3-search-fstring"
+  name: "ldap3 search() with f-string Filter"
+  description: "Using f-strings to construct ldap3 search filters allows LDAP injection. Use ldap3.utils.conv.escape_filter_chars() to sanitize input."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute attribute: (identifier) @method (#eq? @method \"search\")) arguments: (argument_list (_) (string (interpolation) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-90"
+  owasp_category: A03_Injection
+  help_uri: "https://ldap3.readthedocs.io/en/latest/searches.html"
+  test_cases:
+    - code: "conn.search(base_dn, f\"(uid={username})\")"
+      expected: TruePositive
+    - code: "conn.search(base, f\"(&(cn={name})(mail={email}))\")"
+      expected: TruePositive
+    - code: "connection.search(dn, f\"(sn={surname})\")"
+      expected: TruePositive
+    - code: "conn.search(base_dn, \"(uid=%s)\" % escape_filter_chars(username))"
+      expected: TrueNegative
+    - code: "conn.search(base_dn, \"(objectClass=*)\")"
+      expected: TrueNegative
+    - code: "conn.search(base_dn, filter_str)"
+      expected: TrueNegative
+
+- id: "py-ldap3-search-format"
+  name: "ldap3 search() with .format() Filter"
+  description: "Using .format() to construct ldap3 search filters allows LDAP injection. Use ldap3.utils.conv.escape_filter_chars() to sanitize input."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute attribute: (identifier) @method (#eq? @method \"search\")) arguments: (argument_list (_) (call function: (attribute attribute: (identifier) @fmt (#eq? @fmt \"format\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-90"
+  owasp_category: A03_Injection
+  help_uri: "https://ldap3.readthedocs.io/en/latest/searches.html"
+  test_cases:
+    - code: "conn.search(base_dn, \"(uid={})\".format(username))"
+      expected: TruePositive
+    - code: "conn.search(base, \"(&(cn={})(mail={}))\".format(name, email))"
+      expected: TruePositive
+    - code: "connection.search(dn, \"(sn={})\".format(surname))"
+      expected: TruePositive
+    - code: "conn.search(base_dn, \"(objectClass=*)\")"
+      expected: TrueNegative
+    - code: "conn.search(base_dn, filter_str)"
+      expected: TrueNegative
+    - code: "msg = \"search {}\".format(name)"
+      expected: TrueNegative

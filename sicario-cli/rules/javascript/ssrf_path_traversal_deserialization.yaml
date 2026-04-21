@@ -1,0 +1,502 @@
+# SSRF, Path Traversal, and Deserialization Rules for JavaScript/TypeScript
+# Covers: SSRF via fetch/axios/http.request/got/node-fetch,
+# Path traversal via fs.readFile/readFileSync/createReadStream/writeFile/unlink/path.join/path.resolve,
+# Deserialization via JSON.parse/eval/node-serialize/Function constructor/vm.runInNewContext
+#
+# CWE-918: Server-Side Request Forgery (SSRF)
+# CWE-22: Improper Limitation of a Pathname to a Restricted Directory (Path Traversal)
+# CWE-502: Deserialization of Untrusted Data
+# OWASP A10:2021 - Server-Side Request Forgery
+# OWASP A01:2021 - Broken Access Control
+# OWASP A08:2021 - Software and Data Integrity Failures
+
+# =============================================================================
+# SSRF Rules (CWE-918, OWASP A10)
+# =============================================================================
+
+- id: "js-ssrf-fetch-user-url"
+  name: "fetch() with User-Controlled URL"
+  description: "Passing user-controlled variables directly to fetch() enables SSRF attacks. Validate and allowlist URLs before making requests."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (identifier) @fn (#eq? @fn \"fetch\") arguments: (arguments (identifier) @url)) @ssrf"
+    captures:
+      - "ssrf"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "fetch(userUrl);"
+      expected: TruePositive
+    - code: "fetch(targetUrl);"
+      expected: TruePositive
+    - code: "fetch(requestedEndpoint);"
+      expected: TruePositive
+    - code: "fetch('https://api.example.com/data');"
+      expected: TrueNegative
+    - code: "fetch(`https://api.example.com/users`);"
+      expected: TrueNegative
+    - code: "document.getElementById('fetch');"
+      expected: TrueNegative
+
+- id: "js-ssrf-fetch-template-url"
+  name: "fetch() with Template Literal URL from User Input"
+  description: "Interpolating user input into fetch() URL via template literals enables SSRF. Validate and allowlist the base URL before making requests."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (identifier) @fn (#eq? @fn \"fetch\") arguments: (arguments (template_string (template_substitution) @interp))) @ssrf"
+    captures:
+      - "ssrf"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "fetch(`${baseUrl}/api/data`);"
+      expected: TruePositive
+    - code: "fetch(`http://${host}:${port}/endpoint`);"
+      expected: TruePositive
+    - code: "fetch(`${req.query.url}`);"
+      expected: TruePositive
+    - code: "fetch('https://api.example.com/data');"
+      expected: TrueNegative
+    - code: "console.log(`fetching ${url}`);"
+      expected: TrueNegative
+    - code: "fetch(`https://api.example.com/users`);"
+      expected: TrueNegative
+
+- id: "js-ssrf-axios-user-url"
+  name: "axios Request with User-Controlled URL"
+  description: "Passing user-controlled variables to axios.get/post/put/delete enables SSRF. Validate and allowlist URLs before making requests."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"axios\") property: (property_identifier) @method (#match? @method \"^(get|post|put|delete|patch|request|head|options)$\")) arguments: (arguments (identifier) @url)) @ssrf"
+    captures:
+      - "ssrf"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "axios.get(userUrl);"
+      expected: TruePositive
+    - code: "axios.post(targetEndpoint);"
+      expected: TruePositive
+    - code: "axios.delete(resourceUrl);"
+      expected: TruePositive
+    - code: "axios.get('https://api.example.com/data');"
+      expected: TrueNegative
+    - code: "axios.post('https://api.example.com/users', data);"
+      expected: TrueNegative
+    - code: "console.log(axios);"
+      expected: TrueNegative
+
+- id: "js-ssrf-http-request-user-url"
+  name: "http.request() / https.request() with User-Controlled URL"
+  description: "Passing user-controlled variables to http.request or https.request enables SSRF. Validate and allowlist URLs before making requests."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#match? @obj \"^(http|https)$\") property: (property_identifier) @method (#match? @method \"^(request|get)$\")) arguments: (arguments (identifier) @url)) @ssrf"
+    captures:
+      - "ssrf"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "http.request(userUrl);"
+      expected: TruePositive
+    - code: "https.get(targetUrl);"
+      expected: TruePositive
+    - code: "http.get(requestedEndpoint);"
+      expected: TruePositive
+    - code: "http.request('https://api.example.com/data');"
+      expected: TrueNegative
+    - code: "https.get('https://api.example.com/health');"
+      expected: TrueNegative
+    - code: "const http = require('http');"
+      expected: TrueNegative
+
+- id: "js-ssrf-got-user-url"
+  name: "got() with User-Controlled URL"
+  description: "Passing user-controlled variables to the got HTTP client enables SSRF. Validate and allowlist URLs before making requests."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (identifier) @fn (#eq? @fn \"got\") arguments: (arguments (identifier) @url)) @ssrf"
+    captures:
+      - "ssrf"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "got(userUrl);"
+      expected: TruePositive
+    - code: "got(targetEndpoint);"
+      expected: TruePositive
+    - code: "got(requestedUrl);"
+      expected: TruePositive
+    - code: "got('https://api.example.com/data');"
+      expected: TrueNegative
+    - code: "got('https://api.example.com/health', { timeout: 5000 });"
+      expected: TrueNegative
+    - code: "const got = require('got');"
+      expected: TrueNegative
+
+
+# =============================================================================
+# Path Traversal Rules (CWE-22, OWASP A01)
+# =============================================================================
+
+- id: "js-path-traversal-fs-readfile"
+  name: "fs.readFile with User Input in Path"
+  description: "Passing user-controlled input to fs.readFile enables path traversal attacks. Validate and sanitize file paths, use path.resolve with a base directory, and reject paths containing '..'."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"fs\") property: (property_identifier) @method (#eq? @method \"readFile\")) arguments: (arguments (identifier) @path)) @traversal"
+    captures:
+      - "traversal"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html"
+  test_cases:
+    - code: "fs.readFile(userPath, callback);"
+      expected: TruePositive
+    - code: "fs.readFile(filePath, 'utf8', callback);"
+      expected: TruePositive
+    - code: "fs.readFile(requestedFile, callback);"
+      expected: TruePositive
+    - code: "fs.readFile('/etc/config.json', callback);"
+      expected: TrueNegative
+    - code: "fs.readFile('./data/config.json', 'utf8', callback);"
+      expected: TrueNegative
+    - code: "console.log('fs.readFile called');"
+      expected: TrueNegative
+
+- id: "js-path-traversal-fs-readfilesync"
+  name: "fs.readFileSync with User Input in Path"
+  description: "Passing user-controlled input to fs.readFileSync enables path traversal attacks. Validate and sanitize file paths before reading."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"fs\") property: (property_identifier) @method (#eq? @method \"readFileSync\")) arguments: (arguments (identifier) @path)) @traversal"
+    captures:
+      - "traversal"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html"
+  test_cases:
+    - code: "fs.readFileSync(userPath);"
+      expected: TruePositive
+    - code: "fs.readFileSync(filePath, 'utf8');"
+      expected: TruePositive
+    - code: "fs.readFileSync(requestedFile);"
+      expected: TruePositive
+    - code: "fs.readFileSync('/etc/config.json');"
+      expected: TrueNegative
+    - code: "fs.readFileSync('./package.json', 'utf8');"
+      expected: TrueNegative
+    - code: "const data = JSON.parse('{\"readFileSync\": true}');"
+      expected: TrueNegative
+
+- id: "js-path-traversal-fs-createreadstream"
+  name: "fs.createReadStream with User Input in Path"
+  description: "Passing user-controlled input to fs.createReadStream enables path traversal attacks. Validate and sanitize file paths before creating streams."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"fs\") property: (property_identifier) @method (#eq? @method \"createReadStream\")) arguments: (arguments (identifier) @path)) @traversal"
+    captures:
+      - "traversal"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html"
+  test_cases:
+    - code: "fs.createReadStream(userPath);"
+      expected: TruePositive
+    - code: "fs.createReadStream(filePath);"
+      expected: TruePositive
+    - code: "fs.createReadStream(downloadTarget);"
+      expected: TruePositive
+    - code: "fs.createReadStream('/var/log/app.log');"
+      expected: TrueNegative
+    - code: "fs.createReadStream('./data/export.csv');"
+      expected: TrueNegative
+    - code: "stream.pipe(res);"
+      expected: TrueNegative
+
+- id: "js-path-traversal-path-join"
+  name: "path.join with User Input from Request"
+  description: "Using user input from req.params, req.query, or req.body in path.join enables path traversal. Validate input and ensure the resolved path stays within the intended directory."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"path\") property: (property_identifier) @method (#eq? @method \"join\")) arguments: (arguments (_) (member_expression object: (member_expression object: (identifier) @req (#eq? @req \"req\"))))) @traversal"
+    captures:
+      - "traversal"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html"
+  test_cases:
+    - code: "path.join(uploadDir, req.params.filename);"
+      expected: TruePositive
+    - code: "path.join('/data', req.query.file);"
+      expected: TruePositive
+    - code: "path.join(baseDir, req.body.path);"
+      expected: TruePositive
+    - code: "path.join(__dirname, 'public', 'index.html');"
+      expected: TrueNegative
+    - code: "path.join(uploadDir, sanitize(filename));"
+      expected: TrueNegative
+    - code: "path.join('/data', 'config.json');"
+      expected: TrueNegative
+
+- id: "js-path-traversal-path-resolve"
+  name: "path.resolve with User Input from Request"
+  description: "Using user input from req.params, req.query, or req.body in path.resolve enables path traversal. Validate input and ensure the resolved path stays within the intended directory."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"path\") property: (property_identifier) @method (#eq? @method \"resolve\")) arguments: (arguments (_) (member_expression object: (member_expression object: (identifier) @req (#eq? @req \"req\"))))) @traversal"
+    captures:
+      - "traversal"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html"
+  test_cases:
+    - code: "path.resolve(uploadDir, req.params.filename);"
+      expected: TruePositive
+    - code: "path.resolve('/data', req.query.file);"
+      expected: TruePositive
+    - code: "path.resolve(baseDir, req.body.path);"
+      expected: TruePositive
+    - code: "path.resolve(__dirname, 'public', 'index.html');"
+      expected: TrueNegative
+    - code: "path.resolve('/data', 'config.json');"
+      expected: TrueNegative
+    - code: "path.resolve(process.cwd(), 'output');"
+      expected: TrueNegative
+
+- id: "js-path-traversal-fs-writefile"
+  name: "fs.writeFile with User Input in Path"
+  description: "Passing user-controlled input to fs.writeFile enables path traversal attacks allowing arbitrary file writes. Validate and sanitize file paths before writing."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"fs\") property: (property_identifier) @method (#match? @method \"^(writeFile|writeFileSync)$\")) arguments: (arguments (identifier) @path)) @traversal"
+    captures:
+      - "traversal"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html"
+  test_cases:
+    - code: "fs.writeFile(userPath, content, callback);"
+      expected: TruePositive
+    - code: "fs.writeFileSync(filePath, data);"
+      expected: TruePositive
+    - code: "fs.writeFile(outputFile, buffer, callback);"
+      expected: TruePositive
+    - code: "fs.writeFile('/tmp/output.json', data, callback);"
+      expected: TrueNegative
+    - code: "fs.writeFileSync('./config.json', JSON.stringify(config));"
+      expected: TrueNegative
+    - code: "console.log('writeFile complete');"
+      expected: TrueNegative
+
+- id: "js-path-traversal-fs-unlink"
+  name: "fs.unlink / fs.rm with User Input in Path"
+  description: "Passing user-controlled input to fs.unlink or fs.rm enables path traversal attacks allowing arbitrary file deletion. Validate and sanitize file paths before deleting."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"fs\") property: (property_identifier) @method (#match? @method \"^(unlink|unlinkSync|rm|rmSync)$\")) arguments: (arguments (identifier) @path)) @traversal"
+    captures:
+      - "traversal"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html"
+  test_cases:
+    - code: "fs.unlink(userPath, callback);"
+      expected: TruePositive
+    - code: "fs.unlinkSync(filePath);"
+      expected: TruePositive
+    - code: "fs.rm(targetFile, callback);"
+      expected: TruePositive
+    - code: "fs.unlink('/tmp/session.tmp', callback);"
+      expected: TrueNegative
+    - code: "fs.rmSync('./cache/old.json');"
+      expected: TrueNegative
+    - code: "console.log('file deleted');"
+      expected: TrueNegative
+
+
+# =============================================================================
+# Deserialization Rules (CWE-502, OWASP A08)
+# =============================================================================
+
+- id: "js-deser-json-parse-req-body"
+  name: "JSON.parse of Request Body without Schema Validation"
+  description: "Using JSON.parse on request body data without schema validation can lead to deserialization attacks. Validate parsed data against a schema using libraries like Joi, Zod, or ajv."
+  severity: Medium
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"JSON\") property: (property_identifier) @method (#eq? @method \"parse\")) arguments: (arguments (member_expression object: (identifier) @req (#eq? @req \"req\")))) @deser"
+    captures:
+      - "deser"
+  cwe_id: "CWE-502"
+  owasp_category: A08_DataIntegrityFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"
+  test_cases:
+    - code: "JSON.parse(req.body);"
+      expected: TruePositive
+    - code: "JSON.parse(req.rawBody);"
+      expected: TruePositive
+    - code: "JSON.parse(req.text);"
+      expected: TruePositive
+    - code: "JSON.parse('{\"key\": \"value\"}');"
+      expected: TrueNegative
+    - code: "JSON.stringify(req.body);"
+      expected: TrueNegative
+    - code: "const data = req.body;"
+      expected: TrueNegative
+
+- id: "js-deser-eval-data"
+  name: "eval() Used for Deserialization"
+  description: "Using eval() to deserialize data allows arbitrary code execution. Use JSON.parse with schema validation instead."
+  severity: Critical
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (identifier) @fn (#eq? @fn \"eval\") arguments: (arguments (identifier) @data)) @deser"
+    captures:
+      - "deser"
+  cwe_id: "CWE-502"
+  owasp_category: A08_DataIntegrityFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"
+  test_cases:
+    - code: "eval(userData);"
+      expected: TruePositive
+    - code: "eval(serializedData);"
+      expected: TruePositive
+    - code: "eval(responseBody);"
+      expected: TruePositive
+    - code: "JSON.parse(userData);"
+      expected: TrueNegative
+    - code: "console.log('eval is dangerous');"
+      expected: TrueNegative
+    - code: "const result = safeEval(expression);"
+      expected: TrueNegative
+
+- id: "js-deser-node-serialize"
+  name: "node-serialize unserialize with User Input"
+  description: "Using node-serialize's unserialize function with user input allows remote code execution via crafted serialized objects. Avoid node-serialize entirely; use JSON.parse with schema validation."
+  severity: Critical
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#match? @obj \"^(serialize|nodeSerialize)$\") property: (property_identifier) @method (#eq? @method \"unserialize\")) arguments: (arguments (_) @input)) @deser"
+    captures:
+      - "deser"
+  cwe_id: "CWE-502"
+  owasp_category: A08_DataIntegrityFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"
+  test_cases:
+    - code: "serialize.unserialize(userInput);"
+      expected: TruePositive
+    - code: "serialize.unserialize(cookieData);"
+      expected: TruePositive
+    - code: "nodeSerialize.unserialize(req.body.data);"
+      expected: TruePositive
+    - code: "JSON.parse(userInput);"
+      expected: TrueNegative
+    - code: "serialize.serialize(data);"
+      expected: TrueNegative
+    - code: "console.log('unserialize');"
+      expected: TrueNegative
+
+- id: "js-deser-function-constructor"
+  name: "Function() Constructor with User Input"
+  description: "Using the Function constructor with user-controlled input allows arbitrary code execution, similar to eval(). Use safe alternatives like JSON.parse with schema validation."
+  severity: Critical
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(new_expression constructor: (identifier) @ctor (#eq? @ctor \"Function\") arguments: (arguments (identifier) @input)) @deser"
+    captures:
+      - "deser"
+  cwe_id: "CWE-502"
+  owasp_category: A08_DataIntegrityFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"
+  test_cases:
+    - code: "new Function(userCode);"
+      expected: TruePositive
+    - code: "new Function(serializedLogic);"
+      expected: TruePositive
+    - code: "new Function(requestBody);"
+      expected: TruePositive
+    - code: "new Function('return 42');"
+      expected: TrueNegative
+    - code: "new Map();"
+      expected: TrueNegative
+    - code: "Function.prototype.bind(context);"
+      expected: TrueNegative
+
+- id: "js-deser-vm-run-user-input"
+  name: "vm.runInNewContext / vm.runInThisContext with User Input"
+  description: "Using Node.js vm module to execute user-controlled code allows sandbox escape and arbitrary code execution. Avoid running untrusted code; use isolated workers or WebAssembly sandboxes instead."
+  severity: Critical
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"vm\") property: (property_identifier) @method (#match? @method \"^(runInNewContext|runInThisContext|runInContext)$\")) arguments: (arguments (identifier) @input)) @deser"
+    captures:
+      - "deser"
+  cwe_id: "CWE-502"
+  owasp_category: A08_DataIntegrityFailures
+  help_uri: "https://nodejs.org/api/vm.html#vm_vm_runinnewcontext_code_contextobject_options"
+  test_cases:
+    - code: "vm.runInNewContext(userCode);"
+      expected: TruePositive
+    - code: "vm.runInThisContext(scriptContent);"
+      expected: TruePositive
+    - code: "vm.runInContext(untrustedCode, context);"
+      expected: TruePositive
+    - code: "vm.runInNewContext('1 + 1');"
+      expected: TrueNegative
+    - code: "vm.createContext({});"
+      expected: TrueNegative
+    - code: "const vm = require('vm');"
+      expected: TrueNegative
+

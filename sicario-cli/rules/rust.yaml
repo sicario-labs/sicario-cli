@@ -1,0 +1,51 @@
+- id: "rust-unsafe-block"
+  name: "Unsafe Block Usage"
+  description: "Unsafe blocks bypass Rust's memory safety guarantees"
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(unsafe_block) @unsafe"
+    captures:
+      - "unsafe"
+  cwe_id: "CWE-119"
+  owasp_category: A04_InsecureDesign
+
+- id: "rust-unwrap-panic"
+  name: "Unchecked unwrap() Call"
+  description: "unwrap() panics on None/Err and can crash the process"
+  severity: Low
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (field_expression field: (field_identifier) @field (#eq? @field \"unwrap\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-248"
+  owasp_category: A05_SecurityMisconfiguration
+
+- id: "rust-expect-panic"
+  name: "Unchecked expect() Call"
+  description: "expect() panics on None/Err and can crash the process"
+  severity: Low
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (field_expression field: (field_identifier) @field (#eq? @field \"expect\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-248"
+  owasp_category: A05_SecurityMisconfiguration
+
+- id: "rust-todo-panic"
+  name: "todo!() Macro in Production Code"
+  description: "todo!() panics at runtime and should not be in production code"
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(macro_invocation macro: (identifier) @name (#eq? @name \"todo\")) @mac"
+    captures:
+      - "mac"
+  cwe_id: "CWE-248"
+  owasp_category: A05_SecurityMisconfiguration

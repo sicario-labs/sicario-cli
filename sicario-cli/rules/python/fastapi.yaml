@@ -1,0 +1,195 @@
+# FastAPI Security Rules for Python
+# Covers: missing auth dependency injection, unvalidated path params, missing CORS, exposed debug endpoints
+#
+# CWE-862: Missing Authorization
+# CWE-942: Overly Permissive Cross-domain Whitelist
+# OWASP A01:2021 - Broken Access Control, A05:2021 - Security Misconfiguration
+
+- id: "py-fastapi-cors-allow-all-origins"
+  name: "FastAPI CORS Allow All Origins"
+  description: "Setting allow_origins=['*'] in CORSMiddleware allows any origin to make cross-origin requests. Specify explicit allowed origins."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"CORSMiddleware\") arguments: (argument_list (keyword_argument name: (identifier) @kw (#eq? @kw \"allow_origins\") value: (list (string) @val (#eq? @val \"'*'\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-942"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://fastapi.tiangolo.com/tutorial/cors/"
+  test_cases:
+    - code: "CORSMiddleware(app, allow_origins=['*'])"
+      expected: TruePositive
+    - code: "CORSMiddleware(app, allow_origins=['*'], allow_methods=['*'])"
+      expected: TruePositive
+    - code: "CORSMiddleware(app, allow_origins=['*'], allow_credentials=True)"
+      expected: TruePositive
+    - code: "CORSMiddleware(app, allow_origins=['https://example.com'])"
+      expected: TrueNegative
+    - code: "CORSMiddleware(app, allow_origins=ALLOWED_ORIGINS)"
+      expected: TrueNegative
+    - code: "CORSMiddleware(app, allow_origins=[])"
+      expected: TrueNegative
+
+- id: "py-fastapi-cors-allow-credentials-wildcard"
+  name: "FastAPI CORS Allow Credentials with Wildcard"
+  description: "Using allow_credentials=True with allow_origins=['*'] is a dangerous combination that can expose authenticated endpoints. Specify explicit origins."
+  severity: Critical
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"CORSMiddleware\") arguments: (argument_list (keyword_argument name: (identifier) @kw (#eq? @kw \"allow_credentials\") value: (true) @val))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-942"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://fastapi.tiangolo.com/tutorial/cors/"
+  test_cases:
+    - code: "CORSMiddleware(app, allow_origins=['*'], allow_credentials=True)"
+      expected: TruePositive
+    - code: "CORSMiddleware(app, allow_credentials=True, allow_origins=['*'])"
+      expected: TruePositive
+    - code: "CORSMiddleware(app, allow_credentials=True)"
+      expected: TruePositive
+    - code: "CORSMiddleware(app, allow_origins=['https://example.com'], allow_credentials=True)"
+      expected: TrueNegative
+    - code: "CORSMiddleware(app, allow_credentials=False)"
+      expected: TrueNegative
+    - code: "CORSMiddleware(app, allow_origins=['https://example.com'])"
+      expected: TrueNegative
+
+- id: "py-fastapi-debug-true"
+  name: "FastAPI Debug Mode Enabled"
+  description: "Running FastAPI with debug=True exposes detailed error information. Disable debug mode in production."
+  severity: Medium
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"FastAPI\") arguments: (argument_list (keyword_argument name: (identifier) @kw (#eq? @kw \"debug\") value: (true) @val))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-215"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://fastapi.tiangolo.com/"
+  test_cases:
+    - code: "app = FastAPI(debug=True)"
+      expected: TruePositive
+    - code: "FastAPI(title='My API', debug=True)"
+      expected: TruePositive
+    - code: "application = FastAPI(debug=True, version='1.0')"
+      expected: TruePositive
+    - code: "app = FastAPI(debug=False)"
+      expected: TrueNegative
+    - code: "app = FastAPI()"
+      expected: TrueNegative
+    - code: "app = FastAPI(title='My API')"
+      expected: TrueNegative
+
+- id: "py-fastapi-no-auth-dependency"
+  name: "FastAPI Route Without Authentication Dependency"
+  description: "FastAPI routes handling sensitive operations should use Depends() with an authentication function. Add authentication dependency injection."
+  severity: Medium
+  languages:
+    - Python
+  pattern:
+    query: "(decorator (call function: (attribute attribute: (identifier) @method (#match? @method \"^(post|put|patch|delete)$\")))) @decorator"
+    captures:
+      - "decorator"
+  cwe_id: "CWE-862"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://fastapi.tiangolo.com/tutorial/security/"
+  test_cases:
+    - code: "@app.post(\"/users\")\nasync def create_user(data: UserCreate):\n    pass"
+      expected: TruePositive
+    - code: "@app.delete(\"/users/{id}\")\nasync def delete_user(id: int):\n    pass"
+      expected: TruePositive
+    - code: "@app.put(\"/settings\")\nasync def update_settings(data: Settings):\n    pass"
+      expected: TruePositive
+    - code: "@app.get(\"/health\")\nasync def health():\n    return {\"status\": \"ok\"}"
+      expected: TrueNegative
+    - code: "@app.get(\"/docs\")\nasync def docs():\n    pass"
+      expected: TrueNegative
+    - code: "@router.get(\"/items\")\nasync def list_items():\n    pass"
+      expected: TrueNegative
+
+- id: "py-fastapi-sql-in-path-param"
+  name: "FastAPI Path Parameter Used in SQL Query"
+  description: "Using FastAPI path parameters directly in SQL queries allows SQL injection. Use parameterized queries or ORM methods."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute attribute: (identifier) @method (#eq? @method \"execute\")) arguments: (argument_list (string (interpolation) @interp) .)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://fastapi.tiangolo.com/tutorial/sql-databases/"
+  test_cases:
+    - code: "db.execute(f\"SELECT * FROM users WHERE id = {user_id}\")"
+      expected: TruePositive
+    - code: "db.execute(f\"DELETE FROM items WHERE id = {item_id}\")"
+      expected: TruePositive
+    - code: "session.execute(f\"UPDATE users SET name = '{name}'\")"
+      expected: TruePositive
+    - code: "db.execute(text(\"SELECT * FROM users WHERE id = :id\"), {\"id\": user_id})"
+      expected: TrueNegative
+    - code: "db.query(User).filter(User.id == user_id).first()"
+      expected: TrueNegative
+    - code: "db.execute(text(\"SELECT 1\"))"
+      expected: TrueNegative
+
+- id: "py-uvicorn-reload-production"
+  name: "Uvicorn with reload=True"
+  description: "Running Uvicorn with reload=True in production is a security risk and performance issue. Disable reload in production."
+  severity: Medium
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"uvicorn\") attribute: (identifier) @fn (#eq? @fn \"run\")) arguments: (argument_list (keyword_argument name: (identifier) @kw (#eq? @kw \"reload\") value: (true) @val))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-215"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://www.uvicorn.org/settings/"
+  test_cases:
+    - code: "uvicorn.run(app, reload=True)"
+      expected: TruePositive
+    - code: "uvicorn.run(\"main:app\", reload=True, host=\"0.0.0.0\")"
+      expected: TruePositive
+    - code: "uvicorn.run(app, host=\"0.0.0.0\", port=8000, reload=True)"
+      expected: TruePositive
+    - code: "uvicorn.run(app, reload=False)"
+      expected: TrueNegative
+    - code: "uvicorn.run(app)"
+      expected: TrueNegative
+    - code: "uvicorn.run(app, host=\"0.0.0.0\", port=8000)"
+      expected: TrueNegative
+
+- id: "py-fastapi-allow-all-methods"
+  name: "FastAPI CORS Allow All Methods"
+  description: "Setting allow_methods=['*'] in CORSMiddleware permits all HTTP methods. Specify only the methods your API needs."
+  severity: Medium
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"CORSMiddleware\") arguments: (argument_list (keyword_argument name: (identifier) @kw (#eq? @kw \"allow_methods\") value: (list (string) @val (#eq? @val \"'*'\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-942"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://fastapi.tiangolo.com/tutorial/cors/"
+  test_cases:
+    - code: "CORSMiddleware(app, allow_methods=['*'])"
+      expected: TruePositive
+    - code: "CORSMiddleware(app, allow_origins=['*'], allow_methods=['*'])"
+      expected: TruePositive
+    - code: "CORSMiddleware(app, allow_methods=['*'], allow_headers=['*'])"
+      expected: TruePositive
+    - code: "CORSMiddleware(app, allow_methods=['GET', 'POST'])"
+      expected: TrueNegative
+    - code: "CORSMiddleware(app, allow_methods=ALLOWED_METHODS)"
+      expected: TrueNegative
+    - code: "CORSMiddleware(app, allow_origins=['https://example.com'])"
+      expected: TrueNegative

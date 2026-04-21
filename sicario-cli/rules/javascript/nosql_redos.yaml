@@ -1,0 +1,430 @@
+# NoSQL Injection and ReDoS Security Rules for JavaScript/TypeScript
+# Covers: MongoDB $where injection, $regex with user input, Mongoose unvalidated operators,
+# MongoDB aggregate injection, Redis EVAL/command injection, MongoDB updateOne injection,
+# ReDoS via new RegExp with user input, nested quantifiers, overlapping alternation,
+# String.match/replace/search with user-controlled regex, exponential backtracking
+#
+# CWE-943: Improper Neutralization of Special Elements in Data Query Logic (NoSQL Injection)
+# CWE-1333: Inefficient Regular Expression Complexity (ReDoS)
+# CWE-77: Command Injection (Redis)
+# OWASP A03:2021 - Injection
+
+- id: "js-nosql-mongodb-where-injection"
+  name: "MongoDB $where with User Input"
+  description: "Using $where with user-controlled input allows NoSQL injection via JavaScript execution. Use standard query operators instead of $where, or validate input strictly."
+  severity: Critical
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression property: (property_identifier) @method (#eq? @method \"find\")) arguments: (arguments (object (pair key: (property_identifier) @key (#eq? @key \"$where\") value: (template_string) @val)))) @nosql"
+    captures:
+      - "nosql"
+  cwe_id: "CWE-943"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection"
+  test_cases:
+    - code: "db.users.find({ $where: `this.name == '${userInput}'` });"
+      expected: TruePositive
+    - code: "collection.find({ $where: `this.role == '${req.body.role}'` });"
+      expected: TruePositive
+    - code: "db.accounts.find({ $where: `this.email == '${email}'` });"
+      expected: TruePositive
+    - code: "db.users.find({ name: sanitizedInput });"
+      expected: TrueNegative
+    - code: "db.users.find({ role: { $eq: 'admin' } });"
+      expected: TrueNegative
+    - code: "collection.find({ status: 'active' });"
+      expected: TrueNegative
+
+- id: "js-nosql-mongodb-where-string"
+  name: "MongoDB $where with String Concatenation"
+  description: "Concatenating user input into $where strings allows arbitrary JavaScript execution in MongoDB. Use parameterized queries with standard operators."
+  severity: Critical
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression property: (property_identifier) @method (#eq? @method \"find\")) arguments: (arguments (object (pair key: (property_identifier) @key (#eq? @key \"$where\") value: (binary_expression operator: \"+\"))))) @nosql"
+    captures:
+      - "nosql"
+  cwe_id: "CWE-943"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection"
+  test_cases:
+    - code: "db.users.find({ $where: 'this.name == \"' + userInput + '\"' });"
+      expected: TruePositive
+    - code: "collection.find({ $where: 'this.age > ' + req.query.age });"
+      expected: TruePositive
+    - code: "db.items.find({ $where: 'this.price < ' + price + ' && this.active' });"
+      expected: TruePositive
+    - code: "db.users.find({ name: userInput });"
+      expected: TrueNegative
+    - code: "db.users.find({ age: { $gt: parseInt(age) } });"
+      expected: TrueNegative
+    - code: "collection.find({ $where: 'this.status === \"active\"' });"
+      expected: TrueNegative
+
+- id: "js-nosql-mongodb-regex-user-input"
+  name: "MongoDB $regex with User Input (ReDoS + Injection)"
+  description: "Using user input directly in MongoDB $regex allows both ReDoS attacks and regex injection. Escape special regex characters or use exact match operators."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression property: (property_identifier) @method (#match? @method \"^(find|findOne|findMany)$\")) arguments: (arguments (object (pair key: (_) @field value: (object (pair key: (property_identifier) @op (#eq? @op \"$regex\") value: (identifier) @input)))))) @nosql_regex"
+    captures:
+      - "nosql_regex"
+  cwe_id: "CWE-943"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection"
+  test_cases:
+    - code: "db.users.find({ name: { $regex: userInput } });"
+      expected: TruePositive
+    - code: "collection.findOne({ email: { $regex: searchTerm } });"
+      expected: TruePositive
+    - code: "db.products.find({ title: { $regex: query } });"
+      expected: TruePositive
+    - code: "db.users.find({ name: { $regex: escapeRegex(userInput) } });"
+      expected: TrueNegative
+    - code: "db.users.find({ name: { $regex: '^admin$' } });"
+      expected: TrueNegative
+    - code: "db.users.find({ name: userInput });"
+      expected: TrueNegative
+
+- id: "js-nosql-mongoose-operator-injection"
+  name: "Mongoose Query with User-Controlled Operators"
+  description: "Passing user input directly as query objects to Mongoose allows operator injection ($gt, $ne, $in). Sanitize input by stripping $ prefixed keys or use explicit field matching."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @model property: (property_identifier) @method (#match? @method \"^(find|findOne|findById|where|countDocuments|deleteMany|updateMany)$\")) arguments: (arguments (member_expression object: (member_expression object: (identifier) @req (#eq? @req \"req\") property: (property_identifier) @prop (#match? @prop \"^(body|query|params)$\"))))) @nosql_op"
+    captures:
+      - "nosql_op"
+  cwe_id: "CWE-943"
+  owasp_category: A03_Injection
+  help_uri: "https://blog.websecurify.com/2014/08/hacking-nodejs-and-mongodb"
+  test_cases:
+    - code: "User.find(req.body.filter);"
+      expected: TruePositive
+    - code: "Product.findOne(req.query.search);"
+      expected: TruePositive
+    - code: "Order.where(req.body.conditions);"
+      expected: TruePositive
+    - code: "User.find({ email: req.body.email });"
+      expected: TrueNegative
+    - code: "User.find({ _id: sanitize(req.params.id) });"
+      expected: TrueNegative
+    - code: "Product.find({ active: true });"
+      expected: TrueNegative
+
+- id: "js-nosql-mongoose-findone-unvalidated"
+  name: "Mongoose findOne with Unvalidated Query Object"
+  description: "Passing unvalidated request data directly to Mongoose findOne allows NoSQL injection. Validate input schema and strip MongoDB operators before querying."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @model property: (property_identifier) @method (#eq? @method \"findOne\")) arguments: (arguments (member_expression object: (identifier) @req (#eq? @req \"req\") property: (property_identifier) @prop (#match? @prop \"^(body|query)$\")))) @nosql_findone"
+    captures:
+      - "nosql_findone"
+  cwe_id: "CWE-943"
+  owasp_category: A03_Injection
+  help_uri: "https://blog.websecurify.com/2014/08/hacking-nodejs-and-mongodb"
+  test_cases:
+    - code: "const user = await User.findOne(req.body);"
+      expected: TruePositive
+    - code: "const doc = await Document.findOne(req.query);"
+      expected: TruePositive
+    - code: "const account = await Account.findOne(req.body);"
+      expected: TruePositive
+    - code: "const user = await User.findOne({ email: req.body.email });"
+      expected: TrueNegative
+    - code: "const user = await User.findOne({ _id: mongoose.Types.ObjectId(id) });"
+      expected: TrueNegative
+    - code: "const user = await User.findOne({ active: true });"
+      expected: TrueNegative
+
+- id: "js-nosql-mongodb-aggregate-injection"
+  name: "MongoDB Aggregate with User-Controlled $match"
+  description: "Passing user input directly to MongoDB aggregate $match stage allows operator injection. Validate and sanitize all fields before using in aggregation pipelines."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression property: (property_identifier) @method (#eq? @method \"aggregate\")) arguments: (arguments (array (object (pair key: (property_identifier) @stage (#eq? @stage \"$match\") value: (member_expression object: (identifier) @req (#eq? @req \"req\"))))))) @nosql_agg"
+    captures:
+      - "nosql_agg"
+  cwe_id: "CWE-943"
+  owasp_category: A03_Injection
+  help_uri: "https://www.mongodb.com/docs/manual/reference/operator/aggregation/match/"
+  test_cases:
+    - code: "collection.aggregate([{ $match: req.body }]);"
+      expected: TruePositive
+    - code: "db.orders.aggregate([{ $match: req.query }]);"
+      expected: TruePositive
+    - code: "Model.aggregate([{ $match: req.body }]);"
+      expected: TruePositive
+    - code: "collection.aggregate([{ $match: { status: 'active' } }]);"
+      expected: TrueNegative
+    - code: "collection.aggregate([{ $match: { userId: validatedId } }]);"
+      expected: TrueNegative
+    - code: "db.orders.aggregate([{ $group: { _id: '$status' } }]);"
+      expected: TrueNegative
+
+- id: "js-nosql-redis-eval-injection"
+  name: "Redis EVAL with User Input (Lua Injection)"
+  description: "Passing user input to Redis EVAL command allows Lua script injection. Use parameterized EVALSHA with pre-loaded scripts, or validate input strictly."
+  severity: Critical
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @client property: (property_identifier) @method (#eq? @method \"eval\")) arguments: (arguments (template_string (template_substitution (identifier) @input)))) @redis_eval"
+    captures:
+      - "redis_eval"
+  cwe_id: "CWE-77"
+  owasp_category: A03_Injection
+  help_uri: "https://redis.io/docs/latest/commands/eval/"
+  test_cases:
+    - code: "redis.eval(`return redis.call('get', '${userKey}')`);"
+      expected: TruePositive
+    - code: "client.eval(`return redis.call('del', '${input}')`);"
+      expected: TruePositive
+    - code: "redis.eval(`return redis.call('set', '${key}', '${value}')`);"
+      expected: TruePositive
+    - code: "redis.evalsha(scriptHash, 1, key);"
+      expected: TrueNegative
+    - code: "redis.eval(\"return redis.call('get', KEYS[1])\", 1, 'safe-key');"
+      expected: TrueNegative
+    - code: "redis.get(sanitizedKey);"
+      expected: TrueNegative
+
+- id: "js-nosql-redis-command-concat"
+  name: "Redis Command Injection via String Concatenation"
+  description: "Concatenating user input into Redis commands allows command injection. Use parameterized Redis client methods instead of raw command strings."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @client (#match? @client \"^(redis|client|redisClient)$\") property: (property_identifier) @method (#eq? @method \"sendCommand\")) arguments: (arguments (template_string (template_substitution (identifier) @input)))) @redis_inject"
+    captures:
+      - "redis_inject"
+  cwe_id: "CWE-77"
+  owasp_category: A03_Injection
+  help_uri: "https://redis.io/docs/latest/develop/connect/clients/nodejs/"
+  test_cases:
+    - code: "redis.sendCommand(`SET ${userKey} ${userValue}`);"
+      expected: TruePositive
+    - code: "client.sendCommand(`GET ${inputKey}`);"
+      expected: TruePositive
+    - code: "redisClient.sendCommand(`DEL ${keyFromUser}`);"
+      expected: TruePositive
+    - code: "redis.set(key, value);"
+      expected: TrueNegative
+    - code: "client.sendCommand(['SET', sanitizedKey, value]);"
+      expected: TrueNegative
+    - code: "redis.get('static-key');"
+      expected: TrueNegative
+
+- id: "js-nosql-mongodb-update-injection"
+  name: "MongoDB updateOne with User-Controlled $set"
+  description: "Passing user input directly to MongoDB $set in updateOne allows field injection. Validate and whitelist fields before update operations."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression property: (property_identifier) @method (#eq? @method \"updateOne\")) arguments: (arguments (_) (object (pair key: (property_identifier) @op (#eq? @op \"$set\") value: (member_expression object: (identifier) @req (#eq? @req \"req\") property: (property_identifier) @prop (#match? @prop \"^(body|query)$\")))))) @nosql_update"
+    captures:
+      - "nosql_update"
+  cwe_id: "CWE-943"
+  owasp_category: A03_Injection
+  help_uri: "https://www.mongodb.com/docs/manual/reference/operator/update/set/"
+  test_cases:
+    - code: "collection.updateOne({ _id: id }, { $set: req.body });"
+      expected: TruePositive
+    - code: "User.updateOne({ _id: userId }, { $set: req.body });"
+      expected: TruePositive
+    - code: "db.profiles.updateOne({ uid: uid }, { $set: req.body });"
+      expected: TruePositive
+    - code: "collection.updateOne({ _id: id }, { $set: { name: req.body.name } });"
+      expected: TrueNegative
+    - code: "User.updateOne({ _id: id }, { $set: validatedFields });"
+      expected: TrueNegative
+    - code: "collection.updateOne({ _id: id }, { $set: { status: 'active' } });"
+      expected: TrueNegative
+
+- id: "js-redos-new-regexp-user-input"
+  name: "new RegExp() with User Input (ReDoS)"
+  description: "Creating RegExp from user input without sanitization allows ReDoS attacks via catastrophic backtracking patterns. Escape special regex characters or use a safe regex library."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(new_expression constructor: (identifier) @ctor (#eq? @ctor \"RegExp\") arguments: (arguments (identifier) @input)) @redos"
+    captures:
+      - "redos"
+  cwe_id: "CWE-1333"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/www-community/attacks/Regular_expression_Denial_of_Service_-_ReDoS"
+  test_cases:
+    - code: "const regex = new RegExp(userInput);"
+      expected: TruePositive
+    - code: "const pattern = new RegExp(searchQuery);"
+      expected: TruePositive
+    - code: "const re = new RegExp(filterPattern);"
+      expected: TruePositive
+    - code: "const regex = new RegExp(escapeRegex(userInput));"
+      expected: TrueNegative
+    - code: "const regex = new RegExp('^[a-z]+$');"
+      expected: TrueNegative
+    - code: "const regex = /^[a-z]+$/;"
+      expected: TrueNegative
+
+- id: "js-redos-new-regexp-request"
+  name: "new RegExp() with Request Data"
+  description: "Creating RegExp directly from request parameters allows ReDoS attacks. Sanitize and escape regex special characters before constructing patterns."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(new_expression constructor: (identifier) @ctor (#eq? @ctor \"RegExp\") arguments: (arguments (member_expression object: (member_expression object: (identifier) @req (#eq? @req \"req\") property: (property_identifier) @prop (#match? @prop \"^(query|body|params)$\"))))) @redos"
+    captures:
+      - "redos"
+  cwe_id: "CWE-1333"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/www-community/attacks/Regular_expression_Denial_of_Service_-_ReDoS"
+  test_cases:
+    - code: "const regex = new RegExp(req.query.pattern);"
+      expected: TruePositive
+    - code: "const re = new RegExp(req.body.search);"
+      expected: TruePositive
+    - code: "const pattern = new RegExp(req.params.filter);"
+      expected: TruePositive
+    - code: "const regex = new RegExp(escapeRegex(req.query.pattern));"
+      expected: TrueNegative
+    - code: "const regex = new RegExp('^' + escapeRegex(req.query.term) + '$');"
+      expected: TrueNegative
+    - code: "const regex = /^[a-z]+$/;"
+      expected: TrueNegative
+
+- id: "js-redos-nested-quantifiers"
+  name: "Regex with Nested Quantifiers (Catastrophic Backtracking)"
+  description: "Regular expressions with nested quantifiers like (a+)+ or (a*)*b cause exponential backtracking. Refactor to use atomic groups or possessive quantifiers."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(regex pattern: (regex_pattern) @pat (#match? @pat \"\\\\([^)]*[+*][^)]*\\\\)[+*]\")) @redos"
+    captures:
+      - "redos"
+  cwe_id: "CWE-1333"
+  owasp_category: A03_Injection
+  help_uri: "https://www.regular-expressions.info/catastrophic.html"
+  test_cases:
+    - code: "const re = /(a+)+$/;"
+      expected: TruePositive
+    - code: "const re = /(\\w+)+/;"
+      expected: TruePositive
+    - code: "const re = /(.*)+b/;"
+      expected: TruePositive
+    - code: "const re = /^[a-z]+$/;"
+      expected: TrueNegative
+    - code: "const re = /\\d{1,10}/;"
+      expected: TrueNegative
+    - code: "const re = /^\\w+@\\w+\\.\\w+$/;"
+      expected: TrueNegative
+
+- id: "js-redos-overlapping-alternation"
+  name: "Regex with Overlapping Alternation"
+  description: "Regular expressions with overlapping alternation patterns like (a|a)+ or (.+|.+) cause exponential backtracking. Use non-overlapping alternatives."
+  severity: Medium
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(regex pattern: (regex_pattern) @pat (#match? @pat \"\\\\(\\\\.\\\\+\\\\|\\\\.\\\\+\\\\)\")) @redos"
+    captures:
+      - "redos"
+  cwe_id: "CWE-1333"
+  owasp_category: A03_Injection
+  help_uri: "https://www.regular-expressions.info/catastrophic.html"
+  test_cases:
+    - code: "const re = /(.+|.+)+/;"
+      expected: TruePositive
+    - code: "const re = /(.+|.+)$/;"
+      expected: TruePositive
+    - code: "const re = /(.+|.+){2,}/;"
+      expected: TruePositive
+    - code: "const re = /(cat|dog)+/;"
+      expected: TrueNegative
+    - code: "const re = /^(a|b|c)+$/;"
+      expected: TrueNegative
+    - code: "const re = /\\d+/;"
+      expected: TrueNegative
+
+- id: "js-redos-string-match-user-regex"
+  name: "String.match/replace/search with User-Controlled Regex"
+  description: "Using user-controlled strings in String.match(), replace(), or search() creates regex from user input, enabling ReDoS. Escape input or use indexOf/includes instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression property: (property_identifier) @method (#match? @method \"^(match|replace|search)$\")) arguments: (arguments (identifier) @input)) @redos"
+    captures:
+      - "redos"
+  cwe_id: "CWE-1333"
+  owasp_category: A03_Injection
+  help_uri: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/match"
+  test_cases:
+    - code: "const result = text.match(userPattern);"
+      expected: TruePositive
+    - code: "const cleaned = input.replace(filterRegex, '');"
+      expected: TruePositive
+    - code: "const idx = content.search(searchPattern);"
+      expected: TruePositive
+    - code: "const result = text.match(/^[a-z]+$/);"
+      expected: TrueNegative
+    - code: "const found = text.includes(searchTerm);"
+      expected: TrueNegative
+    - code: "const idx = text.indexOf(query);"
+      expected: TrueNegative
+
+- id: "js-redos-exponential-backtracking"
+  name: "Regex with Exponential Backtracking Pattern"
+  description: "Patterns like (a+)+ or ([a-zA-Z]+)* cause exponential time complexity on non-matching inputs. Use atomic grouping or rewrite to avoid nested repetition."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(regex pattern: (regex_pattern) @pat (#match? @pat \"\\\\([^)]*\\\\+\\\\)\\\\+\")) @redos"
+    captures:
+      - "redos"
+  cwe_id: "CWE-1333"
+  owasp_category: A03_Injection
+  help_uri: "https://www.regular-expressions.info/catastrophic.html"
+  test_cases:
+    - code: "const emailRegex = /([a-zA-Z]+)+@/;"
+      expected: TruePositive
+    - code: "const pathRegex = /(\\/[a-z]+)+$/;"
+      expected: TruePositive
+    - code: "const tagRegex = /(<[^>]+>)+/;"
+      expected: TruePositive
+    - code: "const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$/;"
+      expected: TrueNegative
+    - code: "const pathRegex = /^\\/[a-z]+(\\/[a-z]+)*$/;"
+      expected: TrueNegative
+    - code: "const numRegex = /^\\d+$/;"
+      expected: TrueNegative

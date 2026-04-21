@@ -1,0 +1,391 @@
+# Path Traversal Rules for Java
+# Covers: new File(), Paths.get(), FileInputStream, Spring Resource loading,
+# Files.readAllBytes, Files.write, FileOutputStream, RandomAccessFile,
+# ClassLoader.getResource, ServletContext.getResource
+#
+# CWE-22: Improper Limitation of a Pathname to a Restricted Directory
+# OWASP A01:2021 - Broken Access Control
+
+# ============================================================================
+# File Constructor Path Traversal (2 rules)
+# ============================================================================
+
+- id: "java-path-file-concat"
+  name: "new File() with String Concatenation"
+  description: "Concatenating user input into File constructor paths allows path traversal. Validate and canonicalize paths against a base directory."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(object_creation_expression type: (type_identifier) @type (#eq? @type \"File\") arguments: (argument_list (binary_expression))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
+  test_cases:
+    - code: "new File(\"/uploads/\" + userFilename);"
+      expected: TruePositive
+    - code: "new File(baseDir + \"/\" + request.getParameter(\"file\"));"
+      expected: TruePositive
+    - code: "new File(\"/data/\" + tenantId + \"/\" + fileName);"
+      expected: TruePositive
+    - code: "new File(\"/etc/config.properties\");"
+      expected: TrueNegative
+    - code: "new File(\"src/main/resources/app.yaml\");"
+      expected: TrueNegative
+    - code: "new File(canonicalPath);"
+      expected: TrueNegative
+
+- id: "java-path-file-variable"
+  name: "new File() with Variable Path"
+  description: "Passing a variable directly to the File constructor may allow path traversal if the variable is user-controlled. Validate and canonicalize paths."
+  severity: Medium
+  languages:
+    - Java
+  pattern:
+    query: "(object_creation_expression type: (type_identifier) @type (#eq? @type \"File\") arguments: (argument_list . (identifier) @arg)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
+  test_cases:
+    - code: "new File(userPath);"
+      expected: TruePositive
+    - code: "new File(filename);"
+      expected: TruePositive
+    - code: "new File(requestedFile);"
+      expected: TruePositive
+    - code: "new File(\"/etc/config.properties\");"
+      expected: TrueNegative
+    - code: "new File(\"resources\", \"app.yaml\");"
+      expected: TrueNegative
+    - code: "file.delete();"
+      expected: TrueNegative
+
+
+# ============================================================================
+# Paths.get Path Traversal (2 rules)
+# ============================================================================
+
+- id: "java-path-paths-get-concat"
+  name: "Paths.get() with String Concatenation"
+  description: "Concatenating user input into Paths.get() allows path traversal. Resolve paths against a safe base directory and use Path.normalize()."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#eq? @obj \"Paths\") name: (identifier) @method (#eq? @method \"get\") arguments: (argument_list (binary_expression))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
+  test_cases:
+    - code: "Paths.get(\"/uploads/\" + userFilename);"
+      expected: TruePositive
+    - code: "Paths.get(baseDir + \"/\" + request.getParameter(\"path\"));"
+      expected: TruePositive
+    - code: "Paths.get(\"/data/\" + tenantId + \"/\" + fileName);"
+      expected: TruePositive
+    - code: "Paths.get(\"/etc/config.properties\");"
+      expected: TrueNegative
+    - code: "Paths.get(\"src\", \"main\", \"resources\");"
+      expected: TrueNegative
+    - code: "Paths.get(System.getProperty(\"user.home\"));"
+      expected: TrueNegative
+
+- id: "java-path-paths-get-variable"
+  name: "Paths.get() with Variable Path"
+  description: "Passing a variable directly to Paths.get() may allow path traversal if the variable is user-controlled. Validate and canonicalize paths."
+  severity: Medium
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#eq? @obj \"Paths\") name: (identifier) @method (#eq? @method \"get\") arguments: (argument_list . (identifier) @arg)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
+  test_cases:
+    - code: "Paths.get(userPath);"
+      expected: TruePositive
+    - code: "Paths.get(filename);"
+      expected: TruePositive
+    - code: "Paths.get(requestedFile);"
+      expected: TruePositive
+    - code: "Paths.get(\"/etc/config.properties\");"
+      expected: TrueNegative
+    - code: "Paths.get(\"src\", \"main\");"
+      expected: TrueNegative
+    - code: "path.toAbsolutePath();"
+      expected: TrueNegative
+
+# ============================================================================
+# FileInputStream Path Traversal (1 rule)
+# ============================================================================
+
+- id: "java-path-fileinputstream-concat"
+  name: "FileInputStream with String Concatenation"
+  description: "Concatenating user input into FileInputStream paths allows path traversal and arbitrary file read. Validate and canonicalize paths."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(object_creation_expression type: (type_identifier) @type (#eq? @type \"FileInputStream\") arguments: (argument_list (binary_expression))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
+  test_cases:
+    - code: "new FileInputStream(\"/data/\" + userFile);"
+      expected: TruePositive
+    - code: "new FileInputStream(uploadDir + \"/\" + filename);"
+      expected: TruePositive
+    - code: "new FileInputStream(basePath + request.getParameter(\"doc\"));"
+      expected: TruePositive
+    - code: "new FileInputStream(\"/etc/app.conf\");"
+      expected: TrueNegative
+    - code: "new FileInputStream(validatedFile);"
+      expected: TrueNegative
+    - code: "new BufferedReader(reader);"
+      expected: TrueNegative
+
+# ============================================================================
+# Files.readAllBytes / Files.write Path Traversal (2 rules)
+# ============================================================================
+
+- id: "java-path-files-read-concat"
+  name: "Files.readAllBytes with Concatenated Path"
+  description: "Using string concatenation to build paths for Files.readAllBytes allows path traversal. Validate and canonicalize paths."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#eq? @obj \"Files\") name: (identifier) @method (#match? @method \"^(readAllBytes|readAllLines|readString|read)$\") arguments: (argument_list (method_invocation object: (identifier) @p (#eq? @p \"Paths\") name: (identifier) @g (#eq? @g \"get\") arguments: (argument_list (binary_expression))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
+  test_cases:
+    - code: "Files.readAllBytes(Paths.get(\"/uploads/\" + filename));"
+      expected: TruePositive
+    - code: "Files.readAllLines(Paths.get(baseDir + \"/\" + userFile));"
+      expected: TruePositive
+    - code: "Files.readString(Paths.get(\"/data/\" + request.getParameter(\"file\")));"
+      expected: TruePositive
+    - code: "Files.readAllBytes(Paths.get(\"/etc/config.properties\"));"
+      expected: TrueNegative
+    - code: "Files.readAllBytes(validatedPath);"
+      expected: TrueNegative
+    - code: "Files.exists(path);"
+      expected: TrueNegative
+
+- id: "java-path-files-write-concat"
+  name: "Files.write with Concatenated Path"
+  description: "Using string concatenation to build paths for Files.write allows path traversal and arbitrary file write. Validate and canonicalize paths."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#eq? @obj \"Files\") name: (identifier) @method (#match? @method \"^(write|writeString|copy|move)$\") arguments: (argument_list (method_invocation object: (identifier) @p (#eq? @p \"Paths\") name: (identifier) @g (#eq? @g \"get\") arguments: (argument_list (binary_expression))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
+  test_cases:
+    - code: "Files.write(Paths.get(\"/uploads/\" + filename), data);"
+      expected: TruePositive
+    - code: "Files.copy(inputStream, Paths.get(baseDir + \"/\" + userFile));"
+      expected: TruePositive
+    - code: "Files.writeString(Paths.get(\"/data/\" + name), content);"
+      expected: TruePositive
+    - code: "Files.write(Paths.get(\"/etc/output.txt\"), data);"
+      expected: TrueNegative
+    - code: "Files.write(validatedPath, content);"
+      expected: TrueNegative
+    - code: "Files.delete(path);"
+      expected: TrueNegative
+
+# ============================================================================
+# FileOutputStream / RandomAccessFile Path Traversal (2 rules)
+# ============================================================================
+
+- id: "java-path-fileoutputstream-concat"
+  name: "FileOutputStream with String Concatenation"
+  description: "Concatenating user input into FileOutputStream paths allows path traversal and arbitrary file write. Validate and canonicalize paths."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(object_creation_expression type: (type_identifier) @type (#eq? @type \"FileOutputStream\") arguments: (argument_list (binary_expression))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
+  test_cases:
+    - code: "new FileOutputStream(\"/uploads/\" + userFilename);"
+      expected: TruePositive
+    - code: "new FileOutputStream(outputDir + \"/\" + filename);"
+      expected: TruePositive
+    - code: "new FileOutputStream(basePath + request.getParameter(\"file\"));"
+      expected: TruePositive
+    - code: "new FileOutputStream(\"/var/log/app.log\");"
+      expected: TrueNegative
+    - code: "new FileOutputStream(validatedFile);"
+      expected: TrueNegative
+    - code: "outputStream.close();"
+      expected: TrueNegative
+
+- id: "java-path-randomaccessfile-concat"
+  name: "RandomAccessFile with String Concatenation"
+  description: "Concatenating user input into RandomAccessFile paths allows path traversal. Validate and canonicalize paths."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(object_creation_expression type: (type_identifier) @type (#eq? @type \"RandomAccessFile\") arguments: (argument_list (binary_expression))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
+  test_cases:
+    - code: "new RandomAccessFile(\"/data/\" + userFile, \"r\");"
+      expected: TruePositive
+    - code: "new RandomAccessFile(baseDir + \"/\" + filename, \"rw\");"
+      expected: TruePositive
+    - code: "new RandomAccessFile(path + request.getParameter(\"file\"), \"r\");"
+      expected: TruePositive
+    - code: "new RandomAccessFile(\"/var/data/index.dat\", \"r\");"
+      expected: TrueNegative
+    - code: "new RandomAccessFile(validatedFile, \"rw\");"
+      expected: TrueNegative
+    - code: "raf.seek(0);"
+      expected: TrueNegative
+
+# ============================================================================
+# ClassLoader / ServletContext Resource Loading (2 rules)
+# ============================================================================
+
+- id: "java-path-classloader-resource-concat"
+  name: "ClassLoader.getResource with String Concatenation"
+  description: "Concatenating user input into ClassLoader.getResource paths allows path traversal to access arbitrary classpath resources. Validate input against an allowlist."
+  severity: Medium
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation name: (identifier) @method (#match? @method \"^(getResource|getResourceAsStream)$\") arguments: (argument_list (binary_expression))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
+  test_cases:
+    - code: "getClass().getResource(\"/templates/\" + userTemplate);"
+      expected: TruePositive
+    - code: "classLoader.getResourceAsStream(\"/config/\" + configName);"
+      expected: TruePositive
+    - code: "Thread.currentThread().getContextClassLoader().getResource(\"/data/\" + fileName);"
+      expected: TruePositive
+    - code: "getClass().getResource(\"/templates/default.html\");"
+      expected: TrueNegative
+    - code: "classLoader.getResourceAsStream(\"/config/app.properties\");"
+      expected: TrueNegative
+    - code: "getClass().getName();"
+      expected: TrueNegative
+
+- id: "java-path-servlet-resource-concat"
+  name: "ServletContext.getResource with String Concatenation"
+  description: "Concatenating user input into ServletContext.getResource paths allows path traversal to access arbitrary web resources. Validate input against an allowlist."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#match? @method \"^(getResource|getResourceAsStream|getRealPath)$\") arguments: (argument_list (binary_expression left: (string_literal)))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
+  test_cases:
+    - code: "servletContext.getResource(\"/WEB-INF/\" + userFile);"
+      expected: TruePositive
+    - code: "context.getResourceAsStream(\"/pages/\" + pageName);"
+      expected: TruePositive
+    - code: "servletContext.getRealPath(\"/uploads/\" + filename);"
+      expected: TruePositive
+    - code: "servletContext.getResource(\"/WEB-INF/web.xml\");"
+      expected: TrueNegative
+    - code: "context.getResourceAsStream(\"/config/app.properties\");"
+      expected: TrueNegative
+    - code: "servletContext.getContextPath();"
+      expected: TrueNegative
+
+# ============================================================================
+# Spring Resource Loading (1 rule)
+# ============================================================================
+
+- id: "java-path-spring-resource-concat"
+  name: "Spring Resource Loading with String Concatenation"
+  description: "Concatenating user input into Spring resource paths (classpath:, file:) allows path traversal. Validate and sanitize resource paths."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation name: (identifier) @method (#eq? @method \"getResource\") arguments: (argument_list (binary_expression left: (string_literal) @prefix (#match? @prefix \"^\\\"(classpath:|file:|http:)\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/core/io/ResourceLoader.html"
+  test_cases:
+    - code: "resourceLoader.getResource(\"classpath:\" + userPath);"
+      expected: TruePositive
+    - code: "ctx.getResource(\"file:\" + request.getParameter(\"path\"));"
+      expected: TruePositive
+    - code: "resourceLoader.getResource(\"classpath:/templates/\" + templateName);"
+      expected: TruePositive
+    - code: "resourceLoader.getResource(\"classpath:application.properties\");"
+      expected: TrueNegative
+    - code: "ctx.getResource(\"file:/etc/config.yaml\");"
+      expected: TrueNegative
+    - code: "resourceLoader.getResource(validatedPath);"
+      expected: TrueNegative
+
+# ============================================================================
+# Path.resolve with User Input (1 rule)
+# ============================================================================
+
+- id: "java-path-resolve-variable"
+  name: "Path.resolve with Variable Input"
+  description: "Resolving paths with user-controlled input may allow path traversal. Validate that the resolved path stays within the expected base directory."
+  severity: Medium
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"resolve\") arguments: (argument_list . (identifier) @arg)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
+  test_cases:
+    - code: "basePath.resolve(userInput);"
+      expected: TruePositive
+    - code: "uploadDir.resolve(filename);"
+      expected: TruePositive
+    - code: "dataDir.resolve(requestedFile);"
+      expected: TruePositive
+    - code: "basePath.resolve(\"config.yaml\");"
+      expected: TrueNegative
+    - code: "path.toAbsolutePath();"
+      expected: TrueNegative
+    - code: "path.getParent();"
+      expected: TrueNegative

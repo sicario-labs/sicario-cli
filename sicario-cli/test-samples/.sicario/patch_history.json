@@ -1,0 +1,14 @@
+[
+  {
+    "patch_id": "7da4f051-1334-46b7-a3f8-268e87771ffb",
+    "applied_at": "2026-04-19T21:57:56.866771400+00:00",
+    "file_path": "C:\\Sicario-OS\\sicario-cli\\test-samples\\vulnerable.py",
+    "backup_path": "C:\\Sicario-OS\\sicario-cli\\test-samples\\.sicario\\backups\\20260419_215756_858344300\\vulnerable.py"
+  },
+  {
+    "patch_id": "db7a459e-13c1-4b0e-9630-9aded5949cc5",
+    "applied_at": "2026-04-19T21:57:56.867022800+00:00",
+    "file_path": "C:\\Sicario-OS\\sicario-cli\\test-samples\\vulnerable.py",
+    "backup_path": "C:\\Sicario-OS\\sicario-cli\\test-samples\\.sicario\\backups\\20260419_215756_858466400\\vulnerable.py"
+  }
+]

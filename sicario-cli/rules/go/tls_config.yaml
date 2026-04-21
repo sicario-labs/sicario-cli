@@ -1,0 +1,284 @@
+# TLS Configuration Rules for Go (beyond InsecureSkipVerify in go.yaml)
+# Covers: weak TLS versions, MinVersion not set, weak cipher suites,
+# empty RootCAs, custom VerifyPeerCertificate always nil, MaxVersion below 1.2,
+# CipherSuites with RC4/DES/3DES, PreferServerCipherSuites deprecated,
+# GetCertificate returning nil, disabled session tickets
+#
+# CWE-295: Improper Certificate Validation
+# CWE-326: Inadequate Encryption Strength
+# CWE-327: Use of Broken Crypto Algorithm
+# OWASP A02:2021 - Cryptographic Failures
+
+# ============================================================================
+# TLS CONFIGURATION RULES (10 rules)
+# ============================================================================
+
+- id: "go-tls-weak-version-10"
+  name: "Weak TLS Version 1.0"
+  description: "TLS 1.0 has known vulnerabilities (BEAST, POODLE). Set MinVersion to tls.VersionTLS12 or higher."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(keyed_element (literal_element (identifier) @key (#eq? @key \"MinVersion\")) (literal_element (selector_expression operand: (identifier) @pkg (#eq? @pkg \"tls\") field: (field_identifier) @ver (#eq? @ver \"VersionTLS10\")))) @elem"
+    captures:
+      - "elem"
+  cwe_id: "CWE-326"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://pkg.go.dev/crypto/tls#Config"
+  test_cases:
+    - code: "config := &tls.Config{MinVersion: tls.VersionTLS10}"
+      expected: TruePositive
+    - code: "tlsConfig := tls.Config{MinVersion: tls.VersionTLS10}"
+      expected: TruePositive
+    - code: "cfg := &tls.Config{MinVersion: tls.VersionTLS10, InsecureSkipVerify: false}"
+      expected: TruePositive
+    - code: "config := &tls.Config{MinVersion: tls.VersionTLS12}"
+      expected: TrueNegative
+    - code: "config := &tls.Config{MinVersion: tls.VersionTLS13}"
+      expected: TrueNegative
+    - code: "config := &tls.Config{}"
+      expected: TrueNegative
+
+- id: "go-tls-weak-version-11"
+  name: "Weak TLS Version 1.1"
+  description: "TLS 1.1 is deprecated and has known weaknesses. Set MinVersion to tls.VersionTLS12 or higher."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(keyed_element (literal_element (identifier) @key (#eq? @key \"MinVersion\")) (literal_element (selector_expression operand: (identifier) @pkg (#eq? @pkg \"tls\") field: (field_identifier) @ver (#eq? @ver \"VersionTLS11\")))) @elem"
+    captures:
+      - "elem"
+  cwe_id: "CWE-326"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://pkg.go.dev/crypto/tls#Config"
+  test_cases:
+    - code: "config := &tls.Config{MinVersion: tls.VersionTLS11}"
+      expected: TruePositive
+    - code: "tlsConfig := tls.Config{MinVersion: tls.VersionTLS11}"
+      expected: TruePositive
+    - code: "cfg := &tls.Config{MinVersion: tls.VersionTLS11, ServerName: \"example.com\"}"
+      expected: TruePositive
+    - code: "config := &tls.Config{MinVersion: tls.VersionTLS12}"
+      expected: TrueNegative
+    - code: "config := &tls.Config{MinVersion: tls.VersionTLS13}"
+      expected: TrueNegative
+    - code: "config := &tls.Config{}"
+      expected: TrueNegative
+
+- id: "go-tls-max-version-below-12"
+  name: "TLS MaxVersion Set Below 1.2"
+  description: "Setting MaxVersion below TLS 1.2 forces the use of deprecated protocol versions. Remove MaxVersion or set it to tls.VersionTLS12 or higher."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(keyed_element (literal_element (identifier) @key (#eq? @key \"MaxVersion\")) (literal_element (selector_expression operand: (identifier) @pkg (#eq? @pkg \"tls\") field: (field_identifier) @ver (#match? @ver \"^(VersionTLS10|VersionTLS11|VersionSSL30)$\")))) @elem"
+    captures:
+      - "elem"
+  cwe_id: "CWE-326"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://pkg.go.dev/crypto/tls#Config"
+  test_cases:
+    - code: "config := &tls.Config{MaxVersion: tls.VersionTLS10}"
+      expected: TruePositive
+    - code: "config := &tls.Config{MaxVersion: tls.VersionTLS11}"
+      expected: TruePositive
+    - code: "config := &tls.Config{MaxVersion: tls.VersionSSL30}"
+      expected: TruePositive
+    - code: "config := &tls.Config{MaxVersion: tls.VersionTLS12}"
+      expected: TrueNegative
+    - code: "config := &tls.Config{MaxVersion: tls.VersionTLS13}"
+      expected: TrueNegative
+    - code: "config := &tls.Config{MinVersion: tls.VersionTLS12}"
+      expected: TrueNegative
+
+- id: "go-tls-cipher-suite-rc4"
+  name: "TLS Cipher Suite with RC4"
+  description: "RC4 cipher suites are broken and must not be used. Remove RC4 cipher suites from the CipherSuites list."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(selector_expression operand: (identifier) @pkg (#eq? @pkg \"tls\") field: (field_identifier) @suite (#match? @suite \"^TLS_.*RC4\")) @ref"
+    captures:
+      - "ref"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://pkg.go.dev/crypto/tls#pkg-constants"
+  test_cases:
+    - code: "config := &tls.Config{CipherSuites: []uint16{tls.TLS_RSA_WITH_RC4_128_SHA}}"
+      expected: TruePositive
+    - code: "suites := []uint16{tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA}"
+      expected: TruePositive
+    - code: "config.CipherSuites = []uint16{tls.TLS_ECDHE_ECDSA_WITH_RC4_128_SHA}"
+      expected: TruePositive
+    - code: "config := &tls.Config{CipherSuites: []uint16{tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384}}"
+      expected: TrueNegative
+    - code: "config := &tls.Config{CipherSuites: []uint16{tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305}}"
+      expected: TrueNegative
+    - code: "config := &tls.Config{MinVersion: tls.VersionTLS12}"
+      expected: TrueNegative
+
+- id: "go-tls-cipher-suite-3des"
+  name: "TLS Cipher Suite with 3DES"
+  description: "3DES cipher suites are vulnerable to Sweet32 birthday attacks. Remove 3DES cipher suites from the CipherSuites list."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(selector_expression operand: (identifier) @pkg (#eq? @pkg \"tls\") field: (field_identifier) @suite (#match? @suite \"^TLS_.*3DES\")) @ref"
+    captures:
+      - "ref"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://pkg.go.dev/crypto/tls#pkg-constants"
+  test_cases:
+    - code: "config := &tls.Config{CipherSuites: []uint16{tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA}}"
+      expected: TruePositive
+    - code: "suites := []uint16{tls.TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA}"
+      expected: TruePositive
+    - code: "config.CipherSuites = []uint16{tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA}"
+      expected: TruePositive
+    - code: "config := &tls.Config{CipherSuites: []uint16{tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256}}"
+      expected: TrueNegative
+    - code: "config := &tls.Config{CipherSuites: []uint16{tls.TLS_AES_256_GCM_SHA384}}"
+      expected: TrueNegative
+    - code: "config := &tls.Config{MinVersion: tls.VersionTLS13}"
+      expected: TrueNegative
+
+- id: "go-tls-empty-root-cas"
+  name: "TLS Config with Empty RootCAs"
+  description: "Setting RootCAs to an empty certificate pool disables server certificate validation. Use the system root CAs or load specific trusted certificates."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(keyed_element (literal_element (identifier) @key (#eq? @key \"RootCAs\")) (literal_element (call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"x509\") field: (field_identifier) @fn (#eq? @fn \"NewCertPool\"))))) @elem"
+    captures:
+      - "elem"
+  cwe_id: "CWE-295"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://pkg.go.dev/crypto/x509#NewCertPool"
+  test_cases:
+    - code: "config := &tls.Config{RootCAs: x509.NewCertPool()}"
+      expected: TruePositive
+    - code: "tlsConfig := tls.Config{RootCAs: x509.NewCertPool()}"
+      expected: TruePositive
+    - code: "cfg := &tls.Config{RootCAs: x509.NewCertPool(), MinVersion: tls.VersionTLS12}"
+      expected: TruePositive
+    - code: "config := &tls.Config{RootCAs: certPool}"
+      expected: TrueNegative
+    - code: "config := &tls.Config{MinVersion: tls.VersionTLS12}"
+      expected: TrueNegative
+    - code: "pool := x509.NewCertPool()\npool.AppendCertsFromPEM(caCert)"
+      expected: TrueNegative
+
+- id: "go-tls-verify-peer-always-nil"
+  name: "Custom VerifyPeerCertificate Always Returns Nil"
+  description: "A VerifyPeerCertificate function that always returns nil bypasses certificate validation. Implement proper certificate verification logic."
+  severity: Critical
+  languages:
+    - Go
+  pattern:
+    query: "(keyed_element (literal_element (identifier) @key (#eq? @key \"VerifyPeerCertificate\")) (literal_element (func_literal body: (block (return_statement (expression_list (nil))))))) @elem"
+    captures:
+      - "elem"
+  cwe_id: "CWE-295"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://pkg.go.dev/crypto/tls#Config"
+  test_cases:
+    - code: "config := &tls.Config{VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error { return nil }}"
+      expected: TruePositive
+    - code: "tlsConfig.VerifyPeerCertificate = func(rawCerts [][]byte, chains [][]*x509.Certificate) error {\n\treturn nil\n}"
+      expected: TruePositive
+    - code: "cfg := &tls.Config{VerifyPeerCertificate: func(certs [][]byte, chains [][]*x509.Certificate) error { return nil }}"
+      expected: TruePositive
+    - code: "config := &tls.Config{VerifyPeerCertificate: customVerifier}"
+      expected: TrueNegative
+    - code: "config := &tls.Config{MinVersion: tls.VersionTLS12}"
+      expected: TrueNegative
+    - code: "config := &tls.Config{InsecureSkipVerify: false}"
+      expected: TrueNegative
+
+- id: "go-tls-get-certificate-nil"
+  name: "GetCertificate Returning Nil"
+  description: "A GetCertificate function that returns nil causes TLS handshake failures. Implement proper certificate selection logic."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(keyed_element (literal_element (identifier) @key (#eq? @key \"GetCertificate\")) (literal_element (func_literal body: (block (return_statement (expression_list (nil) (nil))))))) @elem"
+    captures:
+      - "elem"
+  cwe_id: "CWE-295"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://pkg.go.dev/crypto/tls#Config"
+  test_cases:
+    - code: "config := &tls.Config{GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) { return nil, nil }}"
+      expected: TruePositive
+    - code: "tlsConfig.GetCertificate = func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {\n\treturn nil, nil\n}"
+      expected: TruePositive
+    - code: "cfg := &tls.Config{GetCertificate: func(hi *tls.ClientHelloInfo) (*tls.Certificate, error) { return nil, nil }}"
+      expected: TruePositive
+    - code: "config := &tls.Config{GetCertificate: certManager.GetCertificate}"
+      expected: TrueNegative
+    - code: "config := &tls.Config{Certificates: []tls.Certificate{cert}}"
+      expected: TrueNegative
+    - code: "config := &tls.Config{MinVersion: tls.VersionTLS12}"
+      expected: TrueNegative
+
+- id: "go-tls-prefer-server-cipher-suites"
+  name: "Deprecated PreferServerCipherSuites Usage"
+  description: "PreferServerCipherSuites is deprecated in Go 1.22+. The Go TLS stack now automatically prefers server cipher suites. Remove this field."
+  severity: Low
+  languages:
+    - Go
+  pattern:
+    query: "(keyed_element (literal_element (identifier) @key (#eq? @key \"PreferServerCipherSuites\")) (literal_element (true))) @elem"
+    captures:
+      - "elem"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://pkg.go.dev/crypto/tls#Config"
+  test_cases:
+    - code: "config := &tls.Config{PreferServerCipherSuites: true}"
+      expected: TruePositive
+    - code: "tlsConfig := tls.Config{PreferServerCipherSuites: true}"
+      expected: TruePositive
+    - code: "cfg := &tls.Config{PreferServerCipherSuites: true, MinVersion: tls.VersionTLS12}"
+      expected: TruePositive
+    - code: "config := &tls.Config{MinVersion: tls.VersionTLS12}"
+      expected: TrueNegative
+    - code: "config := &tls.Config{MinVersion: tls.VersionTLS13}"
+      expected: TrueNegative
+    - code: "config := &tls.Config{}"
+      expected: TrueNegative
+
+- id: "go-tls-disabled-session-tickets"
+  name: "TLS Session Tickets Disabled Without Reason"
+  description: "Disabling TLS session tickets reduces performance without a clear security benefit in most cases. Only disable if you have specific forward secrecy requirements."
+  severity: Low
+  languages:
+    - Go
+  pattern:
+    query: "(keyed_element (literal_element (identifier) @key (#eq? @key \"SessionTicketsDisabled\")) (literal_element (true))) @elem"
+    captures:
+      - "elem"
+  cwe_id: "CWE-326"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://pkg.go.dev/crypto/tls#Config"
+  test_cases:
+    - code: "config := &tls.Config{SessionTicketsDisabled: true}"
+      expected: TruePositive
+    - code: "tlsConfig := tls.Config{SessionTicketsDisabled: true}"
+      expected: TruePositive
+    - code: "cfg := &tls.Config{SessionTicketsDisabled: true, MinVersion: tls.VersionTLS12}"
+      expected: TruePositive
+    - code: "config := &tls.Config{MinVersion: tls.VersionTLS12}"
+      expected: TrueNegative
+    - code: "config := &tls.Config{SessionTicketsDisabled: false}"
+      expected: TrueNegative
+    - code: "config := &tls.Config{}"
+      expected: TrueNegative

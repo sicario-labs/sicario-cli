@@ -1,0 +1,439 @@
+# Next.js and Authentication/JWT Security Rules for JavaScript/TypeScript
+# Covers: SSRF in getServerSideProps, exposed API keys, missing auth in API routes,
+# unsafe redirects, JWT verification bypass, missing token expiration,
+# hardcoded JWT secrets, insecure session config, JWT decode without verify,
+# session cookie without secure flag, password comparison timing attacks
+#
+# CWE-918: Server-Side Request Forgery (SSRF)
+# CWE-200: Exposure of Sensitive Information
+# CWE-306: Missing Authentication for Critical Function
+# CWE-601: URL Redirection to Untrusted Site
+# CWE-347: Improper Verification of Cryptographic Signature
+# CWE-613: Insufficient Session Expiration
+# CWE-798: Use of Hard-coded Credentials
+# CWE-614: Sensitive Cookie in HTTPS Session Without 'Secure' Attribute
+# CWE-208: Observable Timing Discrepancy
+# OWASP A01:2021 - Broken Access Control
+# OWASP A02:2021 - Cryptographic Failures
+# OWASP A07:2021 - Identification and Authentication Failures
+# OWASP A10:2021 - Server-Side Request Forgery
+
+- id: "js-nextjs-ssrf-getserversideprops"
+  name: "SSRF in getServerSideProps via User-Controlled URL"
+  description: "Using context.query or context.params directly in fetch/axios calls within getServerSideProps allows SSRF. Validate and allowlist URLs before making server-side requests."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (identifier) @fn (#eq? @fn \"fetch\") arguments: (arguments (template_string (template_substitution (member_expression object: (member_expression object: (identifier) @ctx (#eq? @ctx \"context\") property: (property_identifier) @prop (#eq? @prop \"query\"))))))) @ssrf"
+    captures:
+      - "ssrf"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://nextjs.org/docs/pages/building-your-application/data-fetching/get-server-side-props"
+  test_cases:
+    - code: "const data = await fetch(`http://api.internal/${context.query.endpoint}`);"
+      expected: TruePositive
+    - code: "const res = await fetch(`${context.query.url}/data`);"
+      expected: TruePositive
+    - code: "const result = await fetch(`http://service/${context.query.path}`);"
+      expected: TruePositive
+    - code: "const data = await fetch('https://api.example.com/data');"
+      expected: TrueNegative
+    - code: "const data = await fetch(`/api/internal/${validatedId}`);"
+      expected: TrueNegative
+    - code: "const data = await fetch(ALLOWED_URLS[context.query.type]);"
+      expected: TrueNegative
+
+- id: "js-nextjs-ssrf-params-fetch"
+  name: "SSRF via context.params in Server-Side Fetch"
+  description: "Using context.params directly in fetch calls within getServerSideProps or getStaticProps allows SSRF. Validate parameters against an allowlist."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (identifier) @fn (#eq? @fn \"fetch\") arguments: (arguments (template_string (template_substitution (member_expression object: (member_expression object: (identifier) @ctx (#eq? @ctx \"context\") property: (property_identifier) @prop (#eq? @prop \"params\"))))))) @ssrf"
+    captures:
+      - "ssrf"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://nextjs.org/docs/pages/building-your-application/data-fetching/get-server-side-props"
+  test_cases:
+    - code: "const data = await fetch(`http://internal-api/${context.params.slug}`);"
+      expected: TruePositive
+    - code: "const res = await fetch(`http://backend/${context.params.id}/details`);"
+      expected: TruePositive
+    - code: "const result = await fetch(`${context.params.serviceUrl}`);"
+      expected: TruePositive
+    - code: "const data = await fetch(`/api/posts/${sanitize(context.params.slug)}`);"
+      expected: TrueNegative
+    - code: "const data = await fetch('https://api.example.com/posts');"
+      expected: TrueNegative
+    - code: "const id = parseInt(context.params.id); const data = await fetch(`/api/${id}`);"
+      expected: TrueNegative
+
+- id: "js-nextjs-exposed-api-key-client"
+  name: "Sensitive API Key Exposed in Client Bundle via NEXT_PUBLIC_"
+  description: "Environment variables prefixed with NEXT_PUBLIC_ are bundled into client-side JavaScript. Never use this prefix for sensitive API keys, secrets, or tokens."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(member_expression object: (member_expression object: (identifier) @obj (#eq? @obj \"process\") property: (property_identifier) @env (#eq? @env \"env\")) property: (property_identifier) @key (#match? @key \"^NEXT_PUBLIC_.*(SECRET|KEY|TOKEN|PASSWORD|PRIVATE)\")) @exposed"
+    captures:
+      - "exposed"
+  cwe_id: "CWE-200"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://nextjs.org/docs/pages/building-your-application/configuring/environment-variables"
+  test_cases:
+    - code: "const key = process.env.NEXT_PUBLIC_API_SECRET;"
+      expected: TruePositive
+    - code: "const token = process.env.NEXT_PUBLIC_STRIPE_SECRET_KEY;"
+      expected: TruePositive
+    - code: "const pw = process.env.NEXT_PUBLIC_DB_PASSWORD;"
+      expected: TruePositive
+    - code: "const url = process.env.NEXT_PUBLIC_API_URL;"
+      expected: TrueNegative
+    - code: "const key = process.env.STRIPE_SECRET_KEY;"
+      expected: TrueNegative
+    - code: "const name = process.env.NEXT_PUBLIC_APP_NAME;"
+      expected: TrueNegative
+
+- id: "js-nextjs-api-route-no-auth"
+  name: "Next.js API Route Without Authentication Check"
+  description: "API route handlers in Next.js pages/api/ that directly access request data without authentication checks may expose sensitive operations. Add authentication middleware or checks."
+  severity: Medium
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(export_statement declaration: (function_declaration name: (identifier) @fn (#eq? @fn \"handler\") parameters: (formal_parameters (identifier) @req (identifier) @res) body: (statement_block (expression_statement (assignment_expression left: (member_expression object: (identifier) @body_obj (#eq? @body_obj \"req\") property: (property_identifier) @body_prop (#eq? @body_prop \"body\"))))))) @no_auth"
+    captures:
+      - "no_auth"
+  cwe_id: "CWE-306"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://nextjs.org/docs/pages/building-your-application/routing/api-routes"
+  test_cases:
+    - code: "export default function handler(req, res) { const data = req.body; res.json(data); }"
+      expected: TruePositive
+    - code: "export default function handler(req, res) { const { email } = req.body; db.update(email); }"
+      expected: TruePositive
+    - code: "export default function handler(req, res) { const input = req.body; process(input); }"
+      expected: TruePositive
+    - code: "export default async function handler(req, res) { const session = await getSession(req); if (!session) return res.status(401).end(); }"
+      expected: TrueNegative
+    - code: "export default withAuth(function handler(req, res) { res.json({ ok: true }); });"
+      expected: TrueNegative
+    - code: "export default function handler(req, res) { res.status(200).json({ status: 'healthy' }); }"
+      expected: TrueNegative
+
+- id: "js-nextjs-unsafe-redirect-gssp"
+  name: "Unsafe Redirect in getServerSideProps with User Input"
+  description: "Using user-controlled values from context.query in getServerSideProps redirect destination allows open redirect attacks. Validate redirect URLs against an allowlist."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(pair key: (property_identifier) @key (#eq? @key \"destination\") value: (template_string (template_substitution (member_expression object: (member_expression property: (property_identifier) @prop (#eq? @prop \"query\")))))) @redirect"
+    captures:
+      - "redirect"
+  cwe_id: "CWE-601"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://nextjs.org/docs/pages/api-reference/functions/get-server-side-props#redirect"
+  test_cases:
+    - code: "return { redirect: { destination: `${context.query.returnUrl}`, permanent: false } };"
+      expected: TruePositive
+    - code: "return { redirect: { destination: `${context.query.next}`, permanent: false } };"
+      expected: TruePositive
+    - code: "return { redirect: { destination: `${context.query.redirect}`, permanent: false } };"
+      expected: TruePositive
+    - code: "return { redirect: { destination: '/login', permanent: false } };"
+      expected: TrueNegative
+    - code: "return { redirect: { destination: '/dashboard', permanent: true } };"
+      expected: TrueNegative
+    - code: "return { props: { data: context.query.id } };"
+      expected: TrueNegative
+
+- id: "js-nextjs-unsanitized-query-db"
+  name: "Unsanitized Query Params in Database Call"
+  description: "Passing context.query values directly to database queries in getServerSideProps allows injection attacks. Validate and sanitize all query parameters before database operations."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression property: (property_identifier) @method (#match? @method \"^(find|findOne|findMany|query|where|raw)$\")) arguments: (arguments (object (pair value: (member_expression object: (member_expression object: (identifier) @ctx (#eq? @ctx \"context\") property: (property_identifier) @prop (#eq? @prop \"query\"))))))) @injection"
+    captures:
+      - "injection"
+  cwe_id: "CWE-943"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Injection_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "const user = await db.find({ email: context.query.email });"
+      expected: TruePositive
+    - code: "const post = await prisma.post.findOne({ id: context.query.id });"
+      expected: TruePositive
+    - code: "const data = await collection.findMany({ slug: context.query.slug });"
+      expected: TruePositive
+    - code: "const id = parseInt(context.query.id); const user = await db.find({ id });"
+      expected: TrueNegative
+    - code: "const user = await db.find({ email: validated.email });"
+      expected: TrueNegative
+    - code: "const posts = await db.find({ published: true });"
+      expected: TrueNegative
+
+- id: "js-nextjs-api-unvalidated-filepath"
+  name: "Next.js API Route with Unvalidated File Path from Query"
+  description: "Using req.query values directly in file system operations within API routes allows path traversal. Validate and sanitize file paths, use path.resolve with a base directory."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"fs\") property: (property_identifier) @method (#match? @method \"^(readFile|readFileSync|createReadStream|writeFile|writeFileSync)$\")) arguments: (arguments (member_expression object: (member_expression object: (identifier) @req (#eq? @req \"req\") property: (property_identifier) @qprop (#eq? @qprop \"query\"))))) @traversal"
+    captures:
+      - "traversal"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
+  test_cases:
+    - code: "const content = fs.readFileSync(req.query.file);"
+      expected: TruePositive
+    - code: "const stream = fs.createReadStream(req.query.path);"
+      expected: TruePositive
+    - code: "fs.readFile(req.query.filename, 'utf8', callback);"
+      expected: TruePositive
+    - code: "const content = fs.readFileSync(path.join(SAFE_DIR, sanitize(filename)));"
+      expected: TrueNegative
+    - code: "const content = fs.readFileSync('./config.json');"
+      expected: TrueNegative
+    - code: "const data = JSON.parse(req.body);"
+      expected: TrueNegative
+
+- id: "js-jwt-algorithms-none"
+  name: "JWT Verification with algorithms: ['none'] Bypass"
+  description: "Setting algorithms to ['none'] in JWT verification allows attackers to forge tokens without a signature. Always specify strong algorithms like ['HS256'] or ['RS256']."
+  severity: Critical
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"jwt\") property: (property_identifier) @method (#eq? @method \"verify\")) arguments: (arguments (_) (_) (object (pair key: (property_identifier) @key (#eq? @key \"algorithms\") value: (array (string) @algo (#match? @algo \"none\")))))) @bypass"
+    captures:
+      - "bypass"
+  cwe_id: "CWE-347"
+  owasp_category: A07_AuthenticationFailures
+  help_uri: "https://auth0.com/blog/critical-vulnerabilities-in-json-web-token-libraries/"
+  test_cases:
+    - code: "jwt.verify(token, secret, { algorithms: ['none'] });"
+      expected: TruePositive
+    - code: "jwt.verify(token, key, { algorithms: ['none', 'HS256'] });"
+      expected: TruePositive
+    - code: "jwt.verify(userToken, secret, { algorithms: ['none'] });"
+      expected: TruePositive
+    - code: "jwt.verify(token, secret, { algorithms: ['HS256'] });"
+      expected: TrueNegative
+    - code: "jwt.verify(token, publicKey, { algorithms: ['RS256'] });"
+      expected: TrueNegative
+    - code: "jwt.verify(token, secret);"
+      expected: TrueNegative
+
+- id: "js-jwt-sign-no-expiry"
+  name: "JWT Sign Without Expiration"
+  description: "Signing JWTs without an expiresIn option creates tokens that never expire, increasing the impact of token theft. Always set a reasonable expiration time."
+  severity: Medium
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"jwt\") property: (property_identifier) @method (#eq? @method \"sign\")) arguments: (arguments (_) @payload (_) @secret . )) @no_expiry"
+    captures:
+      - "no_expiry"
+  cwe_id: "CWE-613"
+  owasp_category: A07_AuthenticationFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html"
+  test_cases:
+    - code: "const token = jwt.sign(payload, secret);"
+      expected: TruePositive
+    - code: "const token = jwt.sign({ userId: id }, SECRET_KEY);"
+      expected: TruePositive
+    - code: "const token = jwt.sign(data, process.env.JWT_SECRET);"
+      expected: TruePositive
+    - code: "const token = jwt.sign(payload, secret, { expiresIn: '1h' });"
+      expected: TrueNegative
+    - code: "const token = jwt.sign(payload, secret, { expiresIn: '7d' });"
+      expected: TrueNegative
+    - code: "const token = jwt.sign({ exp: Math.floor(Date.now() / 1000) + 3600, data: payload }, secret);"
+      expected: TrueNegative
+
+- id: "js-jwt-hardcoded-secret"
+  name: "Hardcoded JWT Secret in Source Code"
+  description: "Hardcoding JWT secrets in source code exposes them in version control. Use environment variables or a secrets manager for JWT signing keys."
+  severity: Critical
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"jwt\") property: (property_identifier) @method (#match? @method \"^(sign|verify)$\")) arguments: (arguments (_) (string) @secret)) @hardcoded"
+    captures:
+      - "hardcoded"
+  cwe_id: "CWE-798"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html#token-sidejacking"
+  test_cases:
+    - code: "jwt.sign(payload, 'my-secret-key');"
+      expected: TruePositive
+    - code: "jwt.verify(token, 'supersecret123');"
+      expected: TruePositive
+    - code: "jwt.sign(data, 'hardcoded-jwt-secret');"
+      expected: TruePositive
+    - code: "jwt.sign(payload, process.env.JWT_SECRET);"
+      expected: TrueNegative
+    - code: "jwt.verify(token, config.jwtSecret);"
+      expected: TrueNegative
+    - code: "jwt.sign(payload, secretFromVault);"
+      expected: TrueNegative
+
+- id: "js-session-insecure-config"
+  name: "Insecure Session Configuration"
+  description: "Session configuration with secure: false or httpOnly: false exposes session cookies to interception and XSS attacks. Always set secure: true and httpOnly: true in production."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (identifier) @fn (#eq? @fn \"session\") arguments: (arguments (object (pair key: (property_identifier) @key (#eq? @key \"cookie\") value: (object (pair key: (property_identifier) @opt (#eq? @opt \"secure\") value: (false) @val)))))) @insecure"
+    captures:
+      - "insecure"
+  cwe_id: "CWE-614"
+  owasp_category: A07_AuthenticationFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html"
+  test_cases:
+    - code: "app.use(session({ cookie: { secure: false } }));"
+      expected: TruePositive
+    - code: "app.use(session({ secret: 'key', cookie: { secure: false } }));"
+      expected: TruePositive
+    - code: "app.use(session({ cookie: { secure: false, httpOnly: true } }));"
+      expected: TruePositive
+    - code: "app.use(session({ cookie: { secure: true, httpOnly: true } }));"
+      expected: TrueNegative
+    - code: "app.use(session({ cookie: { secure: true } }));"
+      expected: TrueNegative
+    - code: "app.use(helmet());"
+      expected: TrueNegative
+
+- id: "js-jwt-decode-without-verify"
+  name: "JWT Decode Without Verification"
+  description: "Using jwt.decode() instead of jwt.verify() does not validate the token signature, allowing forged tokens to be accepted. Always use jwt.verify() for authentication."
+  severity: Critical
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"jwt\") property: (property_identifier) @method (#eq? @method \"decode\")) arguments: (arguments (_) @token)) @decode_no_verify"
+    captures:
+      - "decode_no_verify"
+  cwe_id: "CWE-347"
+  owasp_category: A07_AuthenticationFailures
+  help_uri: "https://github.com/auth0/node-jsonwebtoken#jwtdecodetoken--options"
+  test_cases:
+    - code: "const payload = jwt.decode(token);"
+      expected: TruePositive
+    - code: "const user = jwt.decode(req.headers.authorization);"
+      expected: TruePositive
+    - code: "const data = jwt.decode(accessToken);"
+      expected: TruePositive
+    - code: "const payload = jwt.verify(token, secret);"
+      expected: TrueNegative
+    - code: "const user = jwt.verify(token, publicKey, { algorithms: ['RS256'] });"
+      expected: TrueNegative
+    - code: "const decoded = jwtVerify(token, secret);"
+      expected: TrueNegative
+
+- id: "js-session-cookie-no-secure"
+  name: "Session Cookie Without Secure Flag"
+  description: "Setting cookies without the secure flag allows them to be transmitted over unencrypted HTTP connections. Always set secure: true for session cookies."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj property: (property_identifier) @method (#eq? @method \"cookie\")) arguments: (arguments (string) @name (#match? @name \"(session|token|auth|sid)\") (_) (object (pair key: (property_identifier) @key (#eq? @key \"secure\") value: (false) @val)))) @insecure_cookie"
+    captures:
+      - "insecure_cookie"
+  cwe_id: "CWE-614"
+  owasp_category: A07_AuthenticationFailures
+  help_uri: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies#restrict_access_to_cookies"
+  test_cases:
+    - code: "res.cookie('session', token, { secure: false });"
+      expected: TruePositive
+    - code: "res.cookie('auth_token', jwt, { secure: false, httpOnly: true });"
+      expected: TruePositive
+    - code: "res.cookie('sid', sessionId, { secure: false });"
+      expected: TruePositive
+    - code: "res.cookie('session', token, { secure: true, httpOnly: true });"
+      expected: TrueNegative
+    - code: "res.cookie('preference', 'dark', { secure: false });"
+      expected: TrueNegative
+    - code: "res.cookie('session', token, { secure: true, sameSite: 'strict' });"
+      expected: TrueNegative
+
+- id: "js-session-httponly-false"
+  name: "Session Cookie with httpOnly Disabled"
+  description: "Setting httpOnly: false on session cookies allows JavaScript access, making them vulnerable to XSS-based theft. Always set httpOnly: true for session cookies."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (identifier) @fn (#eq? @fn \"session\") arguments: (arguments (object (pair key: (property_identifier) @key (#eq? @key \"cookie\") value: (object (pair key: (property_identifier) @opt (#eq? @opt \"httpOnly\") value: (false) @val)))))) @insecure"
+    captures:
+      - "insecure"
+  cwe_id: "CWE-1004"
+  owasp_category: A07_AuthenticationFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html#httponly-attribute"
+  test_cases:
+    - code: "app.use(session({ cookie: { httpOnly: false } }));"
+      expected: TruePositive
+    - code: "app.use(session({ secret: 's', cookie: { httpOnly: false } }));"
+      expected: TruePositive
+    - code: "app.use(session({ cookie: { httpOnly: false, secure: true } }));"
+      expected: TruePositive
+    - code: "app.use(session({ cookie: { httpOnly: true, secure: true } }));"
+      expected: TrueNegative
+    - code: "app.use(session({ cookie: { httpOnly: true } }));"
+      expected: TrueNegative
+    - code: "app.use(cookieParser());"
+      expected: TrueNegative
+
+- id: "js-password-timing-attack"
+  name: "Password Comparison Without Constant-Time Function"
+  description: "Using === or == to compare passwords or hashes is vulnerable to timing attacks. Use crypto.timingSafeEqual() or a dedicated comparison library like bcrypt.compare()."
+  severity: Medium
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(binary_expression left: (identifier) @left (#match? @left \"(password|passwd|hash|token|secret|digest)\") operator: \"===\" right: (identifier) @right) @timing"
+    captures:
+      - "timing"
+  cwe_id: "CWE-208"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://codahale.com/a-lesson-in-timing-attacks/"
+  test_cases:
+    - code: "if (password === storedPassword) { grant(); }"
+      expected: TruePositive
+    - code: "if (hash === expectedHash) { return true; }"
+      expected: TruePositive
+    - code: "const valid = token === savedToken;"
+      expected: TruePositive
+    - code: "const valid = await bcrypt.compare(password, hash);"
+      expected: TrueNegative
+    - code: "if (crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b))) {}"
+      expected: TrueNegative
+    - code: "if (username === 'admin') { checkAdmin(); }"
+      expected: TrueNegative

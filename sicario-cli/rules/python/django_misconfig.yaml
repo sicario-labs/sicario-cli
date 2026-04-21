@@ -1,0 +1,222 @@
+# Django Misconfiguration Rules for Python
+# Covers: DEBUG=True, ALLOWED_HOSTS=['*'], missing CSRF middleware,
+# hardcoded SECRET_KEY, @csrf_exempt
+#
+# CWE-16: Configuration
+# OWASP A05:2021 - Security Misconfiguration
+
+- id: "py-django-debug-true"
+  name: "Django DEBUG = True in Settings"
+  description: "Setting DEBUG = True in production exposes detailed error pages, stack traces, and environment variables. Set DEBUG = False in production."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(assignment left: (identifier) @name (#eq? @name \"DEBUG\") right: (true) @val) @assign"
+    captures:
+      - "assign"
+  cwe_id: "CWE-215"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.djangoproject.com/en/4.2/ref/settings/#debug"
+  test_cases:
+    - code: "DEBUG = True"
+      expected: TruePositive
+    - code: "DEBUG=True"
+      expected: TruePositive
+    - code: "DEBUG = True  # TODO: disable in production"
+      expected: TruePositive
+    - code: "DEBUG = False"
+      expected: TrueNegative
+    - code: "DEBUG = os.environ.get('DEBUG', False)"
+      expected: TrueNegative
+    - code: "debug = True"
+      expected: TrueNegative
+
+- id: "py-django-allowed-hosts-wildcard"
+  name: "Django ALLOWED_HOSTS with Wildcard"
+  description: "Setting ALLOWED_HOSTS = ['*'] allows any host header, enabling host header injection attacks. Specify explicit hostnames."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(assignment left: (identifier) @name (#eq? @name \"ALLOWED_HOSTS\") right: (list (string) @val (#eq? @val \"'*'\"))) @assign"
+    captures:
+      - "assign"
+  cwe_id: "CWE-16"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.djangoproject.com/en/4.2/ref/settings/#allowed-hosts"
+  test_cases:
+    - code: "ALLOWED_HOSTS = ['*']"
+      expected: TruePositive
+    - code: "ALLOWED_HOSTS=['*']"
+      expected: TruePositive
+    - code: "ALLOWED_HOSTS = ['*']  # insecure"
+      expected: TruePositive
+    - code: "ALLOWED_HOSTS = ['example.com']"
+      expected: TrueNegative
+    - code: "ALLOWED_HOSTS = ['example.com', 'www.example.com']"
+      expected: TrueNegative
+    - code: "ALLOWED_HOSTS = []"
+      expected: TrueNegative
+
+- id: "py-django-secret-key-hardcoded"
+  name: "Django SECRET_KEY Hardcoded in Settings"
+  description: "Hardcoding SECRET_KEY in source code exposes it in version control. Load it from environment variables or a secrets manager."
+  severity: Critical
+  languages:
+    - Python
+  pattern:
+    query: "(assignment left: (identifier) @name (#eq? @name \"SECRET_KEY\") right: (string) @val) @assign"
+    captures:
+      - "assign"
+  cwe_id: "CWE-798"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://docs.djangoproject.com/en/4.2/ref/settings/#secret-key"
+  test_cases:
+    - code: "SECRET_KEY = 'django-insecure-abc123def456'"
+      expected: TruePositive
+    - code: "SECRET_KEY = \"my-super-secret-key-12345\""
+      expected: TruePositive
+    - code: "SECRET_KEY = 'sk-prod-abcdefghijklmnop'"
+      expected: TruePositive
+    - code: "SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')"
+      expected: TrueNegative
+    - code: "SECRET_KEY = config('SECRET_KEY')"
+      expected: TrueNegative
+    - code: "secret_key = 'not-django-setting'"
+      expected: TrueNegative
+
+- id: "py-django-csrf-exempt"
+  name: "Django @csrf_exempt Decorator"
+  description: "Using @csrf_exempt disables CSRF protection on a view, making it vulnerable to cross-site request forgery attacks. Remove the decorator or use proper CSRF handling."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(decorator (identifier) @dec (#eq? @dec \"csrf_exempt\")) @decorator"
+    captures:
+      - "decorator"
+  cwe_id: "CWE-352"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://docs.djangoproject.com/en/4.2/ref/csrf/#django.views.decorators.csrf.csrf_exempt"
+  test_cases:
+    - code: "@csrf_exempt\ndef my_view(request):\n    pass"
+      expected: TruePositive
+    - code: "@csrf_exempt\ndef api_endpoint(request):\n    return JsonResponse(data)"
+      expected: TruePositive
+    - code: "@csrf_exempt\ndef webhook_handler(request):\n    process(request.body)"
+      expected: TruePositive
+    - code: "@login_required\ndef my_view(request):\n    pass"
+      expected: TrueNegative
+    - code: "@require_POST\ndef my_view(request):\n    pass"
+      expected: TrueNegative
+    - code: "csrf_exempt(my_view)"
+      expected: TrueNegative
+
+- id: "py-django-csrf-exempt-call"
+  name: "Django csrf_exempt() Function Call"
+  description: "Wrapping a view with csrf_exempt() disables CSRF protection. Remove the wrapper or use proper CSRF handling."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"csrf_exempt\") arguments: (argument_list (_) @view)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-352"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://docs.djangoproject.com/en/4.2/ref/csrf/#django.views.decorators.csrf.csrf_exempt"
+  test_cases:
+    - code: "urlpatterns = [path('api/', csrf_exempt(MyView.as_view()))]"
+      expected: TruePositive
+    - code: "view = csrf_exempt(my_view)"
+      expected: TruePositive
+    - code: "csrf_exempt(webhook_handler)"
+      expected: TruePositive
+    - code: "login_required(my_view)"
+      expected: TrueNegative
+    - code: "require_POST(my_view)"
+      expected: TrueNegative
+    - code: "csrf_protect(my_view)"
+      expected: TrueNegative
+
+- id: "py-django-session-cookie-insecure"
+  name: "Django SESSION_COOKIE_SECURE = False"
+  description: "Setting SESSION_COOKIE_SECURE = False allows session cookies to be sent over unencrypted HTTP. Set to True in production."
+  severity: Medium
+  languages:
+    - Python
+  pattern:
+    query: "(assignment left: (identifier) @name (#eq? @name \"SESSION_COOKIE_SECURE\") right: (false) @val) @assign"
+    captures:
+      - "assign"
+  cwe_id: "CWE-614"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.djangoproject.com/en/4.2/ref/settings/#session-cookie-secure"
+  test_cases:
+    - code: "SESSION_COOKIE_SECURE = False"
+      expected: TruePositive
+    - code: "SESSION_COOKIE_SECURE=False"
+      expected: TruePositive
+    - code: "SESSION_COOKIE_SECURE = False  # TODO: fix"
+      expected: TruePositive
+    - code: "SESSION_COOKIE_SECURE = True"
+      expected: TrueNegative
+    - code: "SESSION_COOKIE_SECURE = os.environ.get('SECURE', True)"
+      expected: TrueNegative
+    - code: "session_cookie_secure = False"
+      expected: TrueNegative
+
+- id: "py-django-csrf-cookie-insecure"
+  name: "Django CSRF_COOKIE_SECURE = False"
+  description: "Setting CSRF_COOKIE_SECURE = False allows CSRF cookies to be sent over unencrypted HTTP. Set to True in production."
+  severity: Medium
+  languages:
+    - Python
+  pattern:
+    query: "(assignment left: (identifier) @name (#eq? @name \"CSRF_COOKIE_SECURE\") right: (false) @val) @assign"
+    captures:
+      - "assign"
+  cwe_id: "CWE-614"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.djangoproject.com/en/4.2/ref/settings/#csrf-cookie-secure"
+  test_cases:
+    - code: "CSRF_COOKIE_SECURE = False"
+      expected: TruePositive
+    - code: "CSRF_COOKIE_SECURE=False"
+      expected: TruePositive
+    - code: "CSRF_COOKIE_SECURE = False  # insecure"
+      expected: TruePositive
+    - code: "CSRF_COOKIE_SECURE = True"
+      expected: TrueNegative
+    - code: "CSRF_COOKIE_SECURE = os.environ.get('SECURE', True)"
+      expected: TrueNegative
+    - code: "csrf_cookie_secure = False"
+      expected: TrueNegative
+
+- id: "py-django-secure-ssl-redirect-false"
+  name: "Django SECURE_SSL_REDIRECT = False"
+  description: "Setting SECURE_SSL_REDIRECT = False allows HTTP connections without redirecting to HTTPS. Set to True in production."
+  severity: Medium
+  languages:
+    - Python
+  pattern:
+    query: "(assignment left: (identifier) @name (#eq? @name \"SECURE_SSL_REDIRECT\") right: (false) @val) @assign"
+    captures:
+      - "assign"
+  cwe_id: "CWE-319"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.djangoproject.com/en/4.2/ref/settings/#secure-ssl-redirect"
+  test_cases:
+    - code: "SECURE_SSL_REDIRECT = False"
+      expected: TruePositive
+    - code: "SECURE_SSL_REDIRECT=False"
+      expected: TruePositive
+    - code: "SECURE_SSL_REDIRECT = False  # dev only"
+      expected: TruePositive
+    - code: "SECURE_SSL_REDIRECT = True"
+      expected: TrueNegative
+    - code: "SECURE_SSL_REDIRECT = os.environ.get('SSL_REDIRECT', True)"
+      expected: TrueNegative
+    - code: "secure_ssl_redirect = False"
+      expected: TrueNegative

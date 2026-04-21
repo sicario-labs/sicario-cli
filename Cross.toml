@@ -1,0 +1,12 @@
+# Configuration for `cross` (https://github.com/cross-rs/cross)
+# Used for the x86_64-unknown-linux-musl target in CI.
+
+[target.x86_64-unknown-linux-musl]
+# Use the pre-built cross image; we install extra deps via a pre-build script.
+image = "ghcr.io/cross-rs/x86_64-unknown-linux-musl:main"
+
+# Install libsecret (required by the `keyring` crate) inside the cross container.
+pre-build = [
+    "apt-get update -y",
+    "apt-get install -y libsecret-1-dev pkg-config",
+]

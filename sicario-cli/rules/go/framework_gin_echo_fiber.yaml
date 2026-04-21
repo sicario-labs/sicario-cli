@@ -1,0 +1,593 @@
+# Framework Security Rules for Go (Gin, Echo, Fiber)
+# Covers: missing auth middleware, unvalidated request binding, missing CORS,
+# verbose error responses, debug mode, rate limiting, CSRF, template injection
+#
+# CWE-306: Missing Authentication for Critical Function
+# CWE-20: Improper Input Validation
+# CWE-942: Overly Permissive CORS Policy
+# CWE-209: Generation of Error Message Containing Sensitive Information
+# CWE-352: Cross-Site Request Forgery
+# CWE-770: Allocation of Resources Without Limits
+# OWASP A01:2021 - Broken Access Control
+# OWASP A05:2021 - Security Misconfiguration
+# OWASP A07:2021 - Identification and Authentication Failures
+
+# ============================================================================
+# GIN FRAMEWORK RULES (10 rules)
+# ============================================================================
+
+- id: "go-gin-shouldbind-no-error-check"
+  name: "Gin ShouldBind Without Error Check"
+  description: "Calling ShouldBind/ShouldBindJSON without checking the error allows processing of malformed or incomplete request data. Always check the error."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @obj (#eq? @obj \"c\") field: (field_identifier) @fn (#match? @fn \"^(ShouldBind|ShouldBindJSON|ShouldBindXML|ShouldBindQuery|ShouldBindUri)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-20"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://gin-gonic.com/docs/examples/binding-and-validation/"
+  test_cases:
+    - code: "c.ShouldBindJSON(&req)"
+      expected: TruePositive
+    - code: "c.ShouldBind(&form)"
+      expected: TruePositive
+    - code: "c.ShouldBindQuery(&params)"
+      expected: TruePositive
+    - code: "if err := c.ShouldBindJSON(&req); err != nil { c.JSON(400, gin.H{\"error\": \"bad request\"}) }"
+      expected: TrueNegative
+    - code: "err := c.ShouldBind(&form)"
+      expected: TrueNegative
+    - code: "c.JSON(200, gin.H{\"status\": \"ok\"})"
+      expected: TrueNegative
+
+- id: "go-gin-json-raw-error"
+  name: "Gin JSON Response with Raw Error"
+  description: "Returning raw error messages in Gin JSON responses exposes internal details to attackers. Return generic error messages instead."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @obj (#eq? @obj \"c\") field: (field_identifier) @fn (#eq? @fn \"JSON\")) arguments: (argument_list (_) (call_expression function: (selector_expression field: (field_identifier) @method (#eq? @method \"Error\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-209"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/209.html"
+  test_cases:
+    - code: "c.JSON(500, gin.H{\"error\": err.Error()})"
+      expected: TruePositive
+    - code: "c.JSON(400, gin.H{\"message\": dbErr.Error()})"
+      expected: TruePositive
+    - code: "c.JSON(503, gin.H{\"detail\": connErr.Error()})"
+      expected: TruePositive
+    - code: "c.JSON(500, gin.H{\"error\": \"internal server error\"})"
+      expected: TrueNegative
+    - code: "c.JSON(200, gin.H{\"data\": result})"
+      expected: TrueNegative
+    - code: "c.JSON(400, gin.H{\"error\": \"bad request\"})"
+      expected: TrueNegative
+
+- id: "go-gin-trusted-all-proxies"
+  name: "Gin Trusted All Proxies"
+  description: "Trusting all proxies allows IP spoofing via X-Forwarded-For headers. Set specific trusted proxy IPs or use SetTrustedProxies(nil) to disable."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression field: (field_identifier) @fn (#eq? @fn \"TrustAllProxies\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-346"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://pkg.go.dev/github.com/gin-gonic/gin#Engine.SetTrustedProxies"
+  test_cases:
+    - code: "router.TrustAllProxies()"
+      expected: TruePositive
+    - code: "r.TrustAllProxies()"
+      expected: TruePositive
+    - code: "engine.TrustAllProxies()"
+      expected: TruePositive
+    - code: "router.SetTrustedProxies([]string{\"10.0.0.1\"})"
+      expected: TrueNegative
+    - code: "r.SetTrustedProxies(nil)"
+      expected: TrueNegative
+    - code: "router.Use(gin.Logger())"
+      expected: TrueNegative
+
+- id: "go-gin-html-user-input"
+  name: "Gin HTML Template with User Input"
+  description: "Rendering HTML templates with unsanitized user input can lead to XSS. Ensure user input is properly escaped before rendering."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @obj (#eq? @obj \"c\") field: (field_identifier) @fn (#eq? @fn \"HTML\")) arguments: (argument_list (_) (interpreted_string_literal) (call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"gin\") field: (field_identifier) @hfn (#eq? @hfn \"H\"))) @data)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://cwe.mitre.org/data/definitions/79.html"
+  test_cases:
+    - code: "c.HTML(200, \"index.html\", gin.H{\"name\": c.Query(\"name\")})"
+      expected: TruePositive
+    - code: "c.HTML(200, \"profile.html\", gin.H{\"bio\": userInput})"
+      expected: TruePositive
+    - code: "c.HTML(200, \"page.html\", gin.H{\"content\": c.Param(\"content\")})"
+      expected: TruePositive
+    - code: "c.HTML(200, \"index.html\", gin.H{\"title\": \"Welcome\"})"
+      expected: TrueNegative
+    - code: "c.JSON(200, gin.H{\"status\": \"ok\"})"
+      expected: TrueNegative
+    - code: "c.String(200, \"hello\")"
+      expected: TrueNegative
+
+- id: "go-gin-cors-allow-all"
+  name: "Gin CORS Allow All Origins"
+  description: "Allowing all origins in CORS configuration permits any website to make cross-origin requests. Restrict to specific trusted origins."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"cors\") field: (field_identifier) @fn (#eq? @fn \"AllowAll\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-942"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/942.html"
+  test_cases:
+    - code: "router.Use(cors.AllowAll())"
+      expected: TruePositive
+    - code: "r.Use(cors.AllowAll())"
+      expected: TruePositive
+    - code: "engine.Use(cors.AllowAll())"
+      expected: TruePositive
+    - code: "router.Use(cors.New(cors.Config{AllowOrigins: []string{\"https://example.com\"}}))"
+      expected: TrueNegative
+    - code: "router.Use(cors.Default())"
+      expected: TrueNegative
+    - code: "router.Use(gin.Logger())"
+      expected: TrueNegative
+
+- id: "go-gin-debug-mode"
+  name: "Gin Debug Mode in Production"
+  description: "Running Gin in debug mode in production exposes verbose logging and route information. Set gin.SetMode(gin.ReleaseMode) for production."
+  severity: Low
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"gin\") field: (field_identifier) @fn (#eq? @fn \"SetMode\")) arguments: (argument_list (selector_expression operand: (identifier) @modepkg (#eq? @modepkg \"gin\") field: (field_identifier) @mode (#eq? @mode \"DebugMode\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-489"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://gin-gonic.com/docs/introduction/"
+  test_cases:
+    - code: "gin.SetMode(gin.DebugMode)"
+      expected: TruePositive
+    - code: "gin.SetMode(gin.DebugMode) // for development"
+      expected: TruePositive
+    - code: "gin.SetMode(gin.DebugMode)\nrouter := gin.Default()"
+      expected: TruePositive
+    - code: "gin.SetMode(gin.ReleaseMode)"
+      expected: TrueNegative
+    - code: "gin.SetMode(gin.TestMode)"
+      expected: TrueNegative
+    - code: "router := gin.Default()"
+      expected: TrueNegative
+
+- id: "go-gin-file-user-input"
+  name: "Gin c.File with User Input"
+  description: "Passing user-controlled input to c.File allows path traversal attacks. Validate the file path against a base directory."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @obj (#eq? @obj \"c\") field: (field_identifier) @fn (#eq? @fn \"File\")) arguments: (argument_list (call_expression function: (selector_expression operand: (identifier) @cobj (#eq? @cobj \"c\") field: (field_identifier) @cfn (#match? @cfn \"^(Param|Query|PostForm)$\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A03_Injection
+  help_uri: "https://cwe.mitre.org/data/definitions/22.html"
+  test_cases:
+    - code: "c.File(c.Param(\"filepath\"))"
+      expected: TruePositive
+    - code: "c.File(c.Query(\"file\"))"
+      expected: TruePositive
+    - code: "c.File(c.PostForm(\"path\"))"
+      expected: TruePositive
+    - code: "c.File(\"static/index.html\")"
+      expected: TrueNegative
+    - code: "c.File(filepath.Join(\"static\", sanitizedName))"
+      expected: TrueNegative
+    - code: "c.JSON(200, gin.H{\"status\": \"ok\"})"
+      expected: TrueNegative
+
+- id: "go-gin-bind-no-validation"
+  name: "Gin Bind Without Validation Tags"
+  description: "Using Bind/BindJSON without struct validation tags allows arbitrary input. Add binding validation tags to request structs."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @obj (#eq? @obj \"c\") field: (field_identifier) @fn (#match? @fn \"^(Bind|BindJSON|BindXML|BindQuery|BindUri)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-20"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://gin-gonic.com/docs/examples/binding-and-validation/"
+  test_cases:
+    - code: "c.BindJSON(&req)"
+      expected: TruePositive
+    - code: "c.Bind(&form)"
+      expected: TruePositive
+    - code: "c.BindQuery(&params)"
+      expected: TruePositive
+    - code: "if err := c.ShouldBindJSON(&req); err != nil { return }"
+      expected: TrueNegative
+    - code: "c.JSON(200, gin.H{\"status\": \"ok\"})"
+      expected: TrueNegative
+    - code: "c.String(200, \"hello\")"
+      expected: TrueNegative
+
+- id: "go-gin-no-rate-limit"
+  name: "Gin Router Without Rate Limiting"
+  description: "A Gin router without rate limiting middleware is vulnerable to denial-of-service attacks. Add rate limiting middleware."
+  severity: Low
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"gin\") field: (field_identifier) @fn (#eq? @fn \"Default\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-770"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/770.html"
+  test_cases:
+    - code: "router := gin.Default()"
+      expected: TruePositive
+    - code: "r := gin.Default()"
+      expected: TruePositive
+    - code: "engine := gin.Default()"
+      expected: TruePositive
+    - code: "router := gin.New()\nrouter.Use(ratelimit.RateLimiter())"
+      expected: TrueNegative
+    - code: "gin.SetMode(gin.ReleaseMode)"
+      expected: TrueNegative
+    - code: "router := gin.New()"
+      expected: TrueNegative
+
+- id: "go-gin-abort-with-error"
+  name: "Gin AbortWithStatusJSON with Internal Error"
+  description: "Returning internal error details in AbortWithStatusJSON exposes implementation details. Return generic error messages."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @obj (#eq? @obj \"c\") field: (field_identifier) @fn (#eq? @fn \"AbortWithStatusJSON\")) arguments: (argument_list (_) (call_expression function: (selector_expression field: (field_identifier) @method (#eq? @method \"Error\")))  )) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-209"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/209.html"
+  test_cases:
+    - code: "c.AbortWithStatusJSON(500, gin.H{\"error\": err.Error()})"
+      expected: TruePositive
+    - code: "c.AbortWithStatusJSON(403, gin.H{\"msg\": authErr.Error()})"
+      expected: TruePositive
+    - code: "c.AbortWithStatusJSON(400, gin.H{\"detail\": validErr.Error()})"
+      expected: TruePositive
+    - code: "c.AbortWithStatusJSON(500, gin.H{\"error\": \"internal server error\"})"
+      expected: TrueNegative
+    - code: "c.AbortWithStatus(403)"
+      expected: TrueNegative
+    - code: "c.JSON(200, gin.H{\"status\": \"ok\"})"
+      expected: TrueNegative
+
+
+# ============================================================================
+# ECHO FRAMEWORK RULES (6 rules)
+# ============================================================================
+
+- id: "go-echo-logger-fatal-user-data"
+  name: "Echo Logger Fatal with User Data"
+  description: "Passing user-controlled data to e.Logger.Fatal can expose sensitive information in logs. Sanitize data before logging."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (selector_expression operand: (identifier) @obj (#eq? @obj \"e\") field: (field_identifier) @logger (#eq? @logger \"Logger\")) field: (field_identifier) @fn (#eq? @fn \"Fatal\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingAndMonitoringFailures
+  help_uri: "https://cwe.mitre.org/data/definitions/532.html"
+  test_cases:
+    - code: "e.Logger.Fatal(userInput)"
+      expected: TruePositive
+    - code: "e.Logger.Fatal(requestBody)"
+      expected: TruePositive
+    - code: "e.Logger.Fatal(err)"
+      expected: TruePositive
+    - code: "e.Logger.Info(\"server started\")"
+      expected: TrueNegative
+    - code: "log.Fatal(\"startup error\")"
+      expected: TrueNegative
+    - code: "e.Logger.Debug(\"processing request\")"
+      expected: TrueNegative
+
+- id: "go-echo-bind-no-validation"
+  name: "Echo Bind Without Validation"
+  description: "Using Echo's Bind without subsequent validation allows processing of malformed request data. Always validate after binding."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @obj (#eq? @obj \"c\") field: (field_identifier) @fn (#eq? @fn \"Bind\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-20"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://echo.labstack.com/docs/binding"
+  test_cases:
+    - code: "c.Bind(&req)"
+      expected: TruePositive
+    - code: "c.Bind(&form)"
+      expected: TruePositive
+    - code: "c.Bind(&payload)"
+      expected: TruePositive
+    - code: "if err := c.Bind(&req); err != nil { return err }"
+      expected: TrueNegative
+    - code: "c.JSON(200, result)"
+      expected: TrueNegative
+    - code: "c.String(200, \"ok\")"
+      expected: TrueNegative
+
+- id: "go-echo-verbose-error-handler"
+  name: "Echo Verbose Error Handler"
+  description: "Returning raw error messages in Echo HTTP error handler exposes internal details. Return generic error messages to clients."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @obj (#eq? @obj \"c\") field: (field_identifier) @fn (#eq? @fn \"String\")) arguments: (argument_list (_) (call_expression function: (selector_expression field: (field_identifier) @method (#eq? @method \"Error\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-209"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/209.html"
+  test_cases:
+    - code: "return c.String(500, err.Error())"
+      expected: TruePositive
+    - code: "return c.String(400, validationErr.Error())"
+      expected: TruePositive
+    - code: "return c.String(503, dbErr.Error())"
+      expected: TruePositive
+    - code: "return c.String(500, \"internal server error\")"
+      expected: TrueNegative
+    - code: "return c.JSON(200, result)"
+      expected: TrueNegative
+    - code: "return c.NoContent(204)"
+      expected: TrueNegative
+
+- id: "go-echo-static-user-path"
+  name: "Echo Static File Serving with User Path"
+  description: "Serving static files using user-controlled paths allows path traversal. Validate paths against a base directory."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @obj (#eq? @obj \"c\") field: (field_identifier) @fn (#eq? @fn \"File\")) arguments: (argument_list (call_expression function: (selector_expression operand: (identifier) @cobj (#eq? @cobj \"c\") field: (field_identifier) @cfn (#match? @cfn \"^(Param|QueryParam|FormValue)$\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A03_Injection
+  help_uri: "https://cwe.mitre.org/data/definitions/22.html"
+  test_cases:
+    - code: "return c.File(c.Param(\"filepath\"))"
+      expected: TruePositive
+    - code: "return c.File(c.QueryParam(\"file\"))"
+      expected: TruePositive
+    - code: "return c.File(c.FormValue(\"path\"))"
+      expected: TruePositive
+    - code: "return c.File(\"static/index.html\")"
+      expected: TrueNegative
+    - code: "return c.File(filepath.Join(\"static\", sanitizedName))"
+      expected: TrueNegative
+    - code: "return c.JSON(200, result)"
+      expected: TrueNegative
+
+- id: "go-echo-missing-secure-middleware"
+  name: "Echo Missing Secure Middleware"
+  description: "Echo's Secure middleware sets important security headers (X-Frame-Options, X-Content-Type-Options, etc.). Add middleware.Secure() to your Echo instance."
+  severity: Low
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"echo\") field: (field_identifier) @fn (#eq? @fn \"New\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-16"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://echo.labstack.com/docs/middleware/secure"
+  test_cases:
+    - code: "e := echo.New()"
+      expected: TruePositive
+    - code: "server := echo.New()"
+      expected: TruePositive
+    - code: "app := echo.New()"
+      expected: TruePositive
+    - code: "e := echo.New()\ne.Use(middleware.Secure())"
+      expected: TrueNegative
+    - code: "e.Use(middleware.SecureWithConfig(config))"
+      expected: TrueNegative
+    - code: "gin.Default()"
+      expected: TrueNegative
+
+- id: "go-echo-cors-allow-all"
+  name: "Echo CORS Allow All Origins"
+  description: "Allowing all origins in Echo CORS middleware permits any website to make cross-origin requests. Restrict to specific trusted origins."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(keyed_element (literal_element (identifier) @key (#eq? @key \"AllowOrigins\")) (literal_element (composite_literal body: (literal_value (literal_element (interpreted_string_literal) @origin (#eq? @origin \"\\\"*\\\"\")))))) @elem"
+    captures:
+      - "elem"
+  cwe_id: "CWE-942"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://echo.labstack.com/docs/middleware/cors"
+  test_cases:
+    - code: "middleware.CORSWithConfig(middleware.CORSConfig{AllowOrigins: []string{\"*\"}})"
+      expected: TruePositive
+    - code: "config := middleware.CORSConfig{AllowOrigins: []string{\"*\"}}"
+      expected: TruePositive
+    - code: "cors := middleware.CORSConfig{AllowOrigins: []string{\"*\"}, AllowMethods: []string{\"GET\"}}"
+      expected: TruePositive
+    - code: "middleware.CORSWithConfig(middleware.CORSConfig{AllowOrigins: []string{\"https://example.com\"}})"
+      expected: TrueNegative
+    - code: "e.Use(middleware.CORS())"
+      expected: TrueNegative
+    - code: "config := middleware.CORSConfig{AllowOrigins: []string{\"https://app.example.com\"}}"
+      expected: TrueNegative
+
+# ============================================================================
+# FIBER FRAMEWORK RULES (5 rules)
+# ============================================================================
+
+- id: "go-fiber-sendfile-user-input"
+  name: "Fiber SendFile with User Input"
+  description: "Passing user-controlled input to c.SendFile allows path traversal attacks. Validate the file path against a base directory."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @obj (#eq? @obj \"c\") field: (field_identifier) @fn (#eq? @fn \"SendFile\")) arguments: (argument_list (call_expression function: (selector_expression operand: (identifier) @cobj (#eq? @cobj \"c\") field: (field_identifier) @cfn (#match? @cfn \"^(Params|Query|FormValue)$\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A03_Injection
+  help_uri: "https://cwe.mitre.org/data/definitions/22.html"
+  test_cases:
+    - code: "return c.SendFile(c.Params(\"filepath\"))"
+      expected: TruePositive
+    - code: "return c.SendFile(c.Query(\"file\"))"
+      expected: TruePositive
+    - code: "return c.SendFile(c.FormValue(\"path\"))"
+      expected: TruePositive
+    - code: "return c.SendFile(\"static/index.html\")"
+      expected: TrueNegative
+    - code: "return c.SendFile(filepath.Join(\"static\", sanitizedName))"
+      expected: TrueNegative
+    - code: "return c.JSON(fiber.Map{\"status\": \"ok\"})"
+      expected: TrueNegative
+
+- id: "go-fiber-verbose-error"
+  name: "Fiber Verbose Error in Response"
+  description: "Returning raw error messages in Fiber responses exposes internal details. Return generic error messages to clients."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (call_expression function: (selector_expression operand: (identifier) @obj (#eq? @obj \"c\") field: (field_identifier) @fn (#eq? @fn \"Status\"))) field: (field_identifier) @sendfn (#eq? @sendfn \"SendString\")) arguments: (argument_list (call_expression function: (selector_expression field: (field_identifier) @method (#eq? @method \"Error\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-209"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/209.html"
+  test_cases:
+    - code: "return c.Status(500).SendString(err.Error())"
+      expected: TruePositive
+    - code: "return c.Status(400).SendString(validErr.Error())"
+      expected: TruePositive
+    - code: "return c.Status(503).SendString(dbErr.Error())"
+      expected: TruePositive
+    - code: "return c.Status(500).SendString(\"internal server error\")"
+      expected: TrueNegative
+    - code: "return c.Status(200).JSON(result)"
+      expected: TrueNegative
+    - code: "return c.SendStatus(204)"
+      expected: TrueNegative
+
+- id: "go-fiber-missing-helmet"
+  name: "Fiber Missing Helmet Middleware"
+  description: "Fiber's Helmet middleware sets important security headers. Add app.Use(helmet.New()) to your Fiber app."
+  severity: Low
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"fiber\") field: (field_identifier) @fn (#eq? @fn \"New\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-16"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.gofiber.io/api/middleware/helmet"
+  test_cases:
+    - code: "app := fiber.New()"
+      expected: TruePositive
+    - code: "server := fiber.New()"
+      expected: TruePositive
+    - code: "api := fiber.New()"
+      expected: TruePositive
+    - code: "app := fiber.New()\napp.Use(helmet.New())"
+      expected: TrueNegative
+    - code: "app.Use(helmet.New())"
+      expected: TrueNegative
+    - code: "echo.New()"
+      expected: TrueNegative
+
+- id: "go-fiber-missing-cors-config"
+  name: "Fiber Missing CORS Configuration"
+  description: "Using Fiber's CORS middleware without explicit configuration allows all origins by default. Specify allowed origins explicitly."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"cors\") field: (field_identifier) @fn (#eq? @fn \"New\")) arguments: (argument_list)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-942"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.gofiber.io/api/middleware/cors"
+  test_cases:
+    - code: "app.Use(cors.New())"
+      expected: TruePositive
+    - code: "server.Use(cors.New())"
+      expected: TruePositive
+    - code: "api.Use(cors.New())"
+      expected: TruePositive
+    - code: "app.Use(cors.New(cors.Config{AllowOrigins: \"https://example.com\"}))"
+      expected: TrueNegative
+    - code: "app.Use(cors.New(cors.Config{AllowOrigins: \"https://app.example.com\"}))"
+      expected: TrueNegative
+    - code: "app.Use(helmet.New())"
+      expected: TrueNegative
+
+- id: "go-fiber-missing-rate-limiter"
+  name: "Fiber Missing Rate Limiter"
+  description: "A Fiber app without rate limiting middleware is vulnerable to denial-of-service attacks. Add limiter.New() middleware."
+  severity: Low
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"fiber\") field: (field_identifier) @fn (#eq? @fn \"New\")) arguments: (argument_list (composite_literal))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-770"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.gofiber.io/api/middleware/limiter"
+  test_cases:
+    - code: "app := fiber.New(fiber.Config{Prefork: true})"
+      expected: TruePositive
+    - code: "server := fiber.New(fiber.Config{ReadTimeout: 10 * time.Second})"
+      expected: TruePositive
+    - code: "api := fiber.New(fiber.Config{BodyLimit: 4 * 1024 * 1024})"
+      expected: TruePositive
+    - code: "app := fiber.New()\napp.Use(limiter.New())"
+      expected: TrueNegative
+    - code: "app.Use(limiter.New(limiter.Config{Max: 100}))"
+      expected: TrueNegative
+    - code: "echo.New()"
+      expected: TrueNegative

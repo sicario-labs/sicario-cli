@@ -1,0 +1,734 @@
+# SQL Injection, Command Injection, Path Traversal, and SSRF Rules for Go
+# Covers: database/sql, GORM, sqlx, ent (SQLi),
+# os/exec.Command, os.StartProcess, bash -c (CmdInj),
+# os.Open, os.ReadFile, ioutil.ReadFile, filepath.Join, http.ServeFile (Path Traversal),
+# http.Get, http.Post, http.NewRequest, resty (SSRF)
+#
+# CWE-89: SQL Injection
+# CWE-78: Command Injection
+# CWE-22: Path Traversal
+# CWE-918: Server-Side Request Forgery
+# OWASP A03:2021 - Injection
+# OWASP A10:2021 - Server-Side Request Forgery
+
+# ============================================================================
+# SQL INJECTION RULES (7 rules)
+# ============================================================================
+
+- id: "go-sql-string-concat"
+  name: "SQL Query with String Concatenation"
+  description: "Building SQL queries via string concatenation with variables allows SQL injection. Use parameterized queries with placeholder arguments instead."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(binary_expression left: (interpreted_string_literal) @left (#match? @left \"(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|UNION|FROM|WHERE)\") operator: \"+\" right: (_) @right) @sql_concat"
+    captures:
+      - "sql_concat"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "query := \"SELECT * FROM users WHERE id = \" + userId"
+      expected: TruePositive
+    - code: "query := \"DELETE FROM sessions WHERE token = \" + token"
+      expected: TruePositive
+    - code: "query := \"INSERT INTO logs VALUES (\" + data + \")\""
+      expected: TruePositive
+    - code: "query := \"SELECT * FROM users WHERE id = $1\""
+      expected: TrueNegative
+    - code: "msg := \"Hello \" + name"
+      expected: TrueNegative
+    - code: "db.Query(\"SELECT * FROM users WHERE id = $1\", userId)"
+      expected: TrueNegative
+
+- id: "go-fmt-sprintf-sql"
+  name: "fmt.Sprintf in SQL Query Construction"
+  description: "Using fmt.Sprintf to build SQL queries allows SQL injection. Use parameterized queries with $1 or ? placeholders instead."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"fmt\") field: (field_identifier) @fn (#eq? @fn \"Sprintf\")) arguments: (argument_list (interpreted_string_literal) @sql (#match? @sql \"(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|UNION|FROM|WHERE)\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "query := fmt.Sprintf(\"SELECT * FROM users WHERE id = %d\", userId)"
+      expected: TruePositive
+    - code: "query := fmt.Sprintf(\"DELETE FROM sessions WHERE token = '%s'\", token)"
+      expected: TruePositive
+    - code: "query := fmt.Sprintf(\"INSERT INTO logs (msg) VALUES ('%s')\", message)"
+      expected: TruePositive
+    - code: "msg := fmt.Sprintf(\"Hello %s\", name)"
+      expected: TrueNegative
+    - code: "url := fmt.Sprintf(\"/api/v1/%s/profile\", userId)"
+      expected: TrueNegative
+    - code: "db.Query(\"SELECT * FROM users WHERE id = $1\", userId)"
+      expected: TrueNegative
+
+
+- id: "go-database-sql-query-sprintf"
+  name: "database/sql Query with fmt.Sprintf"
+  description: "Passing fmt.Sprintf output to database/sql Query or Exec allows SQL injection. Use parameterized queries with placeholder arguments instead."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression field: (field_identifier) @method (#match? @method \"^(Query|QueryRow|Exec|QueryContext|ExecContext)$\")) arguments: (argument_list (call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"fmt\") field: (field_identifier) @fn (#eq? @fn \"Sprintf\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://pkg.go.dev/database/sql"
+  test_cases:
+    - code: "db.Query(fmt.Sprintf(\"SELECT * FROM users WHERE id = %d\", userId))"
+      expected: TruePositive
+    - code: "db.Exec(fmt.Sprintf(\"DELETE FROM sessions WHERE token = '%s'\", token))"
+      expected: TruePositive
+    - code: "db.QueryRow(fmt.Sprintf(\"SELECT name FROM users WHERE email = '%s'\", email))"
+      expected: TruePositive
+    - code: "db.Query(\"SELECT * FROM users WHERE id = $1\", userId)"
+      expected: TrueNegative
+    - code: "db.Exec(\"DELETE FROM sessions WHERE token = $1\", token)"
+      expected: TrueNegative
+    - code: "db.QueryRow(\"SELECT name FROM users WHERE id = ?\", id)"
+      expected: TrueNegative
+
+- id: "go-gorm-raw-sprintf"
+  name: "GORM Raw Query with fmt.Sprintf"
+  description: "Using fmt.Sprintf to build GORM Raw queries allows SQL injection. Use GORM's built-in parameterized query support instead."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression field: (field_identifier) @method (#eq? @method \"Raw\")) arguments: (argument_list (call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"fmt\") field: (field_identifier) @fn (#eq? @fn \"Sprintf\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://gorm.io/docs/sql_builder.html"
+  test_cases:
+    - code: "db.Raw(fmt.Sprintf(\"SELECT * FROM users WHERE name = '%s'\", name)).Scan(&users)"
+      expected: TruePositive
+    - code: "db.Raw(fmt.Sprintf(\"DELETE FROM tokens WHERE value = '%s'\", token)).Exec()"
+      expected: TruePositive
+    - code: "db.Raw(fmt.Sprintf(\"UPDATE users SET role = '%s' WHERE id = %d\", role, id)).Exec()"
+      expected: TruePositive
+    - code: "db.Raw(\"SELECT * FROM users WHERE name = ?\", name).Scan(&users)"
+      expected: TrueNegative
+    - code: "db.Where(\"name = ?\", name).Find(&users)"
+      expected: TrueNegative
+    - code: "db.Raw(\"SELECT count(*) FROM users\").Scan(&count)"
+      expected: TrueNegative
+
+- id: "go-gorm-raw-concat"
+  name: "GORM Raw Query with String Concatenation"
+  description: "Concatenating user input into GORM Raw queries allows SQL injection. Use GORM's parameterized query support with ? placeholders instead."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression field: (field_identifier) @method (#eq? @method \"Raw\")) arguments: (argument_list (binary_expression left: (interpreted_string_literal) @sql (#match? @sql \"(?i)(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)\") operator: \"+\" right: (_) @input))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://gorm.io/docs/sql_builder.html"
+  test_cases:
+    - code: "db.Raw(\"SELECT * FROM users WHERE id = \" + userId).Scan(&user)"
+      expected: TruePositive
+    - code: "db.Raw(\"DELETE FROM sessions WHERE token = '\" + token + \"'\").Exec()"
+      expected: TruePositive
+    - code: "db.Raw(\"UPDATE users SET name = '\" + name + \"' WHERE id = \" + id).Exec()"
+      expected: TruePositive
+    - code: "db.Raw(\"SELECT * FROM users WHERE id = ?\", userId).Scan(&user)"
+      expected: TrueNegative
+    - code: "db.Where(\"id = ?\", userId).First(&user)"
+      expected: TrueNegative
+    - code: "db.Raw(\"SELECT 1\").Scan(&result)"
+      expected: TrueNegative
+
+- id: "go-sqlx-sprintf"
+  name: "sqlx Query with fmt.Sprintf"
+  description: "Using fmt.Sprintf to build sqlx queries allows SQL injection. Use sqlx's named or positional parameter binding instead."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression field: (field_identifier) @method (#match? @method \"^(Get|Select|NamedExec|MustExec|Queryx|QueryRowx)$\")) arguments: (argument_list (call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"fmt\") field: (field_identifier) @fn (#eq? @fn \"Sprintf\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://pkg.go.dev/github.com/jmoiron/sqlx"
+  test_cases:
+    - code: "db.Get(&user, fmt.Sprintf(\"SELECT * FROM users WHERE id = %d\", id))"
+      expected: TruePositive
+    - code: "db.Select(&users, fmt.Sprintf(\"SELECT * FROM users WHERE role = '%s'\", role))"
+      expected: TruePositive
+    - code: "db.MustExec(fmt.Sprintf(\"DELETE FROM tokens WHERE value = '%s'\", token))"
+      expected: TruePositive
+    - code: "db.Get(&user, \"SELECT * FROM users WHERE id = $1\", id)"
+      expected: TrueNegative
+    - code: "db.Select(&users, \"SELECT * FROM users WHERE role = ?\", role)"
+      expected: TrueNegative
+    - code: "db.MustExec(\"DELETE FROM tokens WHERE value = $1\", token)"
+      expected: TrueNegative
+
+- id: "go-database-sql-exec-concat"
+  name: "database/sql Exec with String Concatenation"
+  description: "Concatenating user input into database/sql Exec calls allows SQL injection. Use parameterized queries with placeholder arguments instead."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression field: (field_identifier) @method (#match? @method \"^(Exec|ExecContext)$\")) arguments: (argument_list (binary_expression left: (interpreted_string_literal) @sql (#match? @sql \"(?i)(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)\") operator: \"+\" right: (_) @input))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://pkg.go.dev/database/sql"
+  test_cases:
+    - code: "db.Exec(\"INSERT INTO users (name) VALUES ('\" + name + \"')\")"
+      expected: TruePositive
+    - code: "db.Exec(\"DELETE FROM sessions WHERE user_id = \" + userId)"
+      expected: TruePositive
+    - code: "db.ExecContext(ctx, \"UPDATE users SET role = '\" + role + \"' WHERE id = \" + id)"
+      expected: TruePositive
+    - code: "db.Exec(\"INSERT INTO users (name) VALUES ($1)\", name)"
+      expected: TrueNegative
+    - code: "db.Exec(\"DELETE FROM sessions WHERE user_id = ?\", userId)"
+      expected: TrueNegative
+    - code: "db.Exec(\"CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY)\")"
+      expected: TrueNegative
+
+
+# ============================================================================
+# COMMAND INJECTION RULES (7 rules)
+# ============================================================================
+
+- id: "go-exec-command-variable"
+  name: "exec.Command with Variable Program Name"
+  description: "Using a variable as the program name in exec.Command allows command injection if the variable is user-controlled. Use a hardcoded program name or validate against an allowlist."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"exec\") field: (field_identifier) @fn (#eq? @fn \"Command\")) arguments: (argument_list (identifier) @arg)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://pkg.go.dev/os/exec#Command"
+  test_cases:
+    - code: "cmd := exec.Command(userProgram, \"--version\")"
+      expected: TruePositive
+    - code: "cmd := exec.Command(programName, \"--help\")"
+      expected: TruePositive
+    - code: "out, err := exec.Command(binary, filename).Output()"
+      expected: TruePositive
+    - code: "cmd := exec.Command(\"ls\", \"-la\")"
+      expected: TrueNegative
+    - code: "cmd := exec.Command(\"git\", \"status\")"
+      expected: TrueNegative
+    - code: "cmd := exec.Command(\"/usr/bin/python3\", \"script.py\")"
+      expected: TrueNegative
+
+- id: "go-exec-command-bash-c"
+  name: "exec.Command with bash -c Shell Invocation"
+  description: "Invoking a shell with -c and a command string via exec.Command allows arbitrary command execution. Avoid shell invocations; use exec.Command with the target binary directly."
+  severity: Critical
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"exec\") field: (field_identifier) @fn (#eq? @fn \"Command\")) arguments: (argument_list (interpreted_string_literal) @prog (#match? @prog \"^\\\"(sh|bash|zsh|dash|cmd)\\\"$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "cmd := exec.Command(\"bash\", \"-c\", userCommand)"
+      expected: TruePositive
+    - code: "cmd := exec.Command(\"sh\", \"-c\", fmt.Sprintf(\"echo %s\", input))"
+      expected: TruePositive
+    - code: "out, _ := exec.Command(\"bash\", \"-c\", \"rm -rf \" + path).Output()"
+      expected: TruePositive
+    - code: "cmd := exec.Command(\"git\", \"status\")"
+      expected: TrueNegative
+    - code: "cmd := exec.Command(\"ls\", \"-la\")"
+      expected: TrueNegative
+    - code: "cmd := exec.Command(\"python3\", \"script.py\")"
+      expected: TrueNegative
+
+- id: "go-exec-command-sprintf-arg"
+  name: "exec.Command with fmt.Sprintf Argument"
+  description: "Using fmt.Sprintf to build command arguments allows injection of unexpected flags or values. Pass arguments individually without string interpolation."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"exec\") field: (field_identifier) @fn (#eq? @fn \"Command\")) arguments: (argument_list (interpreted_string_literal) (call_expression function: (selector_expression operand: (identifier) @fmtpkg (#eq? @fmtpkg \"fmt\") field: (field_identifier) @fmtfn (#eq? @fmtfn \"Sprintf\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://pkg.go.dev/os/exec#Command"
+  test_cases:
+    - code: "cmd := exec.Command(\"grep\", fmt.Sprintf(\"%s %s\", pattern, filename))"
+      expected: TruePositive
+    - code: "cmd := exec.Command(\"curl\", fmt.Sprintf(\"https://example.com/%s\", userPath))"
+      expected: TruePositive
+    - code: "cmd := exec.Command(\"ffmpeg\", fmt.Sprintf(\"-i %s\", inputFile))"
+      expected: TruePositive
+    - code: "cmd := exec.Command(\"grep\", pattern, filename)"
+      expected: TrueNegative
+    - code: "cmd := exec.Command(\"echo\", \"hello\")"
+      expected: TrueNegative
+    - code: "cmd := exec.Command(\"ls\", \"-la\", \"/tmp\")"
+      expected: TrueNegative
+
+- id: "go-os-startprocess-variable"
+  name: "os.StartProcess with Variable Program Path"
+  description: "Using a variable as the program path in os.StartProcess allows command injection if the variable is user-controlled. Use a hardcoded program path or validate against an allowlist."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"os\") field: (field_identifier) @fn (#eq? @fn \"StartProcess\")) arguments: (argument_list (identifier) @prog)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://pkg.go.dev/os#StartProcess"
+  test_cases:
+    - code: "os.StartProcess(userBinary, args, attr)"
+      expected: TruePositive
+    - code: "os.StartProcess(programPath, []string{\"--help\"}, &os.ProcAttr{})"
+      expected: TruePositive
+    - code: "os.StartProcess(cmdPath, argv, procAttr)"
+      expected: TruePositive
+    - code: "os.StartProcess(\"/usr/bin/git\", []string{\"status\"}, &os.ProcAttr{})"
+      expected: TrueNegative
+    - code: "os.StartProcess(\"/bin/ls\", []string{\"-la\"}, attr)"
+      expected: TrueNegative
+    - code: "os.Getenv(\"HOME\")"
+      expected: TrueNegative
+
+- id: "go-exec-command-context-variable"
+  name: "exec.CommandContext with Variable Program Name"
+  description: "Using a variable as the program name in exec.CommandContext allows command injection if the variable is user-controlled. Use a hardcoded program name or validate against an allowlist."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"exec\") field: (field_identifier) @fn (#eq? @fn \"CommandContext\")) arguments: (argument_list (_) (identifier) @prog)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://pkg.go.dev/os/exec#CommandContext"
+  test_cases:
+    - code: "cmd := exec.CommandContext(ctx, userProgram, \"--version\")"
+      expected: TruePositive
+    - code: "cmd := exec.CommandContext(ctx, binary, args...)"
+      expected: TruePositive
+    - code: "cmd := exec.CommandContext(ctx, programName)"
+      expected: TruePositive
+    - code: "cmd := exec.CommandContext(ctx, \"git\", \"status\")"
+      expected: TrueNegative
+    - code: "cmd := exec.CommandContext(ctx, \"ls\", \"-la\")"
+      expected: TrueNegative
+    - code: "cmd := exec.CommandContext(ctx, \"/usr/bin/python3\", \"script.py\")"
+      expected: TrueNegative
+
+- id: "go-syscall-exec-variable"
+  name: "syscall.Exec with Variable Program Path"
+  description: "Using a variable as the program path in syscall.Exec allows command injection. Validate the program path against an allowlist before use."
+  severity: Critical
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"syscall\") field: (field_identifier) @fn (#eq? @fn \"Exec\")) arguments: (argument_list (identifier) @prog)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://pkg.go.dev/syscall#Exec"
+  test_cases:
+    - code: "syscall.Exec(userBinary, args, env)"
+      expected: TruePositive
+    - code: "syscall.Exec(programPath, argv, os.Environ())"
+      expected: TruePositive
+    - code: "syscall.Exec(cmdPath, []string{cmdPath, \"--help\"}, envp)"
+      expected: TruePositive
+    - code: "syscall.Exec(\"/usr/bin/git\", []string{\"git\", \"status\"}, os.Environ())"
+      expected: TrueNegative
+    - code: "syscall.Exec(\"/bin/sh\", []string{\"sh\"}, env)"
+      expected: TrueNegative
+    - code: "syscall.Getenv(\"HOME\")"
+      expected: TrueNegative
+
+- id: "go-exec-command-concat-arg"
+  name: "exec.Command with Concatenated String Argument"
+  description: "Concatenating user input into exec.Command arguments allows command injection. Pass arguments as separate strings without concatenation."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"exec\") field: (field_identifier) @fn (#eq? @fn \"Command\")) arguments: (argument_list (interpreted_string_literal) (binary_expression left: (_) @left operator: \"+\" right: (_) @right))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://pkg.go.dev/os/exec#Command"
+  test_cases:
+    - code: "cmd := exec.Command(\"grep\", pattern + \" \" + filename)"
+      expected: TruePositive
+    - code: "cmd := exec.Command(\"curl\", \"https://example.com/\" + userPath)"
+      expected: TruePositive
+    - code: "cmd := exec.Command(\"rm\", \"-rf \" + path)"
+      expected: TruePositive
+    - code: "cmd := exec.Command(\"grep\", pattern, filename)"
+      expected: TrueNegative
+    - code: "cmd := exec.Command(\"echo\", \"hello\")"
+      expected: TrueNegative
+    - code: "msg := \"prefix\" + suffix"
+      expected: TrueNegative
+
+
+# ============================================================================
+# PATH TRAVERSAL RULES (6 rules)
+# ============================================================================
+
+- id: "go-os-open-sprintf"
+  name: "os.Open with fmt.Sprintf Path"
+  description: "Using fmt.Sprintf to construct file paths passed to os.Open allows path traversal attacks. Validate and use filepath.Clean or filepath.Abs before opening files."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"os\") field: (field_identifier) @fn (#match? @fn \"^(Open|OpenFile|Create)$\")) arguments: (argument_list (call_expression function: (selector_expression operand: (identifier) @fmtpkg (#eq? @fmtpkg \"fmt\") field: (field_identifier) @fmtfn (#eq? @fmtfn \"Sprintf\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "f, err := os.Open(fmt.Sprintf(\"/uploads/%s\", userFilename))"
+      expected: TruePositive
+    - code: "f, err := os.OpenFile(fmt.Sprintf(\"./data/%s/%s\", tenantId, fileName), os.O_RDONLY, 0644)"
+      expected: TruePositive
+    - code: "f, err := os.Create(fmt.Sprintf(\"%s/%s\", baseDir, requestPath))"
+      expected: TruePositive
+    - code: "f, err := os.Open(\"config/settings.toml\")"
+      expected: TrueNegative
+    - code: "f, err := os.Open(filepath.Clean(userPath))"
+      expected: TrueNegative
+    - code: "f, err := os.Create(\"output/results.json\")"
+      expected: TrueNegative
+
+- id: "go-os-readfile-sprintf"
+  name: "os.ReadFile with fmt.Sprintf Path"
+  description: "Using fmt.Sprintf to construct file paths passed to os.ReadFile allows path traversal attacks. Validate and canonicalize paths before reading files."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"os\") field: (field_identifier) @fn (#eq? @fn \"ReadFile\")) arguments: (argument_list (call_expression function: (selector_expression operand: (identifier) @fmtpkg (#eq? @fmtpkg \"fmt\") field: (field_identifier) @fmtfn (#eq? @fmtfn \"Sprintf\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "data, err := os.ReadFile(fmt.Sprintf(\"/uploads/%s\", userFilename))"
+      expected: TruePositive
+    - code: "content, err := os.ReadFile(fmt.Sprintf(\"./data/%s/%s\", tenantId, fileName))"
+      expected: TruePositive
+    - code: "bytes, err := os.ReadFile(fmt.Sprintf(\"%s/%s\", baseDir, requestPath))"
+      expected: TruePositive
+    - code: "data, err := os.ReadFile(\"config/settings.toml\")"
+      expected: TrueNegative
+    - code: "data, err := os.ReadFile(cleanedPath)"
+      expected: TrueNegative
+    - code: "data, err := os.ReadFile(filepath.Join(\"static\", \"index.html\"))"
+      expected: TrueNegative
+
+- id: "go-ioutil-readfile-sprintf"
+  name: "ioutil.ReadFile with fmt.Sprintf Path"
+  description: "Using fmt.Sprintf to construct file paths passed to ioutil.ReadFile allows path traversal attacks. Validate and canonicalize paths before reading files."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"ioutil\") field: (field_identifier) @fn (#eq? @fn \"ReadFile\")) arguments: (argument_list (call_expression function: (selector_expression operand: (identifier) @fmtpkg (#eq? @fmtpkg \"fmt\") field: (field_identifier) @fmtfn (#eq? @fmtfn \"Sprintf\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "data, err := ioutil.ReadFile(fmt.Sprintf(\"/uploads/%s\", userFilename))"
+      expected: TruePositive
+    - code: "content, err := ioutil.ReadFile(fmt.Sprintf(\"./data/%s\", fileName))"
+      expected: TruePositive
+    - code: "bytes, err := ioutil.ReadFile(fmt.Sprintf(\"%s/%s\", dir, userFile))"
+      expected: TruePositive
+    - code: "data, err := ioutil.ReadFile(\"config/settings.toml\")"
+      expected: TrueNegative
+    - code: "data, err := ioutil.ReadFile(validatedPath)"
+      expected: TrueNegative
+    - code: "data, err := os.ReadFile(\"README.md\")"
+      expected: TrueNegative
+
+- id: "go-filepath-join-variable"
+  name: "filepath.Join with Unsanitized User Input"
+  description: "Passing user-controlled variables to filepath.Join without validation allows path traversal via ../ sequences. Validate that the resulting path stays within the intended base directory."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"filepath\") field: (field_identifier) @fn (#eq? @fn \"Join\")) arguments: (argument_list (interpreted_string_literal) @base (selector_expression operand: (identifier) @obj (#match? @obj \"^(r|req|request|params|query|c|ctx|input)$\")) @user_input)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "path := filepath.Join(\"/uploads\", r.FormValue(\"filename\"))"
+      expected: TruePositive
+    - code: "path := filepath.Join(\"./data\", req.URL.Query().Get(\"file\"))"
+      expected: TruePositive
+    - code: "path := filepath.Join(\"/static\", c.Param(\"path\"))"
+      expected: TruePositive
+    - code: "path := filepath.Join(\"/uploads\", \"known_file.txt\")"
+      expected: TrueNegative
+    - code: "path := filepath.Join(\"static\", \"index.html\")"
+      expected: TrueNegative
+    - code: "path := filepath.Join(baseDir, sanitizedName)"
+      expected: TrueNegative
+
+- id: "go-http-servefile-variable"
+  name: "http.ServeFile with User-Controlled Path"
+  description: "Passing user-controlled input to http.ServeFile allows path traversal attacks. Validate the file path against a base directory and ensure it does not contain ../ sequences."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"http\") field: (field_identifier) @fn (#eq? @fn \"ServeFile\")) arguments: (argument_list (_) (_) (call_expression function: (selector_expression operand: (identifier) @fmtpkg (#eq? @fmtpkg \"fmt\") field: (field_identifier) @fmtfn (#eq? @fmtfn \"Sprintf\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A03_Injection
+  help_uri: "https://pkg.go.dev/net/http#ServeFile"
+  test_cases:
+    - code: "http.ServeFile(w, r, fmt.Sprintf(\"./static/%s\", r.URL.Path))"
+      expected: TruePositive
+    - code: "http.ServeFile(w, r, fmt.Sprintf(\"/uploads/%s\", filename))"
+      expected: TruePositive
+    - code: "http.ServeFile(w, r, fmt.Sprintf(\"%s/%s\", baseDir, userFile))"
+      expected: TruePositive
+    - code: "http.ServeFile(w, r, \"static/index.html\")"
+      expected: TrueNegative
+    - code: "http.ServeFile(w, r, cleanedPath)"
+      expected: TrueNegative
+    - code: "http.FileServer(http.Dir(\"./static\"))"
+      expected: TrueNegative
+
+- id: "go-os-open-concat"
+  name: "os.Open with String Concatenation Path"
+  description: "Concatenating user input into file paths passed to os.Open allows path traversal attacks. Validate and canonicalize paths before use."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"os\") field: (field_identifier) @fn (#match? @fn \"^(Open|OpenFile|Create|ReadFile)$\")) arguments: (argument_list (binary_expression left: (interpreted_string_literal) @base operator: \"+\" right: (_) @input))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "f, err := os.Open(\"/uploads/\" + userFilename)"
+      expected: TruePositive
+    - code: "f, err := os.OpenFile(\"./data/\" + fileName, os.O_RDONLY, 0644)"
+      expected: TruePositive
+    - code: "data, err := os.ReadFile(\"/tmp/\" + requestPath)"
+      expected: TruePositive
+    - code: "f, err := os.Open(\"config/settings.toml\")"
+      expected: TrueNegative
+    - code: "f, err := os.Open(validatedPath)"
+      expected: TrueNegative
+    - code: "f, err := os.Create(\"output/results.json\")"
+      expected: TrueNegative
+
+
+# ============================================================================
+# SSRF RULES (6 rules)
+# ============================================================================
+
+- id: "go-http-get-sprintf"
+  name: "http.Get with fmt.Sprintf URL"
+  description: "Using fmt.Sprintf to construct URLs passed to http.Get allows SSRF attacks. Validate URLs against an allowlist of permitted hosts before making requests."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"http\") field: (field_identifier) @fn (#eq? @fn \"Get\")) arguments: (argument_list (call_expression function: (selector_expression operand: (identifier) @fmtpkg (#eq? @fmtpkg \"fmt\") field: (field_identifier) @fmtfn (#eq? @fmtfn \"Sprintf\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/"
+  test_cases:
+    - code: "resp, err := http.Get(fmt.Sprintf(\"http://%s/api/data\", userHost))"
+      expected: TruePositive
+    - code: "resp, err := http.Get(fmt.Sprintf(\"%s/callback\", callbackUrl))"
+      expected: TruePositive
+    - code: "resp, err := http.Get(fmt.Sprintf(\"https://api.example.com/%s\", userPath))"
+      expected: TruePositive
+    - code: "resp, err := http.Get(\"https://api.example.com/data\")"
+      expected: TrueNegative
+    - code: "resp, err := http.Get(validatedUrl)"
+      expected: TrueNegative
+    - code: "fmt.Sprintf(\"http://%s/api\", host)"
+      expected: TrueNegative
+
+- id: "go-http-post-sprintf"
+  name: "http.Post with fmt.Sprintf URL"
+  description: "Using fmt.Sprintf to construct URLs passed to http.Post allows SSRF attacks. Validate URLs against an allowlist of permitted hosts before making requests."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"http\") field: (field_identifier) @fn (#eq? @fn \"Post\")) arguments: (argument_list (call_expression function: (selector_expression operand: (identifier) @fmtpkg (#eq? @fmtpkg \"fmt\") field: (field_identifier) @fmtfn (#eq? @fmtfn \"Sprintf\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/"
+  test_cases:
+    - code: "resp, err := http.Post(fmt.Sprintf(\"http://%s/webhook\", userHost), \"application/json\", body)"
+      expected: TruePositive
+    - code: "resp, err := http.Post(fmt.Sprintf(\"%s/callback\", callbackUrl), contentType, payload)"
+      expected: TruePositive
+    - code: "resp, err := http.Post(fmt.Sprintf(\"https://api.example.com/%s\", userEndpoint), \"text/plain\", data)"
+      expected: TruePositive
+    - code: "resp, err := http.Post(\"https://api.example.com/data\", \"application/json\", body)"
+      expected: TrueNegative
+    - code: "resp, err := http.Post(validatedUrl, contentType, payload)"
+      expected: TrueNegative
+    - code: "http.Post(\"https://hooks.slack.com/services/xxx\", \"application/json\", msg)"
+      expected: TrueNegative
+
+- id: "go-http-newrequest-sprintf"
+  name: "http.NewRequest with fmt.Sprintf URL"
+  description: "Using fmt.Sprintf to construct URLs passed to http.NewRequest allows SSRF attacks. Validate URLs against an allowlist of permitted hosts before making requests."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"http\") field: (field_identifier) @fn (#match? @fn \"^(NewRequest|NewRequestWithContext)$\")) arguments: (argument_list (_) (call_expression function: (selector_expression operand: (identifier) @fmtpkg (#eq? @fmtpkg \"fmt\") field: (field_identifier) @fmtfn (#eq? @fmtfn \"Sprintf\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/"
+  test_cases:
+    - code: "req, err := http.NewRequest(\"GET\", fmt.Sprintf(\"http://%s/api\", userHost), nil)"
+      expected: TruePositive
+    - code: "req, err := http.NewRequest(\"POST\", fmt.Sprintf(\"%s/webhook\", callbackUrl), body)"
+      expected: TruePositive
+    - code: "req, err := http.NewRequestWithContext(ctx, \"GET\", fmt.Sprintf(\"https://api.example.com/%s\", userPath), nil)"
+      expected: TruePositive
+    - code: "req, err := http.NewRequest(\"GET\", \"https://api.example.com/data\", nil)"
+      expected: TrueNegative
+    - code: "req, err := http.NewRequest(\"POST\", validatedUrl, body)"
+      expected: TrueNegative
+    - code: "req, err := http.NewRequest(\"GET\", \"https://api.github.com/repos\", nil)"
+      expected: TrueNegative
+
+- id: "go-http-get-concat"
+  name: "http.Get with Concatenated URL"
+  description: "Concatenating user input into URLs passed to http.Get allows SSRF attacks. Validate URLs against an allowlist of permitted hosts before making requests."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"http\") field: (field_identifier) @fn (#eq? @fn \"Get\")) arguments: (argument_list (binary_expression left: (interpreted_string_literal) @url operator: \"+\" right: (_) @input))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/"
+  test_cases:
+    - code: "resp, err := http.Get(\"http://\" + userHost + \"/api/data\")"
+      expected: TruePositive
+    - code: "resp, err := http.Get(\"https://api.example.com/\" + userPath)"
+      expected: TruePositive
+    - code: "resp, err := http.Get(\"http://internal-service/\" + endpoint)"
+      expected: TruePositive
+    - code: "resp, err := http.Get(\"https://api.example.com/data\")"
+      expected: TrueNegative
+    - code: "resp, err := http.Get(validatedUrl)"
+      expected: TrueNegative
+    - code: "msg := \"http://\" + host"
+      expected: TrueNegative
+
+- id: "go-http-newrequest-concat"
+  name: "http.NewRequest with Concatenated URL"
+  description: "Concatenating user input into URLs passed to http.NewRequest allows SSRF attacks. Validate URLs against an allowlist of permitted hosts before making requests."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"http\") field: (field_identifier) @fn (#match? @fn \"^(NewRequest|NewRequestWithContext)$\")) arguments: (argument_list (_) (binary_expression left: (interpreted_string_literal) @url operator: \"+\" right: (_) @input))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/"
+  test_cases:
+    - code: "req, err := http.NewRequest(\"GET\", \"http://\" + userHost + \"/api\", nil)"
+      expected: TruePositive
+    - code: "req, err := http.NewRequest(\"POST\", \"https://api.example.com/\" + userPath, body)"
+      expected: TruePositive
+    - code: "req, err := http.NewRequestWithContext(ctx, \"GET\", \"http://internal/\" + endpoint, nil)"
+      expected: TruePositive
+    - code: "req, err := http.NewRequest(\"GET\", \"https://api.example.com/data\", nil)"
+      expected: TrueNegative
+    - code: "req, err := http.NewRequest(\"POST\", validatedUrl, body)"
+      expected: TrueNegative
+    - code: "req, err := http.NewRequest(\"GET\", \"https://api.github.com/repos\", nil)"
+      expected: TrueNegative
+
+- id: "go-resty-sprintf-url"
+  name: "Resty Client with fmt.Sprintf URL"
+  description: "Using fmt.Sprintf to construct URLs in resty HTTP client calls allows SSRF attacks. Validate URLs against an allowlist of permitted hosts before making requests."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression field: (field_identifier) @method (#match? @method \"^(Get|Post|Put|Delete|Patch|Head|Options)$\")) arguments: (argument_list (call_expression function: (selector_expression operand: (identifier) @fmtpkg (#eq? @fmtpkg \"fmt\") field: (field_identifier) @fmtfn (#eq? @fmtfn \"Sprintf\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/"
+  test_cases:
+    - code: "resp, err := client.R().Get(fmt.Sprintf(\"http://%s/api/data\", userHost))"
+      expected: TruePositive
+    - code: "resp, err := client.R().Post(fmt.Sprintf(\"%s/webhook\", callbackUrl))"
+      expected: TruePositive
+    - code: "resp, err := client.R().Delete(fmt.Sprintf(\"https://api.example.com/users/%s\", userId))"
+      expected: TruePositive
+    - code: "resp, err := client.R().Get(\"https://api.example.com/data\")"
+      expected: TrueNegative
+    - code: "resp, err := client.R().Post(validatedUrl)"
+      expected: TrueNegative
+    - code: "client.SetBaseURL(\"https://api.example.com\")"
+      expected: TrueNegative

@@ -1,0 +1,115 @@
+[package]
+name = "sicario-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "sicario_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "sicario"
+path = "src/main.rs"
+
+[dependencies]
+# Tree-sitter parsing
+tree-sitter.workspace = true
+tree-sitter-javascript.workspace = true
+tree-sitter-typescript.workspace = true
+tree-sitter-python.workspace = true
+tree-sitter-rust.workspace = true
+tree-sitter-go.workspace = true
+tree-sitter-java.workspace = true
+
+# TUI
+ratatui.workspace = true
+crossterm.workspace = true
+
+# Async runtime
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+tungstenite.workspace = true
+
+# Parallelism
+rayon.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+
+# HTTP client
+reqwest.workspace = true
+
+# Git integration
+git2.workspace = true
+
+# File patterns and exclusions
+ignore.workspace = true
+globset.workspace = true
+
+# Regex and pattern matching
+regex.workspace = true
+
+# Caching
+lru.workspace = true
+
+# UUID generation
+uuid.workspace = true
+
+# Date/time
+chrono.workspace = true
+
+# Error handling
+anyhow.workspace = true
+thiserror.workspace = true
+
+# Keychain/credential storage
+keyring.workspace = true
+
+# Diff generation
+similar.workspace = true
+
+# Database
+rusqlite.workspace = true
+
+# Logging
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# CLI framework
+clap.workspace = true
+clap_complete.workspace = true
+
+# Professional output
+indicatif.workspace = true
+owo-colors.workspace = true
+comfy-table.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+tempfile.workspace = true
+
+[dependencies.base64-url]
+workspace = true
+
+[dependencies.rand]
+workspace = true
+
+[dependencies.sha2]
+workspace = true
+
+[dependencies.semver]
+workspace = true
+
+[dependencies.zip]
+workspace = true
+
+[dependencies.toml]
+workspace = true
+
+[build-dependencies]
+# For cross-platform compilation configuration

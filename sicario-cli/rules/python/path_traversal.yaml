@@ -1,0 +1,221 @@
+# Path Traversal Rules for Python
+# Covers: open(), os.path.join, pathlib.Path, shutil.copy, send_file with unsanitized input
+#
+# CWE-22: Improper Limitation of a Pathname to a Restricted Directory
+# OWASP A01:2021 - Broken Access Control
+
+- id: "py-open-fstring"
+  name: "open() with f-string Path"
+  description: "Using f-strings to construct file paths in open() allows path traversal. Validate and sanitize the path first."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"open\") arguments: (argument_list (string (interpolation) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
+  test_cases:
+    - code: "open(f\"/data/{filename}\")"
+      expected: TruePositive
+    - code: "open(f\"{base_dir}/{user_file}\")"
+      expected: TruePositive
+    - code: "open(f\"/uploads/{request.args.get('file')}\")"
+      expected: TruePositive
+    - code: "open('config.yaml')"
+      expected: TrueNegative
+    - code: "open('/etc/config.yaml', 'r')"
+      expected: TrueNegative
+    - code: "msg = f\"opening {filename}\""
+      expected: TrueNegative
+
+- id: "py-open-format"
+  name: "open() with .format() Path"
+  description: "Using .format() to construct file paths in open() allows path traversal. Validate and sanitize the path first."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"open\") arguments: (argument_list (call function: (attribute attribute: (identifier) @fmt (#eq? @fmt \"format\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
+  test_cases:
+    - code: "open(\"/data/{}\".format(filename))"
+      expected: TruePositive
+    - code: "open(\"{}/{}\".format(base_dir, user_file))"
+      expected: TruePositive
+    - code: "open(\"/uploads/{}\".format(request.args.get('file')))"
+      expected: TruePositive
+    - code: "open('config.yaml')"
+      expected: TrueNegative
+    - code: "msg = \"path {}\".format(filename)"
+      expected: TrueNegative
+    - code: "open('/etc/config.yaml', 'r')"
+      expected: TrueNegative
+
+- id: "py-open-concat"
+  name: "open() with Concatenated Path"
+  description: "Concatenating user input into file paths in open() allows path traversal. Validate and sanitize the path first."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"open\") arguments: (argument_list (binary_expression left: (string) @path right: (_) @input operator: \"+\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
+  test_cases:
+    - code: "open(\"/data/\" + filename)"
+      expected: TruePositive
+    - code: "open(\"/uploads/\" + user_file)"
+      expected: TruePositive
+    - code: "open(base_path + \"/\" + request.args.get('file'))"
+      expected: TruePositive
+    - code: "open('config.yaml')"
+      expected: TrueNegative
+    - code: "msg = \"path \" + filename"
+      expected: TrueNegative
+    - code: "open('/etc/config.yaml', 'r')"
+      expected: TrueNegative
+
+- id: "py-os-path-join-user-input"
+  name: "os.path.join() with User-Controlled Input"
+  description: "Using os.path.join() with user input can lead to path traversal if the input contains absolute paths or '..' sequences. Validate input first."
+  severity: Medium
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (attribute object: (identifier) @mod (#eq? @mod \"os\") attribute: (identifier) @sub (#eq? @sub \"path\")) attribute: (identifier) @fn (#eq? @fn \"join\")) arguments: (argument_list (_) (_) @second_arg)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
+  test_cases:
+    - code: "os.path.join(base_dir, user_input)"
+      expected: TruePositive
+    - code: "os.path.join('/uploads', filename)"
+      expected: TruePositive
+    - code: "os.path.join(MEDIA_ROOT, request.args.get('file'))"
+      expected: TruePositive
+    - code: "os.path.join('static', 'css', 'style.css')"
+      expected: TrueNegative
+    - code: "os.path.join(BASE_DIR, 'templates')"
+      expected: TrueNegative
+    - code: "os.path.exists('/tmp/file.txt')"
+      expected: TrueNegative
+
+- id: "py-shutil-copy-fstring"
+  name: "shutil.copy() with f-string Path"
+  description: "Using f-strings to construct paths in shutil.copy() allows path traversal. Validate and sanitize paths first."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"shutil\") attribute: (identifier) @fn (#match? @fn \"^(copy|copy2|copyfile|move)$\")) arguments: (argument_list (string (interpolation) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://docs.python.org/3/library/shutil.html"
+  test_cases:
+    - code: "shutil.copy(f\"/uploads/{filename}\", dest)"
+      expected: TruePositive
+    - code: "shutil.copy2(f\"{base}/{user_file}\", target)"
+      expected: TruePositive
+    - code: "shutil.move(f\"/data/{request.args.get('file')}\", archive)"
+      expected: TruePositive
+    - code: "shutil.copy('config.yaml', 'backup.yaml')"
+      expected: TrueNegative
+    - code: "shutil.copy2('/etc/config', '/tmp/config')"
+      expected: TrueNegative
+    - code: "shutil.rmtree('/tmp/cache')"
+      expected: TrueNegative
+
+- id: "py-flask-send-file-fstring"
+  name: "Flask send_file() with f-string Path"
+  description: "Using f-strings to construct paths in send_file() allows path traversal. Use send_from_directory() with a safe base directory instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"send_file\") arguments: (argument_list (string (interpolation) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://flask.palletsprojects.com/en/2.3.x/api/#flask.send_file"
+  test_cases:
+    - code: "send_file(f\"/uploads/{filename}\")"
+      expected: TruePositive
+    - code: "send_file(f\"{base_dir}/{user_file}\")"
+      expected: TruePositive
+    - code: "send_file(f\"/data/{request.args.get('file')}\")"
+      expected: TruePositive
+    - code: "send_from_directory(app.config['UPLOAD_FOLDER'], filename)"
+      expected: TrueNegative
+    - code: "send_file('static/logo.png')"
+      expected: TrueNegative
+    - code: "send_file('/etc/known_safe_file.txt')"
+      expected: TrueNegative
+
+- id: "py-flask-send-file-concat"
+  name: "Flask send_file() with Concatenated Path"
+  description: "Concatenating user input into send_file() paths allows path traversal. Use send_from_directory() instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"send_file\") arguments: (argument_list (binary_expression left: (string) @path right: (_) @input operator: \"+\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://flask.palletsprojects.com/en/2.3.x/api/#flask.send_file"
+  test_cases:
+    - code: "send_file(\"/uploads/\" + filename)"
+      expected: TruePositive
+    - code: "send_file(base_dir + \"/\" + user_file)"
+      expected: TruePositive
+    - code: "send_file(\"/data/\" + request.args.get('file'))"
+      expected: TruePositive
+    - code: "send_from_directory(app.config['UPLOAD_FOLDER'], filename)"
+      expected: TrueNegative
+    - code: "send_file('static/logo.png')"
+      expected: TrueNegative
+    - code: "msg = \"/uploads/\" + filename"
+      expected: TrueNegative
+
+- id: "py-pathlib-fstring"
+  name: "pathlib.Path() with f-string"
+  description: "Using f-strings to construct pathlib.Path objects with user input allows path traversal. Validate and resolve the path first."
+  severity: Medium
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"Path\") arguments: (argument_list (string (interpolation) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://docs.python.org/3/library/pathlib.html"
+  test_cases:
+    - code: "Path(f\"/uploads/{filename}\")"
+      expected: TruePositive
+    - code: "Path(f\"{base_dir}/{user_file}\")"
+      expected: TruePositive
+    - code: "Path(f\"/data/{request.args.get('file')}\")"
+      expected: TruePositive
+    - code: "Path('config.yaml')"
+      expected: TrueNegative
+    - code: "Path('/etc/config')"
+      expected: TrueNegative
+    - code: "Path(__file__).parent"
+      expected: TrueNegative

@@ -1,0 +1,1197 @@
+# Cryptography, Deserialization, Memory Safety, and Concurrency Rules for Rust
+# Covers: md5/sha1 crates, hardcoded keys, weak RNG, insecure ciphers (Crypto),
+# serde_json, serde_yaml, bincode, rmp_serde, ciborium, toml (Deserialization),
+# raw pointers, transmute, from_raw_parts, use-after-free (Memory Safety),
+# static mut, Send/Sync misimpl, UnsafeCell, tokio::spawn races (Concurrency)
+#
+# CWE-327: Use of Broken Crypto Algorithm
+# CWE-321: Use of Hard-coded Cryptographic Key
+# CWE-330: Use of Insufficiently Random Values
+# CWE-502: Deserialization of Untrusted Data
+# CWE-119: Buffer Overflow / Memory Corruption
+# CWE-416: Use After Free
+# CWE-362: Race Condition
+# OWASP A02:2021 - Cryptographic Failures
+# OWASP A08:2021 - Software and Data Integrity Failures
+
+# ============================================================================
+# CRYPTOGRAPHY RULES (10 rules)
+# ============================================================================
+
+- id: "rust-md5-compute"
+  name: "md5::compute Usage for Hashing"
+  description: "MD5 is cryptographically broken and must not be used for password hashing or integrity verification. Use argon2, bcrypt, or sha2 crate instead."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"md5\") (#eq? @fn \"compute\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "let hash = md5::compute(password.as_bytes());"
+      expected: TruePositive
+    - code: "let digest = md5::compute(&user_input);"
+      expected: TruePositive
+    - code: "let result = md5::compute(secret_token.as_bytes());"
+      expected: TruePositive
+    - code: "let hash = argon2::hash_encoded(password.as_bytes(), &salt, &config).unwrap();"
+      expected: TrueNegative
+    - code: "let hash = bcrypt::hash(password, bcrypt::DEFAULT_COST).unwrap();"
+      expected: TrueNegative
+    - code: "let mut hasher = Sha256::new(); hasher.update(data);"
+      expected: TrueNegative
+
+- id: "rust-md5-digest-new"
+  name: "md5::Md5::new Digest Usage"
+  description: "MD5 is cryptographically broken and must not be used for security-sensitive hashing. Use SHA-256 or stronger algorithms from the sha2 crate."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (scoped_identifier path: (identifier) @crate name: (identifier) @type (#eq? @crate \"md5\") (#eq? @type \"Md5\")) name: (identifier) @fn (#eq? @fn \"new\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "let mut hasher = md5::Md5::new();"
+      expected: TruePositive
+    - code: "let digest = md5::Md5::new(); digest.update(password);"
+      expected: TruePositive
+    - code: "let h = md5::Md5::new(); h.update(&token);"
+      expected: TruePositive
+    - code: "let mut hasher = sha2::Sha256::new();"
+      expected: TrueNegative
+    - code: "let mut hasher = blake3::Hasher::new();"
+      expected: TrueNegative
+    - code: "let mut hasher = sha2::Sha512::new();"
+      expected: TrueNegative
+
+- id: "rust-sha1-new"
+  name: "sha1::Sha1::new Usage"
+  description: "SHA-1 is cryptographically broken and must not be used for password hashing or digital signatures. Use SHA-256 or stronger from the sha2 crate."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (scoped_identifier path: (identifier) @crate name: (identifier) @type (#eq? @crate \"sha1\") (#eq? @type \"Sha1\")) name: (identifier) @fn (#eq? @fn \"new\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "let mut hasher = sha1::Sha1::new();"
+      expected: TruePositive
+    - code: "let h = sha1::Sha1::new(); h.update(password.as_bytes());"
+      expected: TruePositive
+    - code: "let digest = sha1::Sha1::new(); digest.update(&secret);"
+      expected: TruePositive
+    - code: "let mut hasher = sha2::Sha256::new();"
+      expected: TrueNegative
+    - code: "let hash = argon2::hash_encoded(password.as_bytes(), &salt, &config).unwrap();"
+      expected: TrueNegative
+    - code: "let mut hasher = sha3::Sha3_256::new();"
+      expected: TrueNegative
+
+
+- id: "rust-hardcoded-crypto-key"
+  name: "Hardcoded Cryptographic Key"
+  description: "Hardcoded encryption keys in source code can be extracted by attackers. Use environment variables, key management services, or secure vaults for key storage."
+  severity: Critical
+  languages:
+    - Rust
+  pattern:
+    query: "(let_declaration pattern: (identifier) @var (#match? @var \"(?i)(key|secret|password|api_key|encryption_key|private_key|secret_key)\") value: (array_expression)) @decl"
+    captures:
+      - "decl"
+  cwe_id: "CWE-321"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Key_Management_Cheat_Sheet.html"
+  test_cases:
+    - code: "let key = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10];"
+      expected: TruePositive
+    - code: "let secret_key = [1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];"
+      expected: TruePositive
+    - code: "let encryption_key = [0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03, 0x04];"
+      expected: TruePositive
+    - code: "let key = std::env::var(\"ENCRYPTION_KEY\").expect(\"key not set\");"
+      expected: TrueNegative
+    - code: "let buffer = [0u8; 32];"
+      expected: TrueNegative
+    - code: "let indices = [0, 1, 2, 3, 4];"
+      expected: TrueNegative
+
+- id: "rust-thread-rng-security"
+  name: "rand::thread_rng for Security-Sensitive Operations"
+  description: "thread_rng uses a non-cryptographic PRNG that is predictable. Use OsRng or rand::rngs::StdRng seeded from OsRng for security-sensitive random number generation."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"rand\") (#eq? @fn \"thread_rng\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-330"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://rust-random.github.io/book/guide-rngs.html"
+  test_cases:
+    - code: "let mut rng = rand::thread_rng(); let token: [u8; 32] = rng.gen();"
+      expected: TruePositive
+    - code: "let session_id = rand::thread_rng().gen::<u64>();"
+      expected: TruePositive
+    - code: "let nonce = rand::thread_rng().gen::<[u8; 12]>();"
+      expected: TruePositive
+    - code: "let mut rng = OsRng; let token: [u8; 32] = rng.gen();"
+      expected: TrueNegative
+    - code: "let key = rand::rngs::OsRng.gen::<[u8; 32]>();"
+      expected: TrueNegative
+    - code: "use rand::rngs::OsRng; let bytes = OsRng.gen::<[u8; 16]>();"
+      expected: TrueNegative
+
+- id: "rust-des-cipher-usage"
+  name: "DES/3DES Cipher Usage"
+  description: "DES and 3DES are deprecated ciphers with insufficient key lengths. Use AES-256-GCM or ChaCha20-Poly1305 instead."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(use_declaration argument: (scoped_identifier) @path (#match? @path \"(des|tdes|triple_des)\")) @decl"
+    captures:
+      - "decl"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "use des::Des;"
+      expected: TruePositive
+    - code: "use des::TdesEde3;"
+      expected: TruePositive
+    - code: "use triple_des::TripleDes;"
+      expected: TruePositive
+    - code: "use aes_gcm::Aes256Gcm;"
+      expected: TrueNegative
+    - code: "use chacha20poly1305::ChaCha20Poly1305;"
+      expected: TrueNegative
+    - code: "use aes::Aes256;"
+      expected: TrueNegative
+
+- id: "rust-ecb-mode-usage"
+  name: "ECB Mode Cipher Usage"
+  description: "ECB mode does not provide semantic security — identical plaintext blocks produce identical ciphertext. Use GCM, CTR, or CBC with HMAC instead."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(type_identifier) @type (#match? @type \"Ecb\")"
+    captures:
+      - "type"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "type Aes128Ecb = Ecb<Aes128, Pkcs7>;"
+      expected: TruePositive
+    - code: "let cipher = Ecb::<Aes256, ZeroPadding>::new(&key);"
+      expected: TruePositive
+    - code: "use block_modes::Ecb;"
+      expected: TruePositive
+    - code: "type Aes256Gcm = Gcm<Aes256>;"
+      expected: TrueNegative
+    - code: "let cipher = Cbc::<Aes128, Pkcs7>::new(&key, &iv);"
+      expected: TrueNegative
+    - code: "use aes_gcm::Aes256Gcm;"
+      expected: TrueNegative
+
+- id: "rust-hardcoded-iv-nonce"
+  name: "Hardcoded IV/Nonce Value"
+  description: "Hardcoded initialization vectors or nonces destroy the security of encryption. Generate a fresh random IV/nonce for each encryption operation using OsRng."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(let_declaration pattern: (identifier) @var (#match? @var \"(?i)(iv|nonce|initialization_vector)\") value: (array_expression)) @decl"
+    captures:
+      - "decl"
+  cwe_id: "CWE-329"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "let iv = [0u8; 16];"
+      expected: TruePositive
+    - code: "let nonce = [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b];"
+      expected: TruePositive
+    - code: "let initialization_vector = [1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];"
+      expected: TruePositive
+    - code: "let nonce = OsRng.gen::<[u8; 12]>();"
+      expected: TrueNegative
+    - code: "let iv = generate_random_iv();"
+      expected: TrueNegative
+    - code: "let nonce = Nonce::from_slice(&random_bytes);"
+      expected: TrueNegative
+
+- id: "rust-weak-key-derivation"
+  name: "Direct Hash as Key Derivation (No KDF)"
+  description: "Using a simple hash function for key derivation is insecure. Use PBKDF2, Argon2, or bcrypt with proper salt and iteration count for deriving keys from passwords."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#match? @mod \"^(sha2|sha3|blake2|blake3)$\") (#eq? @fn \"digest\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-916"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "let key = sha2::digest(password.as_bytes());"
+      expected: TruePositive
+    - code: "let derived = sha3::digest(user_password.as_bytes());"
+      expected: TruePositive
+    - code: "let hash = blake3::digest(secret.as_bytes());"
+      expected: TruePositive
+    - code: "let key = pbkdf2::pbkdf2_hmac::<Sha256>(password, &salt, 100_000, &mut key_bytes);"
+      expected: TrueNegative
+    - code: "let hash = argon2::hash_encoded(password.as_bytes(), &salt, &config).unwrap();"
+      expected: TrueNegative
+    - code: "let hash = bcrypt::hash(password, 12).unwrap();"
+      expected: TrueNegative
+
+- id: "rust-hmac-hardcoded-key"
+  name: "HMAC with Hardcoded Key"
+  description: "Using a hardcoded key for HMAC allows attackers to forge signatures. Load HMAC keys from secure configuration or key management services."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier name: (identifier) @fn (#eq? @fn \"new_from_slice\")) arguments: (arguments (reference_expression value: (array_expression)))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-321"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Key_Management_Cheat_Sheet.html"
+  test_cases:
+    - code: "let mac = Hmac::<Sha256>::new_from_slice(&[0x01, 0x02, 0x03, 0x04]).unwrap();"
+      expected: TruePositive
+    - code: "let key = hmac::Key::new_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8]);"
+      expected: TruePositive
+    - code: "let h = HmacSha256::new_from_slice(&[0xDE, 0xAD, 0xBE, 0xEF]).unwrap();"
+      expected: TruePositive
+    - code: "let mac = Hmac::<Sha256>::new_from_slice(&key_bytes).unwrap();"
+      expected: TrueNegative
+    - code: "let mac = Hmac::<Sha256>::new_from_slice(env_key.as_bytes()).unwrap();"
+      expected: TrueNegative
+    - code: "let mac = Hmac::<Sha256>::new_from_slice(&config.hmac_key).unwrap();"
+      expected: TrueNegative
+
+- id: "rust-deprecated-crypto-crate"
+  name: "Deprecated crypto Crate Usage"
+  description: "The 'crypto' crate is deprecated and unmaintained. Use RustCrypto crates (aes, sha2, chacha20poly1305) or ring for modern cryptographic operations."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(use_declaration argument: (scoped_identifier path: (identifier) @crate (#eq? @crate \"crypto\"))) @decl"
+    captures:
+      - "decl"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://github.com/RustCrypto"
+  test_cases:
+    - code: "use crypto::sha2::Sha256;"
+      expected: TruePositive
+    - code: "use crypto::aes::KeySize;"
+      expected: TruePositive
+    - code: "use crypto::symmetriccipher::Encryptor;"
+      expected: TruePositive
+    - code: "use sha2::Sha256;"
+      expected: TrueNegative
+    - code: "use aes_gcm::Aes256Gcm;"
+      expected: TrueNegative
+    - code: "use ring::hmac;"
+      expected: TrueNegative
+
+
+# ============================================================================
+# DESERIALIZATION RULES (8 rules)
+# ============================================================================
+
+- id: "rust-serde-json-from-str-untrusted"
+  name: "serde_json::from_str with Untrusted Input"
+  description: "Deserializing untrusted JSON input without size limits can lead to denial of service or arbitrary type instantiation. Validate input size and use strict type definitions."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"serde_json\") (#eq? @fn \"from_str\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareAndDataIntegrityFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"
+  test_cases:
+    - code: "let data: Value = serde_json::from_str(&body).unwrap();"
+      expected: TruePositive
+    - code: "let user: User = serde_json::from_str(&request_body).unwrap();"
+      expected: TruePositive
+    - code: "let config: Config = serde_json::from_str(&payload).unwrap();"
+      expected: TruePositive
+    - code: "let config: AppConfig = serde_json::from_str(include_str!(\"config.json\")).unwrap();"
+      expected: TrueNegative
+    - code: "let manifest: Manifest = serde_json::from_str(&validated_json).unwrap();"
+      expected: TrueNegative
+    - code: "let settings = toml::from_str::<Settings>(&fs::read_to_string(\"config.toml\").unwrap()).unwrap();"
+      expected: TrueNegative
+
+- id: "rust-serde-yaml-from-str-untrusted"
+  name: "serde_yaml::from_str with Untrusted Input"
+  description: "Deserializing untrusted YAML input can lead to denial of service via billion laughs attack or arbitrary type instantiation. Validate input size and restrict allowed types."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"serde_yaml\") (#eq? @fn \"from_str\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareAndDataIntegrityFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"
+  test_cases:
+    - code: "let config: Value = serde_yaml::from_str(&user_input).unwrap();"
+      expected: TruePositive
+    - code: "let data: Pipeline = serde_yaml::from_str(&uploaded_yaml).unwrap();"
+      expected: TruePositive
+    - code: "let spec: Deployment = serde_yaml::from_str(&body).unwrap();"
+      expected: TruePositive
+    - code: "let config: Config = serde_yaml::from_str(include_str!(\"config.yaml\")).unwrap();"
+      expected: TrueNegative
+    - code: "let rules: Vec<Rule> = serde_yaml::from_str(&fs::read_to_string(\"rules.yaml\").unwrap()).unwrap();"
+      expected: TrueNegative
+    - code: "let schema = serde_json::from_str::<Schema>(&validated).unwrap();"
+      expected: TrueNegative
+
+- id: "rust-serde-json-from-slice-untrusted"
+  name: "serde_json::from_slice with Untrusted Input"
+  description: "Deserializing untrusted byte slices without size validation can lead to denial of service or memory exhaustion. Enforce maximum payload size before deserialization."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"serde_json\") (#eq? @fn \"from_slice\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareAndDataIntegrityFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"
+  test_cases:
+    - code: "let msg: Message = serde_json::from_slice(&bytes).unwrap();"
+      expected: TruePositive
+    - code: "let event: Event = serde_json::from_slice(&raw_body).unwrap();"
+      expected: TruePositive
+    - code: "let payload: Payload = serde_json::from_slice(&network_data).unwrap();"
+      expected: TruePositive
+    - code: "let config: Config = serde_json::from_slice(include_bytes!(\"config.json\")).unwrap();"
+      expected: TrueNegative
+    - code: "let data: Data = serde_json::from_slice(&validated_bytes).unwrap();"
+      expected: TrueNegative
+    - code: "let manifest = toml::from_slice::<Manifest>(&local_file).unwrap();"
+      expected: TrueNegative
+
+- id: "rust-bincode-deserialize-untrusted"
+  name: "bincode::deserialize with Untrusted Input"
+  description: "Deserializing untrusted binary data with bincode can lead to memory corruption or arbitrary code execution. Use bincode::Options with size limits and validate input source."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"bincode\") (#match? @fn \"^(deserialize|deserialize_from)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareAndDataIntegrityFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"
+  test_cases:
+    - code: "let msg: Message = bincode::deserialize(&network_bytes).unwrap();"
+      expected: TruePositive
+    - code: "let packet: Packet = bincode::deserialize(&raw_data).unwrap();"
+      expected: TruePositive
+    - code: "let cmd: Command = bincode::deserialize_from(&mut stream).unwrap();"
+      expected: TruePositive
+    - code: "let config: Config = bincode::deserialize(&fs::read(\"cache.bin\").unwrap()).unwrap();"
+      expected: TrueNegative
+    - code: "let data = bincode::serialize(&my_struct).unwrap();"
+      expected: TrueNegative
+    - code: "let options = bincode::DefaultOptions::new().with_limit(1024); let msg: Msg = options.deserialize(&bytes).unwrap();"
+      expected: TrueNegative
+
+- id: "rust-rmp-serde-from-slice"
+  name: "rmp_serde::from_slice (MessagePack) with Untrusted Input"
+  description: "Deserializing untrusted MessagePack data can lead to denial of service or type confusion attacks. Validate input size and use strict type definitions."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"rmp_serde\") (#match? @fn \"^(from_slice|from_read|decode)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareAndDataIntegrityFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"
+  test_cases:
+    - code: "let msg: Message = rmp_serde::from_slice(&network_data).unwrap();"
+      expected: TruePositive
+    - code: "let event: Event = rmp_serde::from_read(&mut socket).unwrap();"
+      expected: TruePositive
+    - code: "let cmd: Command = rmp_serde::decode(&raw_bytes).unwrap();"
+      expected: TruePositive
+    - code: "let data = rmp_serde::to_vec(&my_struct).unwrap();"
+      expected: TrueNegative
+    - code: "let config: Config = rmp_serde::from_slice(&fs::read(\"cache.msgpack\").unwrap()).unwrap();"
+      expected: TrueNegative
+    - code: "let serialized = rmp_serde::encode::to_vec(&payload).unwrap();"
+      expected: TrueNegative
+
+- id: "rust-ciborium-from-reader"
+  name: "ciborium::from_reader (CBOR) with Untrusted Input"
+  description: "Deserializing untrusted CBOR data can lead to denial of service or memory exhaustion. Wrap the reader with a size-limiting adapter before deserialization."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"ciborium\") (#match? @fn \"^(from_reader|de)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareAndDataIntegrityFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"
+  test_cases:
+    - code: "let msg: Message = ciborium::from_reader(&network_stream).unwrap();"
+      expected: TruePositive
+    - code: "let data: Data = ciborium::from_reader(&mut socket).unwrap();"
+      expected: TruePositive
+    - code: "let token: Token = ciborium::de(&raw_cbor_bytes).unwrap();"
+      expected: TruePositive
+    - code: "ciborium::into_writer(&my_struct, &mut buffer).unwrap();"
+      expected: TrueNegative
+    - code: "let config: Config = ciborium::from_reader(&local_file).unwrap();"
+      expected: TrueNegative
+    - code: "let serialized = ciborium::ser::into_writer(&data, &mut vec).unwrap();"
+      expected: TrueNegative
+
+- id: "rust-toml-from-str-untrusted"
+  name: "toml::from_str with Untrusted Input"
+  description: "Deserializing untrusted TOML input can lead to denial of service via deeply nested structures. Validate input size and source before deserialization."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"toml\") (#eq? @fn \"from_str\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareAndDataIntegrityFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"
+  test_cases:
+    - code: "let config: Config = toml::from_str(&user_uploaded_toml).unwrap();"
+      expected: TruePositive
+    - code: "let manifest: Manifest = toml::from_str(&request_body).unwrap();"
+      expected: TruePositive
+    - code: "let settings: Settings = toml::from_str(&payload).unwrap();"
+      expected: TruePositive
+    - code: "let config: Config = toml::from_str(include_str!(\"Cargo.toml\")).unwrap();"
+      expected: TrueNegative
+    - code: "let settings: Settings = toml::from_str(&fs::read_to_string(\"config.toml\").unwrap()).unwrap();"
+      expected: TrueNegative
+    - code: "let toml_str = toml::to_string(&config).unwrap();"
+      expected: TrueNegative
+
+- id: "rust-serde-json-from-reader-untrusted"
+  name: "serde_json::from_reader with Untrusted Input"
+  description: "Deserializing from an untrusted reader without size limits can lead to memory exhaustion. Use a BufReader with take() to limit input size before deserialization."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"serde_json\") (#eq? @fn \"from_reader\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareAndDataIntegrityFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"
+  test_cases:
+    - code: "let data: Value = serde_json::from_reader(&mut request.body()).unwrap();"
+      expected: TruePositive
+    - code: "let msg: Message = serde_json::from_reader(tcp_stream).unwrap();"
+      expected: TruePositive
+    - code: "let event: Event = serde_json::from_reader(&mut socket).unwrap();"
+      expected: TruePositive
+    - code: "let config: Config = serde_json::from_reader(File::open(\"config.json\").unwrap()).unwrap();"
+      expected: TrueNegative
+    - code: "let data: Data = serde_json::from_reader(BufReader::new(file)).unwrap();"
+      expected: TrueNegative
+    - code: "let limited = serde_json::from_reader(stream.take(MAX_SIZE)).unwrap();"
+      expected: TrueNegative
+
+
+# ============================================================================
+# MEMORY SAFETY RULES (12 rules)
+# ============================================================================
+
+- id: "rust-raw-pointer-deref"
+  name: "Raw Pointer Dereference in Unsafe Block"
+  description: "Dereferencing raw pointers without bounds checking can lead to buffer overflows, use-after-free, or null pointer dereferences. Validate pointer validity and bounds before dereferencing."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(unsafe_block (block (expression_statement (unary_expression operator: \"*\" operand: (identifier) @ptr)))) @unsafe"
+    captures:
+      - "unsafe"
+  cwe_id: "CWE-119"
+  owasp_category: A06_VulnerableAndOutdatedComponents
+  help_uri: "https://doc.rust-lang.org/book/ch19-01-unsafe-rust.html"
+  test_cases:
+    - code: "unsafe { let val = *ptr; }"
+      expected: TruePositive
+    - code: "unsafe { let data = *raw_ptr; }"
+      expected: TruePositive
+    - code: "unsafe { let x = *buffer; }"
+      expected: TruePositive
+    - code: "let val = *boxed_value;"
+      expected: TrueNegative
+    - code: "let x = *reference;"
+      expected: TrueNegative
+    - code: "let data = vec[0];"
+      expected: TrueNegative
+
+- id: "rust-mem-transmute"
+  name: "std::mem::transmute Usage"
+  description: "transmute reinterprets bits of one type as another without any safety checks. This can cause undefined behavior, memory corruption, and type confusion. Use safe alternatives like From/Into traits or bytemuck."
+  severity: Critical
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (scoped_identifier path: (identifier) @std name: (identifier) @mod (#eq? @std \"std\") (#eq? @mod \"mem\")) name: (identifier) @fn (#eq? @fn \"transmute\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-843"
+  owasp_category: A06_VulnerableAndOutdatedComponents
+  help_uri: "https://doc.rust-lang.org/std/mem/fn.transmute.html"
+  test_cases:
+    - code: "let val: u64 = unsafe { std::mem::transmute(float_val) };"
+      expected: TruePositive
+    - code: "let ptr: *mut u8 = unsafe { std::mem::transmute(reference) };"
+      expected: TruePositive
+    - code: "let obj: MyStruct = unsafe { std::mem::transmute(bytes) };"
+      expected: TruePositive
+    - code: "let val: u64 = f64::to_bits(float_val);"
+      expected: TrueNegative
+    - code: "let bytes: [u8; 4] = u32::to_ne_bytes(num);"
+      expected: TrueNegative
+    - code: "let val = bytemuck::cast::<f32, u32>(float_val);"
+      expected: TrueNegative
+
+- id: "rust-slice-from-raw-parts"
+  name: "std::slice::from_raw_parts Usage"
+  description: "from_raw_parts creates a slice from a raw pointer without validating the pointer or length. Invalid pointer or incorrect length causes buffer overflows and undefined behavior."
+  severity: Critical
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (scoped_identifier path: (identifier) @std name: (identifier) @mod (#eq? @std \"std\") (#eq? @mod \"slice\")) name: (identifier) @fn (#match? @fn \"^from_raw_parts\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-119"
+  owasp_category: A06_VulnerableAndOutdatedComponents
+  help_uri: "https://doc.rust-lang.org/std/slice/fn.from_raw_parts.html"
+  test_cases:
+    - code: "let slice = unsafe { std::slice::from_raw_parts(ptr, len) };"
+      expected: TruePositive
+    - code: "let data = unsafe { std::slice::from_raw_parts(buffer, size) };"
+      expected: TruePositive
+    - code: "let bytes = unsafe { std::slice::from_raw_parts_mut(raw, count) };"
+      expected: TruePositive
+    - code: "let slice = &data[..len];"
+      expected: TrueNegative
+    - code: "let slice = vec.as_slice();"
+      expected: TrueNegative
+    - code: "let bytes = &buffer[start..end];"
+      expected: TrueNegative
+
+- id: "rust-ptr-read-write"
+  name: "std::ptr::read / std::ptr::write Usage"
+  description: "std::ptr::read and std::ptr::write bypass Rust's ownership and borrowing rules. Incorrect usage can cause double-free, use-after-free, or uninitialized memory reads."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (scoped_identifier path: (identifier) @std name: (identifier) @mod (#eq? @std \"std\") (#eq? @mod \"ptr\")) name: (identifier) @fn (#match? @fn \"^(read|write|read_volatile|write_volatile|read_unaligned|write_unaligned)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-119"
+  owasp_category: A06_VulnerableAndOutdatedComponents
+  help_uri: "https://doc.rust-lang.org/std/ptr/fn.read.html"
+  test_cases:
+    - code: "let val = unsafe { std::ptr::read(src_ptr) };"
+      expected: TruePositive
+    - code: "unsafe { std::ptr::write(dst_ptr, value) };"
+      expected: TruePositive
+    - code: "let data = unsafe { std::ptr::read_volatile(mmio_addr) };"
+      expected: TruePositive
+    - code: "let val = *reference;"
+      expected: TrueNegative
+    - code: "vec.push(value);"
+      expected: TrueNegative
+    - code: "buffer.copy_from_slice(&source);"
+      expected: TrueNegative
+
+- id: "rust-box-from-raw"
+  name: "Box::from_raw Usage"
+  description: "Box::from_raw takes ownership of a raw pointer. If the pointer was not originally created by Box::into_raw, or if it's used after being freed, this causes undefined behavior."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (scoped_identifier path: (identifier) @std name: (identifier) @type (#eq? @type \"Box\")) name: (identifier) @fn (#eq? @fn \"from_raw\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-416"
+  owasp_category: A06_VulnerableAndOutdatedComponents
+  help_uri: "https://doc.rust-lang.org/std/boxed/struct.Box.html#method.from_raw"
+  test_cases:
+    - code: "let boxed = unsafe { Box::from_raw(ptr) };"
+      expected: TruePositive
+    - code: "let obj = unsafe { Box::from_raw(raw_ptr as *mut MyStruct) };"
+      expected: TruePositive
+    - code: "let data = unsafe { Box::from_raw(external_ptr) };"
+      expected: TruePositive
+    - code: "let boxed = Box::new(value);"
+      expected: TrueNegative
+    - code: "let ptr = Box::into_raw(boxed);"
+      expected: TrueNegative
+    - code: "let arc = Arc::new(data);"
+      expected: TrueNegative
+
+- id: "rust-mem-forget"
+  name: "std::mem::forget Usage (Resource Leak)"
+  description: "mem::forget prevents destructors from running, which can leak resources like file handles, network connections, or memory. Use ManuallyDrop or explicit drop() instead."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (scoped_identifier path: (identifier) @std name: (identifier) @mod (#eq? @std \"std\") (#eq? @mod \"mem\")) name: (identifier) @fn (#eq? @fn \"forget\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-401"
+  owasp_category: A06_VulnerableAndOutdatedComponents
+  help_uri: "https://doc.rust-lang.org/std/mem/fn.forget.html"
+  test_cases:
+    - code: "std::mem::forget(secret_key);"
+      expected: TruePositive
+    - code: "std::mem::forget(connection);"
+      expected: TruePositive
+    - code: "std::mem::forget(file_handle);"
+      expected: TruePositive
+    - code: "drop(secret_key);"
+      expected: TrueNegative
+    - code: "let _ = ManuallyDrop::new(value);"
+      expected: TrueNegative
+    - code: "std::mem::drop(connection);"
+      expected: TrueNegative
+
+- id: "rust-manually-drop-unsafe"
+  name: "ManuallyDrop with Unsafe Access"
+  description: "Accessing the inner value of ManuallyDrop via unsafe methods like take() or into_inner() after the value has been dropped causes use-after-free. Ensure the value is still valid before access."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (scoped_identifier name: (identifier) @type (#eq? @type \"ManuallyDrop\")) name: (identifier) @fn (#match? @fn \"^(take|into_inner)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-416"
+  owasp_category: A06_VulnerableAndOutdatedComponents
+  help_uri: "https://doc.rust-lang.org/std/mem/struct.ManuallyDrop.html"
+  test_cases:
+    - code: "let val = unsafe { ManuallyDrop::take(&mut slot) };"
+      expected: TruePositive
+    - code: "let inner = unsafe { ManuallyDrop::into_inner(wrapper) };"
+      expected: TruePositive
+    - code: "let data = unsafe { ManuallyDrop::take(&mut self.field) };"
+      expected: TruePositive
+    - code: "let md = ManuallyDrop::new(value);"
+      expected: TrueNegative
+    - code: "let reference = &*manually_drop_val;"
+      expected: TrueNegative
+    - code: "drop(value);"
+      expected: TrueNegative
+
+- id: "rust-raw-pointer-cast"
+  name: "Raw Pointer Cast (as *const / as *mut)"
+  description: "Casting references to raw pointers bypasses the borrow checker and can lead to aliasing violations, data races, and undefined behavior if the pointer outlives the reference."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(type_cast_expression type: (pointer_type) @ptr_type) @cast"
+    captures:
+      - "cast"
+  cwe_id: "CWE-119"
+  owasp_category: A06_VulnerableAndOutdatedComponents
+  help_uri: "https://doc.rust-lang.org/book/ch19-01-unsafe-rust.html#dereferencing-a-raw-pointer"
+  test_cases:
+    - code: "let ptr = &data as *const Data;"
+      expected: TruePositive
+    - code: "let raw = &mut buffer as *mut [u8];"
+      expected: TruePositive
+    - code: "let p = value as *const u8;"
+      expected: TruePositive
+    - code: "let reference = &data;"
+      expected: TrueNegative
+    - code: "let slice = &buffer[..];"
+      expected: TrueNegative
+    - code: "let num = value as u64;"
+      expected: TrueNegative
+
+- id: "rust-mem-uninitialized"
+  name: "std::mem::uninitialized / std::mem::zeroed Usage"
+  description: "mem::uninitialized creates uninitialized memory which is instant UB for most types. mem::zeroed is UB for types where zero is not a valid bit pattern (references, enums, bools). Use MaybeUninit instead."
+  severity: Critical
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (scoped_identifier path: (identifier) @std name: (identifier) @mod (#eq? @std \"std\") (#eq? @mod \"mem\")) name: (identifier) @fn (#match? @fn \"^(uninitialized|zeroed)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-908"
+  owasp_category: A06_VulnerableAndOutdatedComponents
+  help_uri: "https://doc.rust-lang.org/std/mem/union.MaybeUninit.html"
+  test_cases:
+    - code: "let val: MyStruct = unsafe { std::mem::uninitialized() };"
+      expected: TruePositive
+    - code: "let buffer: [u8; 1024] = unsafe { std::mem::zeroed() };"
+      expected: TruePositive
+    - code: "let data: ComplexType = unsafe { std::mem::uninitialized() };"
+      expected: TruePositive
+    - code: "let val = MaybeUninit::<MyStruct>::uninit();"
+      expected: TrueNegative
+    - code: "let buffer = vec![0u8; 1024];"
+      expected: TrueNegative
+    - code: "let data = MyStruct::default();"
+      expected: TrueNegative
+
+- id: "rust-vec-set-len"
+  name: "Vec::set_len Without Proper Initialization"
+  description: "Vec::set_len changes the length without initializing elements, exposing uninitialized memory. Always initialize memory (e.g., with write or copy_from_slice) before calling set_len."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (field_expression field: (field_identifier) @method (#eq? @method \"set_len\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-908"
+  owasp_category: A06_VulnerableAndOutdatedComponents
+  help_uri: "https://doc.rust-lang.org/std/vec/struct.Vec.html#method.set_len"
+  test_cases:
+    - code: "unsafe { buffer.set_len(new_len); }"
+      expected: TruePositive
+    - code: "unsafe { vec.set_len(capacity); }"
+      expected: TruePositive
+    - code: "unsafe { output.set_len(bytes_read); }"
+      expected: TruePositive
+    - code: "vec.resize(new_len, 0);"
+      expected: TrueNegative
+    - code: "vec.extend_from_slice(&data);"
+      expected: TrueNegative
+    - code: "let mut vec = vec![0u8; size];"
+      expected: TrueNegative
+
+- id: "rust-string-from-raw-parts"
+  name: "String::from_raw_parts Usage"
+  description: "String::from_raw_parts constructs a String from a raw pointer, length, and capacity without validating UTF-8 or memory ownership. Invalid inputs cause undefined behavior."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (scoped_identifier name: (identifier) @type (#eq? @type \"String\")) name: (identifier) @fn (#eq? @fn \"from_raw_parts\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-119"
+  owasp_category: A06_VulnerableAndOutdatedComponents
+  help_uri: "https://doc.rust-lang.org/std/string/struct.String.html#method.from_raw_parts"
+  test_cases:
+    - code: "let s = unsafe { String::from_raw_parts(ptr, len, cap) };"
+      expected: TruePositive
+    - code: "let text = unsafe { String::from_raw_parts(buffer, size, allocated) };"
+      expected: TruePositive
+    - code: "let name = unsafe { String::from_raw_parts(raw, length, capacity) };"
+      expected: TruePositive
+    - code: "let s = String::from_utf8(bytes).unwrap();"
+      expected: TrueNegative
+    - code: "let s = String::from(\"hello\");"
+      expected: TrueNegative
+    - code: "let s = std::str::from_utf8(&bytes).unwrap().to_string();"
+      expected: TrueNegative
+
+- id: "rust-ptr-null-deref"
+  name: "std::ptr::null / std::ptr::null_mut Patterns"
+  description: "Creating null pointers that may later be dereferenced causes undefined behavior. Use Option<NonNull<T>> or Option<&T> instead of nullable raw pointers."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (scoped_identifier path: (identifier) @std name: (identifier) @mod (#eq? @std \"std\") (#eq? @mod \"ptr\")) name: (identifier) @fn (#match? @fn \"^(null|null_mut)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-476"
+  owasp_category: A06_VulnerableAndOutdatedComponents
+  help_uri: "https://doc.rust-lang.org/std/ptr/fn.null.html"
+  test_cases:
+    - code: "let ptr: *const u8 = std::ptr::null();"
+      expected: TruePositive
+    - code: "let raw: *mut Data = std::ptr::null_mut();"
+      expected: TruePositive
+    - code: "let p = std::ptr::null::<MyStruct>();"
+      expected: TruePositive
+    - code: "let ptr = NonNull::new(raw_ptr);"
+      expected: TrueNegative
+    - code: "let opt: Option<&Data> = None;"
+      expected: TrueNegative
+    - code: "let ptr = &data as *const Data;"
+      expected: TrueNegative
+
+
+# ============================================================================
+# CONCURRENCY RULES (12 rules)
+# ============================================================================
+
+- id: "rust-static-mut"
+  name: "static mut Variable Usage (Data Race)"
+  description: "Accessing static mut variables is inherently unsafe and causes data races in multi-threaded programs. Use std::sync::Mutex, RwLock, or atomic types instead."
+  severity: Critical
+  languages:
+    - Rust
+  pattern:
+    query: "(static_item (mutable_specifier)) @static_mut"
+    captures:
+      - "static_mut"
+  cwe_id: "CWE-362"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://doc.rust-lang.org/reference/items/static-items.html#mutable-statics"
+  test_cases:
+    - code: "static mut COUNTER: u64 = 0;"
+      expected: TruePositive
+    - code: "static mut GLOBAL_STATE: Vec<String> = Vec::new();"
+      expected: TruePositive
+    - code: "static mut CONFIG: Option<Config> = None;"
+      expected: TruePositive
+    - code: "static COUNTER: AtomicU64 = AtomicU64::new(0);"
+      expected: TrueNegative
+    - code: "static CONFIG: Lazy<Mutex<Config>> = Lazy::new(|| Mutex::new(Config::default()));"
+      expected: TrueNegative
+    - code: "static INSTANCE: OnceCell<Config> = OnceCell::new();"
+      expected: TrueNegative
+
+- id: "rust-unsafe-send-impl"
+  name: "Unsafe Send Impl on Types with Raw Pointers"
+  description: "Implementing Send on types containing raw pointers can cause data races and use-after-free when the type is sent across threads. Only implement Send if the type truly owns the pointed-to data."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(impl_item trait: (type_identifier) @trait (#eq? @trait \"Send\") (where_clause)? body: (declaration_list)?) @impl"
+    captures:
+      - "impl"
+  cwe_id: "CWE-362"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://doc.rust-lang.org/nomicon/send-and-sync.html"
+  test_cases:
+    - code: "unsafe impl Send for RawBuffer {}"
+      expected: TruePositive
+    - code: "unsafe impl Send for SharedPtr {}"
+      expected: TruePositive
+    - code: "unsafe impl Send for FfiHandle {}"
+      expected: TruePositive
+    - code: "impl Clone for MyStruct {}"
+      expected: TrueNegative
+    - code: "impl Default for Config {}"
+      expected: TrueNegative
+    - code: "impl Display for Error {}"
+      expected: TrueNegative
+
+- id: "rust-unsafe-sync-impl"
+  name: "Unsafe Sync Impl on Types with Interior Mutability"
+  description: "Implementing Sync on types with interior mutability (UnsafeCell, Cell, RefCell) without proper synchronization causes data races. Use Mutex or RwLock for thread-safe interior mutability."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(impl_item trait: (type_identifier) @trait (#eq? @trait \"Sync\") (where_clause)? body: (declaration_list)?) @impl"
+    captures:
+      - "impl"
+  cwe_id: "CWE-362"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://doc.rust-lang.org/nomicon/send-and-sync.html"
+  test_cases:
+    - code: "unsafe impl Sync for SharedState {}"
+      expected: TruePositive
+    - code: "unsafe impl Sync for UnsafeCellWrapper {}"
+      expected: TruePositive
+    - code: "unsafe impl Sync for MutableGlobal {}"
+      expected: TruePositive
+    - code: "impl Iterator for MyIter {}"
+      expected: TrueNegative
+    - code: "impl From<String> for MyType {}"
+      expected: TrueNegative
+    - code: "impl Debug for Config {}"
+      expected: TrueNegative
+
+- id: "rust-unsafe-cell-shared"
+  name: "UnsafeCell Shared Across Threads"
+  description: "UnsafeCell provides interior mutability without synchronization. Sharing it across threads without external synchronization causes data races. Use Mutex<T> or RwLock<T> instead."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(type_identifier) @type (#eq? @type \"UnsafeCell\")"
+    captures:
+      - "type"
+  cwe_id: "CWE-362"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://doc.rust-lang.org/std/cell/struct.UnsafeCell.html"
+  test_cases:
+    - code: "struct SharedData { inner: UnsafeCell<Vec<u8>> }"
+      expected: TruePositive
+    - code: "let cell: UnsafeCell<i32> = UnsafeCell::new(0);"
+      expected: TruePositive
+    - code: "static DATA: UnsafeCell<Config> = UnsafeCell::new(Config::new());"
+      expected: TruePositive
+    - code: "let data: Mutex<Vec<u8>> = Mutex::new(Vec::new());"
+      expected: TrueNegative
+    - code: "let state: RwLock<Config> = RwLock::new(Config::default());"
+      expected: TrueNegative
+    - code: "let cell: Cell<i32> = Cell::new(0);"
+      expected: TrueNegative
+
+- id: "rust-arc-unsafe-cell"
+  name: "Arc with UnsafeCell Without Synchronization"
+  description: "Wrapping UnsafeCell in Arc allows shared access across threads without synchronization, causing data races. Use Arc<Mutex<T>> or Arc<RwLock<T>> for thread-safe shared state."
+  severity: Critical
+  languages:
+    - Rust
+  pattern:
+    query: "(generic_type type: (type_identifier) @outer (#eq? @outer \"Arc\") type_arguments: (type_arguments (generic_type type: (type_identifier) @inner (#eq? @inner \"UnsafeCell\")))) @type"
+    captures:
+      - "type"
+  cwe_id: "CWE-362"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://doc.rust-lang.org/std/sync/struct.Arc.html"
+  test_cases:
+    - code: "let shared: Arc<UnsafeCell<Data>> = Arc::new(UnsafeCell::new(Data::new()));"
+      expected: TruePositive
+    - code: "type SharedState = Arc<UnsafeCell<Vec<u8>>>;"
+      expected: TruePositive
+    - code: "let state: Arc<UnsafeCell<HashMap<String, String>>> = Arc::new(UnsafeCell::new(HashMap::new()));"
+      expected: TruePositive
+    - code: "let shared: Arc<Mutex<Data>> = Arc::new(Mutex::new(Data::new()));"
+      expected: TrueNegative
+    - code: "let state: Arc<RwLock<Vec<u8>>> = Arc::new(RwLock::new(Vec::new()));"
+      expected: TrueNegative
+    - code: "let data: Arc<AtomicU64> = Arc::new(AtomicU64::new(0));"
+      expected: TrueNegative
+
+- id: "rust-tokio-spawn-shared-state"
+  name: "Shared Mutable State in tokio::spawn Without Mutex"
+  description: "Sharing mutable state across tokio::spawn tasks without Mutex or RwLock causes data races. Wrap shared state in Arc<Mutex<T>> or use message passing with channels."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"tokio\") (#eq? @fn \"spawn\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-362"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://tokio.rs/tokio/tutorial/shared-state"
+  test_cases:
+    - code: "tokio::spawn(async move { shared_vec.push(item); });"
+      expected: TruePositive
+    - code: "tokio::spawn(async { counter += 1; });"
+      expected: TruePositive
+    - code: "tokio::spawn(async move { state.update(data); });"
+      expected: TruePositive
+    - code: "tokio::spawn(async move { let guard = mutex.lock().await; guard.push(item); });"
+      expected: TrueNegative
+    - code: "tokio::spawn(async move { tx.send(message).await.unwrap(); });"
+      expected: TrueNegative
+    - code: "tokio::spawn(async { let data = rx.recv().await; });"
+      expected: TrueNegative
+
+- id: "rust-thread-spawn-raw-pointer"
+  name: "std::thread::spawn with Raw Pointer Capture"
+  description: "Capturing raw pointers in thread::spawn closures can cause use-after-free and data races since raw pointers are not Send. Use Arc<T> or channels for cross-thread data sharing."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (scoped_identifier path: (identifier) @std name: (identifier) @mod (#eq? @std \"std\") (#eq? @mod \"thread\")) name: (identifier) @fn (#eq? @fn \"spawn\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-362"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://doc.rust-lang.org/std/thread/fn.spawn.html"
+  test_cases:
+    - code: "std::thread::spawn(move || unsafe { *ptr += 1; });"
+      expected: TruePositive
+    - code: "std::thread::spawn(move || { let val = unsafe { &*raw_ptr }; });"
+      expected: TruePositive
+    - code: "std::thread::spawn(|| unsafe { (*shared_ptr).process(); });"
+      expected: TruePositive
+    - code: "std::thread::spawn(move || { let guard = mutex.lock().unwrap(); });"
+      expected: TrueNegative
+    - code: "std::thread::spawn(move || { arc_data.load(Ordering::SeqCst); });"
+      expected: TrueNegative
+    - code: "std::thread::spawn(|| { println!(\"worker thread\"); });"
+      expected: TrueNegative
+
+- id: "rust-rc-across-threads"
+  name: "Rc Used Across Thread Boundaries"
+  description: "Rc is not thread-safe — it uses non-atomic reference counting. Using Rc across threads causes data races and memory corruption. Use Arc for thread-safe reference counting."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(generic_type type: (type_identifier) @type (#eq? @type \"Rc\")) @rc_usage"
+    captures:
+      - "rc_usage"
+  cwe_id: "CWE-362"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://doc.rust-lang.org/std/rc/struct.Rc.html"
+  test_cases:
+    - code: "let shared: Rc<RefCell<Vec<u8>>> = Rc::new(RefCell::new(Vec::new()));"
+      expected: TruePositive
+    - code: "let data: Rc<Data> = Rc::new(Data::new());"
+      expected: TruePositive
+    - code: "let state: Rc<Mutex<Config>> = Rc::new(Mutex::new(Config::default()));"
+      expected: TruePositive
+    - code: "let shared: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));"
+      expected: TrueNegative
+    - code: "let data: Arc<Data> = Arc::new(Data::new());"
+      expected: TrueNegative
+    - code: "let state: Arc<RwLock<Config>> = Arc::new(RwLock::new(Config::default()));"
+      expected: TrueNegative
+
+- id: "rust-refcell-in-static"
+  name: "Cell/RefCell in static Without Thread Safety"
+  description: "Cell and RefCell are not Sync — placing them in static variables without thread-safe wrappers causes data races when accessed from multiple threads. Use Mutex or RwLock in static context."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(static_item type: (generic_type type: (type_identifier) @type (#match? @type \"^(Cell|RefCell)$\"))) @static_decl"
+    captures:
+      - "static_decl"
+  cwe_id: "CWE-362"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://doc.rust-lang.org/std/cell/struct.RefCell.html"
+  test_cases:
+    - code: "static STATE: RefCell<Vec<String>> = RefCell::new(Vec::new());"
+      expected: TruePositive
+    - code: "static COUNTER: Cell<u64> = Cell::new(0);"
+      expected: TruePositive
+    - code: "static CONFIG: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());"
+      expected: TruePositive
+    - code: "static STATE: Mutex<Vec<String>> = Mutex::new(Vec::new());"
+      expected: TrueNegative
+    - code: "static COUNTER: AtomicU64 = AtomicU64::new(0);"
+      expected: TrueNegative
+    - code: "static CONFIG: RwLock<HashMap<String, String>> = RwLock::new(HashMap::new());"
+      expected: TrueNegative
+
+- id: "rust-lazy-static-mutable-no-mutex"
+  name: "lazy_static! with Mutable State Without Mutex"
+  description: "Using lazy_static! with mutable collections without Mutex or RwLock causes data races. Always wrap mutable state in Mutex or RwLock within lazy_static!."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(macro_invocation macro: (identifier) @mac (#eq? @mac \"lazy_static\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-362"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://docs.rs/lazy_static/latest/lazy_static/"
+  test_cases:
+    - code: "lazy_static! { static ref CACHE: HashMap<String, Vec<u8>> = HashMap::new(); }"
+      expected: TruePositive
+    - code: "lazy_static! { static ref STATE: Vec<Connection> = Vec::new(); }"
+      expected: TruePositive
+    - code: "lazy_static! { static ref REGISTRY: BTreeMap<String, Handler> = BTreeMap::new(); }"
+      expected: TruePositive
+    - code: "lazy_static! { static ref CACHE: Mutex<HashMap<String, Vec<u8>>> = Mutex::new(HashMap::new()); }"
+      expected: TrueNegative
+    - code: "lazy_static! { static ref CONFIG: RwLock<Config> = RwLock::new(Config::default()); }"
+      expected: TrueNegative
+    - code: "static CACHE: OnceCell<HashMap<String, String>> = OnceCell::new();"
+      expected: TrueNegative
+
+- id: "rust-crossbeam-scope-raw-ptr"
+  name: "Raw Pointer in Crossbeam Scoped Thread"
+  description: "Using raw pointers in crossbeam scoped threads bypasses lifetime guarantees and can cause data races. Use references or Arc for safe cross-thread data sharing."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"crossbeam\") (#eq? @fn \"scope\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-362"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://docs.rs/crossbeam/latest/crossbeam/fn.scope.html"
+  test_cases:
+    - code: "crossbeam::scope(|s| { s.spawn(|_| unsafe { *ptr += 1; }); });"
+      expected: TruePositive
+    - code: "crossbeam::scope(|s| { let raw = &data as *const _; s.spawn(move |_| { unsafe { &*raw } }); });"
+      expected: TruePositive
+    - code: "crossbeam::scope(|s| { s.spawn(|_| { unsafe { (*shared).update(); } }); });"
+      expected: TruePositive
+    - code: "crossbeam::scope(|s| { s.spawn(|_| { println!(\"{}\", &data); }); });"
+      expected: TrueNegative
+    - code: "std::thread::spawn(move || { let guard = mutex.lock().unwrap(); });"
+      expected: TrueNegative
+    - code: "rayon::iter::ParallelIterator::for_each(&items, |item| process(item));"
+      expected: TrueNegative
+
+- id: "rust-atomic-ordering-relaxed-sync"
+  name: "Relaxed Ordering for Synchronization"
+  description: "Using Ordering::Relaxed for atomic operations that synchronize between threads provides no ordering guarantees and can cause subtle data races. Use Acquire/Release or SeqCst for synchronization."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(scoped_identifier path: (identifier) @mod name: (identifier) @variant (#eq? @mod \"Ordering\") (#eq? @variant \"Relaxed\")) @ordering"
+    captures:
+      - "ordering"
+  cwe_id: "CWE-362"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://doc.rust-lang.org/std/sync/atomic/enum.Ordering.html"
+  test_cases:
+    - code: "flag.store(true, Ordering::Relaxed);"
+      expected: TruePositive
+    - code: "let val = counter.load(Ordering::Relaxed);"
+      expected: TruePositive
+    - code: "state.compare_exchange(old, new, Ordering::Relaxed, Ordering::Relaxed);"
+      expected: TruePositive
+    - code: "flag.store(true, Ordering::Release);"
+      expected: TrueNegative
+    - code: "let val = counter.load(Ordering::Acquire);"
+      expected: TrueNegative
+    - code: "state.compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst);"
+      expected: TrueNegative
+

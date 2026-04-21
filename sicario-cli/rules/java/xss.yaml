@@ -1,0 +1,238 @@
+# Cross-Site Scripting (XSS) Rules for Java
+# Covers: unescaped JSP output, Thymeleaf th:utext, Spring MVC response body
+# with user input, Servlet response writer, HttpServletResponse output
+#
+# CWE-79: Improper Neutralization of Input During Web Page Generation
+# OWASP A03:2021 - Injection
+
+# ============================================================================
+# JSP XSS (2 rules)
+# ============================================================================
+
+- id: "java-xss-jsp-expression"
+  name: "JSP Expression with Unescaped Output"
+  description: "Using JSP expressions (<%= %>) outputs data without HTML encoding, enabling XSS. Use JSTL <c:out> or fn:escapeXml() for safe output."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation name: (identifier) @method (#eq? @method \"write\") arguments: (argument_list (binary_expression left: (string_literal) @html (#match? @html \"<\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "out.write(\"<div>\" + userInput + \"</div>\");"
+      expected: TruePositive
+    - code: "out.write(\"<span>\" + request.getParameter(\"name\") + \"</span>\");"
+      expected: TruePositive
+    - code: "out.write(\"<p>\" + message + \"</p>\");"
+      expected: TruePositive
+    - code: "out.write(\"<div>\" + HtmlUtils.htmlEscape(userInput) + \"</div>\");"
+      expected: TrueNegative
+    - code: "out.write(\"<div>static content</div>\");"
+      expected: TrueNegative
+    - code: "out.write(\"plain text without html\");"
+      expected: TrueNegative
+
+- id: "java-xss-printwriter-html"
+  name: "PrintWriter with HTML Content and User Input"
+  description: "Writing HTML content with user input directly to PrintWriter enables XSS. Use output encoding or a template engine with auto-escaping."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#match? @method \"^(println|print|write)$\") arguments: (argument_list (binary_expression left: (string_literal) @html (#match? @html \"<\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "writer.println(\"<html><body>\" + userInput + \"</body></html>\");"
+      expected: TruePositive
+    - code: "response.getWriter().print(\"<div>\" + name + \"</div>\");"
+      expected: TruePositive
+    - code: "pw.write(\"<h1>\" + title + \"</h1>\");"
+      expected: TruePositive
+    - code: "writer.println(ESAPI.encoder().encodeForHTML(userInput));"
+      expected: TrueNegative
+    - code: "writer.println(\"Content-Type: text/plain\");"
+      expected: TrueNegative
+    - code: "writer.println(\"static html page\");"
+      expected: TrueNegative
+
+# ============================================================================
+# Servlet Response XSS (2 rules)
+# ============================================================================
+
+- id: "java-xss-servlet-getparameter-response"
+  name: "Servlet getParameter Reflected in Response"
+  description: "Reflecting request.getParameter() directly in the HTTP response without encoding enables reflected XSS. Encode output using OWASP Java Encoder or HtmlUtils.htmlEscape()."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#match? @obj \"^(request|req|httpRequest)$\") name: (identifier) @method (#eq? @method \"getParameter\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "String name = request.getParameter(\"name\");"
+      expected: TruePositive
+    - code: "String search = req.getParameter(\"q\");"
+      expected: TruePositive
+    - code: "String value = httpRequest.getParameter(\"input\");"
+      expected: TruePositive
+    - code: "String name = HtmlUtils.htmlEscape(request.getParameter(\"name\"));"
+      expected: TrueNegative
+    - code: "int page = Integer.parseInt(request.getParameter(\"page\"));"
+      expected: TrueNegative
+    - code: "String header = request.getHeader(\"Accept\");"
+      expected: TrueNegative
+
+- id: "java-xss-response-setcontenttype-html"
+  name: "Response Content-Type text/html with Dynamic Content"
+  description: "Setting response content type to text/html and writing dynamic content enables XSS. Ensure all dynamic content is HTML-encoded before writing to the response."
+  severity: Medium
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"setContentType\") arguments: (argument_list (string_literal) @type (#match? @type \"text/html\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "response.setContentType(\"text/html\");"
+      expected: TruePositive
+    - code: "resp.setContentType(\"text/html; charset=UTF-8\");"
+      expected: TruePositive
+    - code: "httpResponse.setContentType(\"text/html\");"
+      expected: TruePositive
+    - code: "response.setContentType(\"application/json\");"
+      expected: TrueNegative
+    - code: "response.setContentType(\"text/plain\");"
+      expected: TrueNegative
+    - code: "response.setHeader(\"X-Content-Type-Options\", \"nosniff\");"
+      expected: TrueNegative
+
+# ============================================================================
+# Spring MVC XSS (2 rules)
+# ============================================================================
+
+- id: "java-xss-spring-responsebody-concat"
+  name: "Spring @ResponseBody with HTML String Concatenation"
+  description: "Returning concatenated HTML strings from @ResponseBody methods enables XSS. Use a template engine with auto-escaping or return JSON responses instead."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(return_statement (binary_expression left: (string_literal) @html (#match? @html \"<\") right: (_) @dynamic)) @ret"
+    captures:
+      - "ret"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.spring.io/spring-framework/docs/current/reference/html/web.html#mvc-ann-responsebody"
+  test_cases:
+    - code: "return \"<h1>Welcome \" + username + \"</h1>\";"
+      expected: TruePositive
+    - code: "return \"<div class='result'>\" + searchResult + \"</div>\";"
+      expected: TruePositive
+    - code: "return \"<p>\" + message + \"</p>\";"
+      expected: TruePositive
+    - code: "return ResponseEntity.ok(jsonResponse);"
+      expected: TrueNegative
+    - code: "return \"redirect:/dashboard\";"
+      expected: TrueNegative
+    - code: "return \"<h1>Static Page</h1>\";"
+      expected: TrueNegative
+
+- id: "java-xss-spring-modelandview-userinput"
+  name: "Spring ModelAndView with Unescaped User Input"
+  description: "Adding user input to ModelAndView without encoding can lead to XSS if the view template does not auto-escape. Ensure template auto-escaping is enabled or encode values before adding to the model."
+  severity: Medium
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"addObject\") arguments: (argument_list (string_literal) @key (method_invocation object: (identifier) @req (#match? @req \"^(request|req)$\") name: (identifier) @getter (#eq? @getter \"getParameter\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.spring.io/spring-framework/docs/current/reference/html/web.html#mvc-ann-modelattrib-method-args"
+  test_cases:
+    - code: "mav.addObject(\"name\", request.getParameter(\"name\"));"
+      expected: TruePositive
+    - code: "model.addObject(\"search\", req.getParameter(\"q\"));"
+      expected: TruePositive
+    - code: "mv.addObject(\"message\", request.getParameter(\"msg\"));"
+      expected: TruePositive
+    - code: "mav.addObject(\"name\", HtmlUtils.htmlEscape(name));"
+      expected: TrueNegative
+    - code: "mav.addObject(\"count\", userCount);"
+      expected: TrueNegative
+    - code: "mav.setViewName(\"dashboard\");"
+      expected: TrueNegative
+
+# ============================================================================
+# Thymeleaf XSS (2 rules)
+# ============================================================================
+
+- id: "java-xss-thymeleaf-utext"
+  name: "Thymeleaf th:utext Unescaped Output"
+  description: "Thymeleaf th:utext renders content without HTML escaping, enabling XSS. Use th:text for auto-escaped output instead."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(string_literal) @str (#match? @str \"th:utext\")"
+    captures:
+      - "str"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://www.thymeleaf.org/doc/tutorials/3.1/usingthymeleaf.html#unescaped-text"
+  test_cases:
+    - code: "\"<div th:utext='${userContent}'></div>\""
+      expected: TruePositive
+    - code: "\"<span th:utext='${message}'></span>\""
+      expected: TruePositive
+    - code: "\"<p th:utext='${htmlBody}'></p>\""
+      expected: TruePositive
+    - code: "\"<div th:text='${userContent}'></div>\""
+      expected: TrueNegative
+    - code: "\"<span th:text='${message}'></span>\""
+      expected: TrueNegative
+    - code: "\"<p>Static content</p>\""
+      expected: TrueNegative
+
+- id: "java-xss-thymeleaf-inline-javascript"
+  name: "Thymeleaf Inline JavaScript with User Data"
+  description: "Using th:inline='javascript' with user-controlled data can lead to XSS if not properly escaped. Ensure JavaScript context escaping is applied."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(string_literal) @str (#match? @str \"th:inline=.javascript\")"
+    captures:
+      - "str"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://www.thymeleaf.org/doc/tutorials/3.1/usingthymeleaf.html#javascript-inlining"
+  test_cases:
+    - code: "\"<script th:inline='javascript'>var name = [[${userName}]];</script>\""
+      expected: TruePositive
+    - code: "\"<script th:inline='javascript'>var data = [[${userInput}]];</script>\""
+      expected: TruePositive
+    - code: "\"<script th:inline='javascript'>init([[${config}]]);</script>\""
+      expected: TruePositive
+    - code: "\"<script>var count = 42;</script>\""
+      expected: TrueNegative
+    - code: "\"<div th:text='${name}'></div>\""
+      expected: TrueNegative
+    - code: "\"<script src='/static/app.js'></script>\""
+      expected: TrueNegative

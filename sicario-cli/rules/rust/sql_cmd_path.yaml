@@ -1,0 +1,587 @@
+# SQL Injection, Command Injection, and Path Traversal Rules for Rust
+# Covers: sqlx, diesel, rusqlite, tokio-postgres, sea-orm (SQLi),
+# std::process::Command (CmdInj), std::fs and tokio::fs (Path Traversal)
+#
+# CWE-89: SQL Injection
+# CWE-78: Command Injection
+# CWE-22: Path Traversal
+# OWASP A03:2021 - Injection
+
+# ============================================================================
+# SQL INJECTION RULES (7 rules)
+# ============================================================================
+
+- id: "rust-sqlx-format-query"
+  name: "sqlx::query with format! String"
+  description: "Using format! to build SQL strings passed to sqlx::query allows SQL injection. Use sqlx::query with bind parameters ($1, $2) instead."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"sqlx\") (#eq? @fn \"query\")) arguments: (arguments (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.rs/sqlx/latest/sqlx/fn.query.html"
+  test_cases:
+    - code: "sqlx::query(&format!(\"SELECT * FROM users WHERE id = {}\", user_id)).fetch_one(&pool).await;"
+      expected: TruePositive
+    - code: "sqlx::query(&format!(\"DELETE FROM sessions WHERE token = '{}'\", token)).execute(&pool).await;"
+      expected: TruePositive
+    - code: "sqlx::query(&format!(\"INSERT INTO logs (msg) VALUES ('{}')\", message)).execute(&pool).await;"
+      expected: TruePositive
+    - code: "sqlx::query(\"SELECT * FROM users WHERE id = $1\").bind(user_id).fetch_one(&pool).await;"
+      expected: TrueNegative
+    - code: "sqlx::query(\"SELECT * FROM users\").fetch_all(&pool).await;"
+      expected: TrueNegative
+    - code: "sqlx::query_as!(User, \"SELECT * FROM users WHERE id = $1\", user_id).fetch_one(&pool).await;"
+      expected: TrueNegative
+
+- id: "rust-diesel-sql-query-format"
+  name: "diesel::sql_query with format! String"
+  description: "Using format! to build SQL strings passed to diesel::sql_query allows SQL injection. Use .bind() with parameterized queries instead."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"diesel\") (#eq? @fn \"sql_query\")) arguments: (arguments (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.rs/diesel/latest/diesel/fn.sql_query.html"
+  test_cases:
+    - code: "diesel::sql_query(format!(\"SELECT * FROM users WHERE name = '{}'\", name)).load::<User>(&mut conn);"
+      expected: TruePositive
+    - code: "diesel::sql_query(format!(\"UPDATE users SET role = '{}' WHERE id = {}\", role, id)).execute(&mut conn);"
+      expected: TruePositive
+    - code: "diesel::sql_query(format!(\"DELETE FROM tokens WHERE value = '{}'\", token)).execute(&mut conn);"
+      expected: TruePositive
+    - code: "diesel::sql_query(\"SELECT * FROM users WHERE id = $1\").bind::<Integer, _>(user_id).load::<User>(&mut conn);"
+      expected: TrueNegative
+    - code: "users::table.filter(users::name.eq(&name)).load::<User>(&mut conn);"
+      expected: TrueNegative
+    - code: "diesel::sql_query(\"SELECT count(*) FROM users\").load::<Count>(&mut conn);"
+      expected: TrueNegative
+
+- id: "rust-rusqlite-execute-format"
+  name: "rusqlite execute/prepare with format! String"
+  description: "Using format! to build SQL strings passed to rusqlite execute or prepare allows SQL injection. Use parameterized queries with params![] instead."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (field_expression field: (field_identifier) @method (#match? @method \"^(execute|prepare|execute_batch|query_row)$\")) arguments: (arguments (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.rs/rusqlite/latest/rusqlite/struct.Connection.html"
+  test_cases:
+    - code: "conn.execute(&format!(\"INSERT INTO users (name) VALUES ('{}')\", name), []);"
+      expected: TruePositive
+    - code: "conn.prepare(&format!(\"SELECT * FROM users WHERE id = {}\", id));"
+      expected: TruePositive
+    - code: "conn.query_row(&format!(\"SELECT name FROM users WHERE email = '{}'\", email), [], |row| row.get(0));"
+      expected: TruePositive
+    - code: "conn.execute(\"INSERT INTO users (name) VALUES (?1)\", params![name]);"
+      expected: TrueNegative
+    - code: "conn.prepare(\"SELECT * FROM users WHERE id = ?1\");"
+      expected: TrueNegative
+    - code: "conn.execute(\"CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY)\", []);"
+      expected: TrueNegative
+
+- id: "rust-tokio-postgres-format-query"
+  name: "tokio-postgres query with format! String"
+  description: "Using format! to build SQL strings passed to tokio-postgres query/execute allows SQL injection. Use parameterized queries with $1 placeholders instead."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (field_expression field: (field_identifier) @method (#match? @method \"^(query|query_one|query_opt|execute)$\")) arguments: (arguments . (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.rs/tokio-postgres/latest/tokio_postgres/"
+  test_cases:
+    - code: "client.query(&format!(\"SELECT * FROM users WHERE id = {}\", id), &[]).await;"
+      expected: TruePositive
+    - code: "client.execute(&format!(\"DELETE FROM sessions WHERE user_id = {}\", uid), &[]).await;"
+      expected: TruePositive
+    - code: "client.query_one(&format!(\"SELECT role FROM users WHERE name = '{}'\", name), &[]).await;"
+      expected: TruePositive
+    - code: "client.query(\"SELECT * FROM users WHERE id = $1\", &[&user_id]).await;"
+      expected: TrueNegative
+    - code: "client.execute(\"DELETE FROM sessions WHERE user_id = $1\", &[&uid]).await;"
+      expected: TrueNegative
+    - code: "client.query(\"SELECT * FROM users\", &[]).await;"
+      expected: TrueNegative
+
+- id: "rust-sql-string-concat"
+  name: "SQL String Concatenation in Query"
+  description: "Concatenating variables into SQL strings allows SQL injection. Use parameterized queries instead."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(let_declaration value: (binary_expression left: (string_literal) @left (#match? @left \"(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|UNION|FROM|WHERE)\") right: (_) @right)) @decl"
+    captures:
+      - "decl"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "let query = \"SELECT * FROM users WHERE id = \".to_owned() + &user_id;"
+      expected: TruePositive
+    - code: "let query = \"DELETE FROM sessions WHERE token = '\" + &token + \"'\";"
+      expected: TruePositive
+    - code: "let query = \"INSERT INTO logs VALUES ('\" + &msg + \"')\";"
+      expected: TruePositive
+    - code: "let query = \"SELECT * FROM users WHERE id = $1\";"
+      expected: TrueNegative
+    - code: "let msg = \"Hello \".to_owned() + &name;"
+      expected: TrueNegative
+    - code: "let path = \"/api/\".to_owned() + &endpoint;"
+      expected: TrueNegative
+
+- id: "rust-sea-orm-raw-format"
+  name: "sea-orm Raw SQL with format! String"
+  description: "Using format! to build SQL strings in sea-orm raw queries allows SQL injection. Use Statement::from_sql_and_values with parameterized queries instead."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier name: (identifier) @fn (#match? @fn \"^(from_raw_sql|execute_unprepared)$\")) arguments: (arguments (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://www.sea-ql.org/SeaORM/docs/basic-crud/raw-sql/"
+  test_cases:
+    - code: "Statement::from_raw_sql(format!(\"SELECT * FROM users WHERE id = {}\", id));"
+      expected: TruePositive
+    - code: "db.execute_unprepared(&format!(\"DROP TABLE {}\", table_name)).await;"
+      expected: TruePositive
+    - code: "Statement::from_raw_sql(format!(\"UPDATE users SET active = {} WHERE name = '{}'\", status, name));"
+      expected: TruePositive
+    - code: "Statement::from_sql_and_values(DbBackend::Postgres, \"SELECT * FROM users WHERE id = $1\", [id.into()]);"
+      expected: TrueNegative
+    - code: "Entity::find().filter(Column::Id.eq(user_id)).one(&db).await;"
+      expected: TrueNegative
+    - code: "db.execute_unprepared(\"CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY)\").await;"
+      expected: TrueNegative
+
+- id: "rust-generic-format-sql"
+  name: "format! Macro Producing SQL String"
+  description: "Using format! to construct strings containing SQL keywords is a strong indicator of SQL injection vulnerability. Use parameterized queries instead."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(macro_invocation macro: (identifier) @mac (#eq? @mac \"format\") (token_tree (string_literal) @sql (#match? @sql \"(?i)(SELECT .* FROM|INSERT INTO|UPDATE .* SET|DELETE FROM|DROP TABLE)\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "let q = format!(\"SELECT * FROM users WHERE name = '{}'\", name);"
+      expected: TruePositive
+    - code: "let q = format!(\"INSERT INTO audit_log (action) VALUES ('{}')\", action);"
+      expected: TruePositive
+    - code: "let q = format!(\"DELETE FROM sessions WHERE user_id = {}\", uid);"
+      expected: TruePositive
+    - code: "let msg = format!(\"Hello, {}!\", name);"
+      expected: TrueNegative
+    - code: "let path = format!(\"/api/v1/{}/profile\", user_id);"
+      expected: TrueNegative
+    - code: "let log = format!(\"Processing request #{}\", req_id);"
+      expected: TrueNegative
+
+# ============================================================================
+# COMMAND INJECTION RULES (7 rules)
+# ============================================================================
+
+- id: "rust-command-new-variable"
+  name: "Command::new with Variable Program Name"
+  description: "Using a variable as the program name in Command::new allows command injection if the variable is user-controlled. Use a hardcoded program name or validate against an allowlist."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (scoped_identifier) @path name: (identifier) @fn (#eq? @fn \"new\")) arguments: (arguments (identifier) @arg)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://doc.rust-lang.org/std/process/struct.Command.html"
+  test_cases:
+    - code: "Command::new(user_program).arg(\"--version\").output();"
+      expected: TruePositive
+    - code: "Command::new(program_name).args(&[\"--help\"]).spawn();"
+      expected: TruePositive
+    - code: "Command::new(cmd).arg(filename).output();"
+      expected: TruePositive
+    - code: "Command::new(\"ls\").arg(\"-la\").output();"
+      expected: TrueNegative
+    - code: "Command::new(\"git\").args(&[\"status\"]).output();"
+      expected: TrueNegative
+    - code: "Command::new(\"/usr/bin/python3\").arg(\"script.py\").spawn();"
+      expected: TrueNegative
+
+- id: "rust-command-arg-format"
+  name: "Command .arg() with format! Macro"
+  description: "Using format! to build command arguments allows injection of unexpected flags or values. Pass arguments individually without string interpolation."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (field_expression field: (field_identifier) @method (#eq? @method \"arg\")) arguments: (arguments (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://doc.rust-lang.org/std/process/struct.Command.html#method.arg"
+  test_cases:
+    - code: "Command::new(\"grep\").arg(format!(\"{} {}\", pattern, filename)).output();"
+      expected: TruePositive
+    - code: "Command::new(\"curl\").arg(format!(\"https://example.com/{}\", user_path)).output();"
+      expected: TruePositive
+    - code: "Command::new(\"ffmpeg\").arg(format!(\"-i {}\", input_file)).output();"
+      expected: TruePositive
+    - code: "Command::new(\"grep\").arg(pattern).arg(filename).output();"
+      expected: TrueNegative
+    - code: "Command::new(\"echo\").arg(\"hello\").output();"
+      expected: TrueNegative
+    - code: "Command::new(\"ls\").arg(\"-la\").arg(\"/tmp\").output();"
+      expected: TrueNegative
+
+- id: "rust-command-shell-sh"
+  name: "Command::new(\"sh\") with -c Flag"
+  description: "Invoking a shell with -c and a command string allows arbitrary command execution. Avoid shell invocations; use Command::new with the target binary directly."
+  severity: Critical
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier name: (identifier) @fn (#eq? @fn \"new\")) arguments: (arguments (string_literal) @prog (#match? @prog \"^\\\"(sh|bash|zsh|dash)\\\"$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "Command::new(\"sh\").arg(\"-c\").arg(&user_command).output();"
+      expected: TruePositive
+    - code: "Command::new(\"bash\").arg(\"-c\").arg(format!(\"echo {}\", input)).output();"
+      expected: TruePositive
+    - code: "Command::new(\"sh\").arg(\"-c\").arg(&format!(\"rm -rf {}\", path)).output();"
+      expected: TruePositive
+    - code: "Command::new(\"git\").arg(\"status\").output();"
+      expected: TrueNegative
+    - code: "Command::new(\"ls\").arg(\"-la\").output();"
+      expected: TrueNegative
+    - code: "Command::new(\"python3\").arg(\"script.py\").output();"
+      expected: TrueNegative
+
+- id: "rust-command-shell-cmd"
+  name: "Command::new(\"cmd\") with /c Flag"
+  description: "Invoking cmd.exe with /c and a command string allows arbitrary command execution on Windows. Avoid shell invocations; use Command::new with the target binary directly."
+  severity: Critical
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier name: (identifier) @fn (#eq? @fn \"new\")) arguments: (arguments (string_literal) @prog (#match? @prog \"^\\\"(cmd|cmd\\\\.exe)\\\"$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "Command::new(\"cmd\").arg(\"/c\").arg(&user_command).output();"
+      expected: TruePositive
+    - code: "Command::new(\"cmd.exe\").arg(\"/c\").arg(format!(\"del {}\", file)).output();"
+      expected: TruePositive
+    - code: "Command::new(\"cmd\").arg(\"/c\").arg(&format!(\"type {}\", path)).output();"
+      expected: TruePositive
+    - code: "Command::new(\"notepad.exe\").arg(\"file.txt\").output();"
+      expected: TrueNegative
+    - code: "Command::new(\"dir\").output();"
+      expected: TrueNegative
+    - code: "Command::new(\"git\").arg(\"log\").output();"
+      expected: TrueNegative
+
+- id: "rust-command-env-var"
+  name: "Command::new with Environment Variable"
+  description: "Using an environment variable as the program in Command::new allows command injection if the environment is attacker-controlled. Validate or hardcode the program path."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier name: (identifier) @fn (#eq? @fn \"new\")) arguments: (arguments (call_expression function: (scoped_identifier name: (identifier) @env_fn (#match? @env_fn \"^(var|var_os)$\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://doc.rust-lang.org/std/env/fn.var.html"
+  test_cases:
+    - code: "Command::new(std::env::var(\"EDITOR\").unwrap()).arg(filename).spawn();"
+      expected: TruePositive
+    - code: "Command::new(env::var(\"SHELL\").unwrap_or_default()).arg(\"-c\").arg(cmd).output();"
+      expected: TruePositive
+    - code: "Command::new(env::var(\"BROWSER\").expect(\"no browser\")).arg(url).spawn();"
+      expected: TruePositive
+    - code: "Command::new(\"vim\").arg(filename).spawn();"
+      expected: TrueNegative
+    - code: "let editor = std::env::var(\"EDITOR\").unwrap_or(\"vi\".to_string());"
+      expected: TrueNegative
+    - code: "Command::new(\"/usr/bin/less\").arg(filename).spawn();"
+      expected: TrueNegative
+
+- id: "rust-command-web-input"
+  name: "Command with Web Framework User Input"
+  description: "Passing user input from web framework extractors directly to Command allows command injection. Validate and sanitize all user input before use in commands."
+  severity: Critical
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (field_expression field: (field_identifier) @method (#match? @method \"^(arg|args)$\")) arguments: (arguments (field_expression object: (identifier) @obj (#match? @obj \"^(params|query|body|payload|path|form|req|request)$\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "Command::new(\"convert\").arg(params.filename).output();"
+      expected: TruePositive
+    - code: "Command::new(\"ffmpeg\").arg(body.input_path).output();"
+      expected: TruePositive
+    - code: "Command::new(\"wc\").arg(query.file).output();"
+      expected: TruePositive
+    - code: "Command::new(\"convert\").arg(\"--resize\").arg(\"100x100\").output();"
+      expected: TrueNegative
+    - code: "Command::new(\"wc\").arg(\"-l\").arg(\"known_file.txt\").output();"
+      expected: TrueNegative
+    - code: "let count = params.count;"
+      expected: TrueNegative
+
+- id: "rust-shell-format-string"
+  name: "Shell Command String Building with format!"
+  description: "Building shell command strings with format! for later execution enables command injection. Use Command::new with separate arguments instead of shell strings."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(let_declaration pattern: (identifier) @var (#match? @var \"(?i)(cmd|command|shell|exec|script)\") value: (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\") (token_tree (string_literal) @str (#match? @str \"(rm|cp|mv|cat|echo|curl|wget|chmod|chown|kill|sudo|apt|yum|pip|npm)\")))) @decl"
+    captures:
+      - "decl"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "let cmd = format!(\"rm -rf {}\", user_path);"
+      expected: TruePositive
+    - code: "let shell_cmd = format!(\"curl -o /tmp/file {}\", url);"
+      expected: TruePositive
+    - code: "let command = format!(\"chmod {} {}\", perms, filepath);"
+      expected: TruePositive
+    - code: "let msg = format!(\"Processing file: {}\", name);"
+      expected: TrueNegative
+    - code: "let url = format!(\"https://api.example.com/{}\", endpoint);"
+      expected: TrueNegative
+    - code: "let log_line = format!(\"[{}] Request completed\", timestamp);"
+      expected: TrueNegative
+
+# ============================================================================
+# PATH TRAVERSAL RULES (7 rules)
+# ============================================================================
+
+- id: "rust-fs-read-format"
+  name: "std::fs::read with format! Path"
+  description: "Using format! to construct file paths passed to std::fs::read allows path traversal attacks. Validate and canonicalize paths before use."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (scoped_identifier) @path name: (identifier) @fn (#eq? @fn \"read\")) arguments: (arguments (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "let data = std::fs::read(format!(\"/uploads/{}\", user_filename)).unwrap();"
+      expected: TruePositive
+    - code: "let content = fs::read(format!(\"./data/{}/{}\", tenant_id, file_name)).unwrap();"
+      expected: TruePositive
+    - code: "let bytes = std::fs::read(format!(\"{}/{}\", base_dir, request_path)).unwrap();"
+      expected: TruePositive
+    - code: "let data = std::fs::read(\"config/settings.toml\").unwrap();"
+      expected: TrueNegative
+    - code: "let data = std::fs::read(Path::new(\"static\").join(\"index.html\")).unwrap();"
+      expected: TrueNegative
+    - code: "let data = std::fs::read(canonical_path).unwrap();"
+      expected: TrueNegative
+
+- id: "rust-fs-write-format"
+  name: "std::fs::write with format! Path"
+  description: "Using format! to construct file paths passed to std::fs::write allows path traversal attacks. Validate and canonicalize paths before use."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (scoped_identifier) @path name: (identifier) @fn (#eq? @fn \"write\")) arguments: (arguments . (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "std::fs::write(format!(\"/tmp/{}\", user_filename), data).unwrap();"
+      expected: TruePositive
+    - code: "fs::write(format!(\"./uploads/{}\", filename), &content).unwrap();"
+      expected: TruePositive
+    - code: "std::fs::write(format!(\"{}/{}\", output_dir, name), bytes).unwrap();"
+      expected: TruePositive
+    - code: "std::fs::write(\"output/report.json\", json_data).unwrap();"
+      expected: TrueNegative
+    - code: "fs::write(safe_path, content).unwrap();"
+      expected: TrueNegative
+    - code: "std::fs::write(Path::new(\"logs\").join(\"app.log\"), log_data).unwrap();"
+      expected: TrueNegative
+
+- id: "rust-file-open-format"
+  name: "File::open with format! Path"
+  description: "Using format! to construct file paths passed to File::open allows path traversal attacks. Validate and canonicalize paths before use."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (scoped_identifier) @path name: (identifier) @fn (#match? @fn \"^(open|create)$\")) arguments: (arguments (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A03_Injection
+  help_uri: "https://doc.rust-lang.org/std/fs/struct.File.html#method.open"
+  test_cases:
+    - code: "let file = File::open(format!(\"/data/{}\", user_input)).unwrap();"
+      expected: TruePositive
+    - code: "let f = File::create(format!(\"./output/{}\", filename)).unwrap();"
+      expected: TruePositive
+    - code: "let handle = File::open(format!(\"{}/{}\", base, request.path)).unwrap();"
+      expected: TruePositive
+    - code: "let file = File::open(\"config.toml\").unwrap();"
+      expected: TrueNegative
+    - code: "let f = File::create(\"output/results.json\").unwrap();"
+      expected: TrueNegative
+    - code: "let file = File::open(validated_path).unwrap();"
+      expected: TrueNegative
+
+- id: "rust-tokio-fs-format"
+  name: "tokio::fs Operations with format! Path"
+  description: "Using format! to construct file paths in tokio::fs async operations allows path traversal attacks. Validate and canonicalize paths before use."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (scoped_identifier) @path (#match? @path \"fs\") name: (identifier) @fn (#match? @fn \"^(read|write|read_to_string|remove_file|copy|rename)$\")) arguments: (arguments . (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.rs/tokio/latest/tokio/fs/index.html"
+  test_cases:
+    - code: "tokio::fs::read(format!(\"/uploads/{}\", filename)).await.unwrap();"
+      expected: TruePositive
+    - code: "tokio::fs::write(format!(\"./cache/{}\", key), data).await.unwrap();"
+      expected: TruePositive
+    - code: "tokio::fs::read_to_string(format!(\"{}/{}\", dir, user_file)).await.unwrap();"
+      expected: TruePositive
+    - code: "tokio::fs::read(\"config/app.toml\").await.unwrap();"
+      expected: TrueNegative
+    - code: "tokio::fs::write(safe_path, content).await.unwrap();"
+      expected: TrueNegative
+    - code: "tokio::fs::read_to_string(\"static/index.html\").await.unwrap();"
+      expected: TrueNegative
+
+- id: "rust-fs-read-to-string-variable"
+  name: "std::fs::read_to_string with Unsanitized Variable"
+  description: "Passing user-controlled variables directly to std::fs::read_to_string allows path traversal. Validate paths against a base directory and canonicalize before use."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (scoped_identifier) @path name: (identifier) @fn (#eq? @fn \"read_to_string\")) arguments: (arguments (field_expression object: (identifier) @obj (#match? @obj \"^(params|query|body|payload|path|form|req|request|input)$\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "let content = fs::read_to_string(params.filepath).unwrap();"
+      expected: TruePositive
+    - code: "let data = std::fs::read_to_string(query.filename).unwrap();"
+      expected: TruePositive
+    - code: "let text = fs::read_to_string(request.path).unwrap();"
+      expected: TruePositive
+    - code: "let content = fs::read_to_string(\"README.md\").unwrap();"
+      expected: TrueNegative
+    - code: "let data = std::fs::read_to_string(validated_path).unwrap();"
+      expected: TrueNegative
+    - code: "let config = fs::read_to_string(\"config/settings.toml\").unwrap();"
+      expected: TrueNegative
+
+- id: "rust-path-new-user-input"
+  name: "Path::new with User Input from Web Framework"
+  description: "Constructing paths from user-controlled web framework input allows path traversal. Validate input does not contain '..' and canonicalize the resulting path."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (scoped_identifier) @path name: (identifier) @fn (#eq? @fn \"new\")) arguments: (arguments (field_expression object: (identifier) @obj (#match? @obj \"^(params|query|body|payload|path|form|req|request|input)$\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "let p = Path::new(&params.filename);"
+      expected: TruePositive
+    - code: "let file_path = Path::new(&query.path);"
+      expected: TruePositive
+    - code: "let target = Path::new(&body.destination);"
+      expected: TruePositive
+    - code: "let p = Path::new(\"static/assets\");"
+      expected: TrueNegative
+    - code: "let p = Path::new(&config.data_dir);"
+      expected: TrueNegative
+    - code: "let p = Path::new(\"/var/log/app.log\");"
+      expected: TrueNegative
+
+- id: "rust-fs-remove-format"
+  name: "std::fs::remove_file with format! Path"
+  description: "Using format! to construct file paths passed to std::fs::remove_file allows path traversal attacks leading to arbitrary file deletion. Validate and canonicalize paths before use."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (scoped_identifier) @path name: (identifier) @fn (#match? @fn \"^(remove_file|remove_dir|remove_dir_all)$\")) arguments: (arguments (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "std::fs::remove_file(format!(\"/tmp/{}\", user_filename)).unwrap();"
+      expected: TruePositive
+    - code: "fs::remove_dir_all(format!(\"./uploads/{}\", session_id)).unwrap();"
+      expected: TruePositive
+    - code: "std::fs::remove_file(format!(\"{}/{}\", cache_dir, request.key)).unwrap();"
+      expected: TruePositive
+    - code: "std::fs::remove_file(\"temp/cache.tmp\").unwrap();"
+      expected: TrueNegative
+    - code: "fs::remove_dir_all(\"target/debug\").unwrap();"
+      expected: TrueNegative
+    - code: "std::fs::remove_file(validated_path).unwrap();"
+      expected: TrueNegative

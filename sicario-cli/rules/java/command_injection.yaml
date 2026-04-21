@@ -1,0 +1,236 @@
+# Command Injection Rules for Java
+# Covers: Runtime.exec with unsanitized input, ProcessBuilder with user args,
+# JNDI injection via InitialContext.lookup, Runtime.getRuntime().exec(),
+# ProcessBuilder with shell commands
+#
+# CWE-78: Improper Neutralization of Special Elements used in an OS Command
+# CWE-917: Improper Neutralization of Special Elements used in an Expression Language Statement (JNDI)
+# OWASP A03:2021 - Injection
+
+# ============================================================================
+# Runtime.exec Command Injection (3 rules)
+# ============================================================================
+
+- id: "java-cmdi-runtime-exec-concat"
+  name: "Runtime.exec with String Concatenation"
+  description: "Concatenating user input into Runtime.exec() command strings allows command injection. Use ProcessBuilder with separate arguments and validate input against an allowlist."
+  severity: Critical
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (method_invocation object: (identifier) @rt (#eq? @rt \"Runtime\") name: (identifier) @gr (#eq? @gr \"getRuntime\")) name: (identifier) @method (#eq? @method \"exec\") arguments: (argument_list (binary_expression))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html"
+  test_cases:
+    - code: "Runtime.getRuntime().exec(\"cmd /c \" + userCommand);"
+      expected: TruePositive
+    - code: "Runtime.getRuntime().exec(\"ping \" + hostname);"
+      expected: TruePositive
+    - code: "Runtime.getRuntime().exec(\"/bin/sh -c \" + script);"
+      expected: TruePositive
+    - code: "Runtime.getRuntime().exec(new String[]{\"ping\", \"-c\", \"1\", \"localhost\"});"
+      expected: TrueNegative
+    - code: "Runtime.getRuntime().exec(\"ls -la /tmp\");"
+      expected: TrueNegative
+    - code: "Runtime.getRuntime().availableProcessors();"
+      expected: TrueNegative
+
+- id: "java-cmdi-runtime-exec-format"
+  name: "Runtime.exec with String.format"
+  description: "Using String.format to build command strings for Runtime.exec allows command injection. Use ProcessBuilder with an argument array instead."
+  severity: Critical
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (method_invocation object: (identifier) @rt (#eq? @rt \"Runtime\") name: (identifier) @gr (#eq? @gr \"getRuntime\")) name: (identifier) @method (#eq? @method \"exec\") arguments: (argument_list (method_invocation object: (identifier) @fmt (#eq? @fmt \"String\") name: (identifier) @fn (#eq? @fn \"format\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html"
+  test_cases:
+    - code: "Runtime.getRuntime().exec(String.format(\"nslookup %s\", domain));"
+      expected: TruePositive
+    - code: "Runtime.getRuntime().exec(String.format(\"convert %s output.png\", inputFile));"
+      expected: TruePositive
+    - code: "Runtime.getRuntime().exec(String.format(\"chmod %s %s\", perms, filePath));"
+      expected: TruePositive
+    - code: "Runtime.getRuntime().exec(new String[]{\"nslookup\", domain});"
+      expected: TrueNegative
+    - code: "String msg = String.format(\"Processing %s\", name);"
+      expected: TrueNegative
+    - code: "Runtime.getRuntime().gc();"
+      expected: TrueNegative
+
+- id: "java-cmdi-runtime-exec-variable"
+  name: "Runtime.exec with Variable Command"
+  description: "Passing a variable directly to Runtime.exec() allows command injection if the variable is user-controlled. Validate against an allowlist of permitted commands."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (method_invocation object: (identifier) @rt (#eq? @rt \"Runtime\") name: (identifier) @gr (#eq? @gr \"getRuntime\")) name: (identifier) @method (#eq? @method \"exec\") arguments: (argument_list (identifier) @cmd)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html"
+  test_cases:
+    - code: "Runtime.getRuntime().exec(userCommand);"
+      expected: TruePositive
+    - code: "Runtime.getRuntime().exec(command);"
+      expected: TruePositive
+    - code: "Runtime.getRuntime().exec(shellCmd);"
+      expected: TruePositive
+    - code: "Runtime.getRuntime().exec(\"ls -la\");"
+      expected: TrueNegative
+    - code: "Runtime.getRuntime().exec(new String[]{\"git\", \"status\"});"
+      expected: TrueNegative
+    - code: "Runtime.getRuntime().totalMemory();"
+      expected: TrueNegative
+
+# ============================================================================
+# ProcessBuilder Command Injection (3 rules)
+# ============================================================================
+
+- id: "java-cmdi-processbuilder-shell"
+  name: "ProcessBuilder with Shell Invocation"
+  description: "Using ProcessBuilder to invoke a shell (sh, bash, cmd) with user input enables arbitrary command execution. Execute the target binary directly without a shell intermediary."
+  severity: Critical
+  languages:
+    - Java
+  pattern:
+    query: "(object_creation_expression type: (type_identifier) @type (#eq? @type \"ProcessBuilder\") arguments: (argument_list (string_literal) @shell (#match? @shell \"^\\\"(sh|bash|cmd|cmd\\\\.exe|/bin/sh|/bin/bash)\\\"$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html"
+  test_cases:
+    - code: "new ProcessBuilder(\"sh\", \"-c\", userCommand).start();"
+      expected: TruePositive
+    - code: "new ProcessBuilder(\"bash\", \"-c\", script).start();"
+      expected: TruePositive
+    - code: "new ProcessBuilder(\"cmd\", \"/c\", command).start();"
+      expected: TruePositive
+    - code: "new ProcessBuilder(\"git\", \"status\").start();"
+      expected: TrueNegative
+    - code: "new ProcessBuilder(\"ls\", \"-la\").start();"
+      expected: TrueNegative
+    - code: "new ProcessBuilder(\"python3\", \"script.py\").start();"
+      expected: TrueNegative
+
+- id: "java-cmdi-processbuilder-variable-command"
+  name: "ProcessBuilder with Variable Command"
+  description: "Passing a variable as the command to ProcessBuilder allows command injection if the variable is user-controlled. Use a hardcoded command name or validate against an allowlist."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(object_creation_expression type: (type_identifier) @type (#eq? @type \"ProcessBuilder\") arguments: (argument_list . (identifier) @cmd)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html"
+  test_cases:
+    - code: "new ProcessBuilder(programName, arg1, arg2).start();"
+      expected: TruePositive
+    - code: "new ProcessBuilder(command).start();"
+      expected: TruePositive
+    - code: "new ProcessBuilder(userProgram, \"--version\").start();"
+      expected: TruePositive
+    - code: "new ProcessBuilder(\"git\", \"log\").start();"
+      expected: TrueNegative
+    - code: "new ProcessBuilder(\"echo\", \"hello\").start();"
+      expected: TrueNegative
+    - code: "ProcessBuilder pb = new ProcessBuilder(\"ls\");"
+      expected: TrueNegative
+
+- id: "java-cmdi-processbuilder-command-list"
+  name: "ProcessBuilder.command with User Input List"
+  description: "Setting ProcessBuilder.command() with a list containing user input allows command injection. Validate all command arguments against an allowlist."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"command\") arguments: (argument_list (method_invocation name: (identifier) @fn (#match? @fn \"^(asList|of)$\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html"
+  test_cases:
+    - code: "pb.command(Arrays.asList(\"sh\", \"-c\", userInput));"
+      expected: TruePositive
+    - code: "builder.command(List.of(\"bash\", \"-c\", command));"
+      expected: TruePositive
+    - code: "pb.command(Arrays.asList(program, arg1, arg2));"
+      expected: TruePositive
+    - code: "pb.command(\"git\", \"status\");"
+      expected: TrueNegative
+    - code: "pb.directory(new File(\"/tmp\"));"
+      expected: TrueNegative
+    - code: "pb.redirectErrorStream(true);"
+      expected: TrueNegative
+
+# ============================================================================
+# JNDI Injection (2 rules)
+# ============================================================================
+
+- id: "java-cmdi-jndi-lookup-variable"
+  name: "JNDI InitialContext.lookup with Variable"
+  description: "Passing user-controlled input to InitialContext.lookup() enables JNDI injection (Log4Shell-style attacks). Validate JNDI names against an allowlist of permitted resources."
+  severity: Critical
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"lookup\") arguments: (argument_list (identifier) @arg)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-917"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/JNDI_Injection_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "ctx.lookup(userInput);"
+      expected: TruePositive
+    - code: "context.lookup(jndiName);"
+      expected: TruePositive
+    - code: "initialContext.lookup(resourceName);"
+      expected: TruePositive
+    - code: "ctx.lookup(\"java:comp/env/jdbc/myDB\");"
+      expected: TrueNegative
+    - code: "ctx.lookup(\"java:comp/env/mail/Session\");"
+      expected: TrueNegative
+    - code: "ctx.close();"
+      expected: TrueNegative
+
+- id: "java-cmdi-jndi-lookup-concat"
+  name: "JNDI InitialContext.lookup with String Concatenation"
+  description: "Concatenating user input into JNDI lookup strings enables JNDI injection. Use a hardcoded JNDI name or validate against an allowlist."
+  severity: Critical
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"lookup\") arguments: (argument_list (binary_expression left: (string_literal) @prefix right: (_) @dynamic))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-917"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/JNDI_Injection_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "ctx.lookup(\"java:comp/env/\" + userInput);"
+      expected: TruePositive
+    - code: "context.lookup(\"ldap://\" + host + \"/\" + dn);"
+      expected: TruePositive
+    - code: "ctx.lookup(\"rmi://\" + serverAddress + \"/service\");"
+      expected: TruePositive
+    - code: "ctx.lookup(\"java:comp/env/jdbc/myDB\");"
+      expected: TrueNegative
+    - code: "ctx.bind(\"java:comp/env/myBean\", bean);"
+      expected: TrueNegative
+    - code: "ctx.close();"
+      expected: TrueNegative

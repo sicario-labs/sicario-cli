@@ -1,0 +1,221 @@
+# XML External Entity (XXE) Rules for Python
+# Covers: xml.etree.ElementTree.parse, lxml.etree.parse, xml.sax without disabling external entities
+#
+# CWE-611: Improper Restriction of XML External Entity Reference
+# OWASP A05:2021 - Security Misconfiguration
+
+- id: "py-etree-parse"
+  name: "xml.etree.ElementTree.parse() with Untrusted Input"
+  description: "xml.etree.ElementTree.parse() is vulnerable to XXE attacks. Use defusedxml.ElementTree instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#match? @mod \"^(ET|ElementTree|etree)$\") attribute: (identifier) @fn (#eq? @fn \"parse\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.python.org/3/library/xml.html#xml-vulnerabilities"
+  test_cases:
+    - code: "ET.parse(user_file)"
+      expected: TruePositive
+    - code: "ElementTree.parse(uploaded_xml)"
+      expected: TruePositive
+    - code: "etree.parse(request.files['xml'])"
+      expected: TruePositive
+    - code: "defusedxml.ElementTree.parse(user_file)"
+      expected: TrueNegative
+    - code: "json.loads(data)"
+      expected: TrueNegative
+    - code: "ET.tostring(element)"
+      expected: TrueNegative
+
+- id: "py-etree-fromstring"
+  name: "xml.etree.ElementTree.fromstring() with Untrusted Input"
+  description: "xml.etree.ElementTree.fromstring() is vulnerable to XXE attacks. Use defusedxml.ElementTree.fromstring() instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#match? @mod \"^(ET|ElementTree|etree)$\") attribute: (identifier) @fn (#eq? @fn \"fromstring\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.python.org/3/library/xml.html#xml-vulnerabilities"
+  test_cases:
+    - code: "ET.fromstring(xml_data)"
+      expected: TruePositive
+    - code: "ElementTree.fromstring(request.body)"
+      expected: TruePositive
+    - code: "etree.fromstring(uploaded_content)"
+      expected: TruePositive
+    - code: "defusedxml.ElementTree.fromstring(xml_data)"
+      expected: TrueNegative
+    - code: "json.loads(data)"
+      expected: TrueNegative
+    - code: "ET.tostring(element)"
+      expected: TrueNegative
+
+- id: "py-lxml-parse"
+  name: "lxml.etree.parse() with Untrusted Input"
+  description: "lxml.etree.parse() processes external entities by default. Use defusedxml or disable entity resolution."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (attribute object: (identifier) @pkg (#eq? @pkg \"lxml\") attribute: (identifier) @sub (#eq? @sub \"etree\")) attribute: (identifier) @fn (#eq? @fn \"parse\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://lxml.de/parsing.html"
+  test_cases:
+    - code: "lxml.etree.parse(user_file)"
+      expected: TruePositive
+    - code: "lxml.etree.parse(uploaded_xml)"
+      expected: TruePositive
+    - code: "lxml.etree.parse(request.files['xml'])"
+      expected: TruePositive
+    - code: "defusedxml.lxml.parse(user_file)"
+      expected: TrueNegative
+    - code: "json.loads(data)"
+      expected: TrueNegative
+    - code: "lxml.etree.tostring(element)"
+      expected: TrueNegative
+
+- id: "py-lxml-fromstring"
+  name: "lxml.etree.fromstring() with Untrusted Input"
+  description: "lxml.etree.fromstring() processes external entities by default. Use defusedxml or disable entity resolution."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (attribute object: (identifier) @pkg (#eq? @pkg \"lxml\") attribute: (identifier) @sub (#eq? @sub \"etree\")) attribute: (identifier) @fn (#eq? @fn \"fromstring\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://lxml.de/parsing.html"
+  test_cases:
+    - code: "lxml.etree.fromstring(xml_data)"
+      expected: TruePositive
+    - code: "lxml.etree.fromstring(request.body)"
+      expected: TruePositive
+    - code: "lxml.etree.fromstring(uploaded_content)"
+      expected: TruePositive
+    - code: "defusedxml.lxml.fromstring(xml_data)"
+      expected: TrueNegative
+    - code: "json.loads(data)"
+      expected: TrueNegative
+    - code: "lxml.etree.tostring(element)"
+      expected: TrueNegative
+
+- id: "py-xml-sax-parse"
+  name: "xml.sax.parse() with Untrusted Input"
+  description: "xml.sax.parse() is vulnerable to XXE attacks. Use defusedxml.sax.parse() instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (attribute object: (identifier) @pkg (#eq? @pkg \"xml\") attribute: (identifier) @sub (#eq? @sub \"sax\")) attribute: (identifier) @fn (#match? @fn \"^(parse|parseString)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.python.org/3/library/xml.sax.html"
+  test_cases:
+    - code: "xml.sax.parse(user_file, handler)"
+      expected: TruePositive
+    - code: "xml.sax.parseString(xml_data, handler)"
+      expected: TruePositive
+    - code: "xml.sax.parse(uploaded_xml, content_handler)"
+      expected: TruePositive
+    - code: "defusedxml.sax.parse(user_file, handler)"
+      expected: TrueNegative
+    - code: "json.loads(data)"
+      expected: TrueNegative
+    - code: "xml.sax.make_parser()"
+      expected: TrueNegative
+
+- id: "py-minidom-parse"
+  name: "xml.dom.minidom.parse() with Untrusted Input"
+  description: "xml.dom.minidom.parse() is vulnerable to XXE attacks. Use defusedxml.minidom instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"minidom\") attribute: (identifier) @fn (#match? @fn \"^(parse|parseString)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.python.org/3/library/xml.dom.minidom.html"
+  test_cases:
+    - code: "minidom.parse(user_file)"
+      expected: TruePositive
+    - code: "minidom.parseString(xml_data)"
+      expected: TruePositive
+    - code: "minidom.parse(uploaded_xml)"
+      expected: TruePositive
+    - code: "defusedxml.minidom.parse(user_file)"
+      expected: TrueNegative
+    - code: "defusedxml.minidom.parseString(xml_data)"
+      expected: TrueNegative
+    - code: "json.loads(data)"
+      expected: TrueNegative
+
+- id: "py-pulldom-parse"
+  name: "xml.dom.pulldom.parse() with Untrusted Input"
+  description: "xml.dom.pulldom.parse() is vulnerable to XXE attacks. Use defusedxml.pulldom instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"pulldom\") attribute: (identifier) @fn (#match? @fn \"^(parse|parseString)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.python.org/3/library/xml.dom.pulldom.html"
+  test_cases:
+    - code: "pulldom.parse(user_file)"
+      expected: TruePositive
+    - code: "pulldom.parseString(xml_data)"
+      expected: TruePositive
+    - code: "pulldom.parse(uploaded_xml)"
+      expected: TruePositive
+    - code: "defusedxml.pulldom.parse(user_file)"
+      expected: TrueNegative
+    - code: "defusedxml.pulldom.parseString(xml_data)"
+      expected: TrueNegative
+    - code: "json.loads(data)"
+      expected: TrueNegative
+
+- id: "py-xmlrpc-server"
+  name: "xmlrpc.server Usage (XXE Vulnerable)"
+  description: "Python's xmlrpc module uses vulnerable XML parsers. Consider using JSON-RPC or gRPC instead."
+  severity: Medium
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#match? @mod \"^(xmlrpc|SimpleXMLRPCServer)$\") attribute: (identifier) @fn (#match? @fn \"^(SimpleXMLRPCServer|CGIXMLRPCRequestHandler)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.python.org/3/library/xmlrpc.server.html"
+  test_cases:
+    - code: "xmlrpc.SimpleXMLRPCServer(('localhost', 8000))"
+      expected: TruePositive
+    - code: "SimpleXMLRPCServer.SimpleXMLRPCServer(addr)"
+      expected: TruePositive
+    - code: "xmlrpc.CGIXMLRPCRequestHandler()"
+      expected: TruePositive
+    - code: "grpc.server(futures.ThreadPoolExecutor())"
+      expected: TrueNegative
+    - code: "Flask(__name__)"
+      expected: TrueNegative
+    - code: "json.loads(data)"
+      expected: TrueNegative

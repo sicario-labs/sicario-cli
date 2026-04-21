@@ -1,0 +1,200 @@
+# XML External Entity (XXE) Rules for Go
+# Covers: xml.NewDecoder without entity restriction, xml.Unmarshal with untrusted input,
+# encoding/xml with DTD processing, xml.NewParser without safe defaults,
+# etree.ReadFrom without entity limits
+#
+# CWE-611: Improper Restriction of XML External Entity Reference
+# OWASP A05:2021 - Security Misconfiguration
+
+# ============================================================================
+# XXE RULES (7 rules)
+# ============================================================================
+
+- id: "go-xml-new-decoder-untrusted"
+  name: "xml.NewDecoder Without Entity Restriction"
+  description: "Using xml.NewDecoder on untrusted input without disabling external entities can lead to XXE attacks. Set d.Strict = true and use a custom CharsetReader, or use a safe XML library."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"xml\") field: (field_identifier) @fn (#eq? @fn \"NewDecoder\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/611.html"
+  test_cases:
+    - code: "decoder := xml.NewDecoder(r.Body)"
+      expected: TruePositive
+    - code: "dec := xml.NewDecoder(bytes.NewReader(data))"
+      expected: TruePositive
+    - code: "d := xml.NewDecoder(file)"
+      expected: TruePositive
+    - code: "json.NewDecoder(r.Body)"
+      expected: TrueNegative
+    - code: "gob.NewDecoder(conn)"
+      expected: TrueNegative
+    - code: "csv.NewReader(file)"
+      expected: TrueNegative
+
+- id: "go-xml-unmarshal-untrusted"
+  name: "xml.Unmarshal with Untrusted Input"
+  description: "Using xml.Unmarshal on untrusted input without validation can lead to XXE attacks and denial of service via entity expansion. Validate and sanitize XML input before unmarshaling."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"xml\") field: (field_identifier) @fn (#eq? @fn \"Unmarshal\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/611.html"
+  test_cases:
+    - code: "xml.Unmarshal(body, &config)"
+      expected: TruePositive
+    - code: "xml.Unmarshal(data, &request)"
+      expected: TruePositive
+    - code: "xml.Unmarshal(rawXML, &result)"
+      expected: TruePositive
+    - code: "json.Unmarshal(body, &config)"
+      expected: TrueNegative
+    - code: "yaml.Unmarshal(data, &config)"
+      expected: TrueNegative
+    - code: "xml.Marshal(config)"
+      expected: TrueNegative
+
+- id: "go-xml-new-token-reader"
+  name: "xml.NewTokenDecoder Without Safe Defaults"
+  description: "Using xml.NewTokenDecoder on untrusted input without entity restrictions can lead to XXE attacks. Implement a custom TokenReader that filters entity declarations."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"xml\") field: (field_identifier) @fn (#eq? @fn \"NewTokenDecoder\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/611.html"
+  test_cases:
+    - code: "dec := xml.NewTokenDecoder(tokenReader)"
+      expected: TruePositive
+    - code: "decoder := xml.NewTokenDecoder(reader)"
+      expected: TruePositive
+    - code: "d := xml.NewTokenDecoder(xmlTokens)"
+      expected: TruePositive
+    - code: "json.NewDecoder(r.Body)"
+      expected: TrueNegative
+    - code: "xml.NewEncoder(w)"
+      expected: TrueNegative
+    - code: "xml.Marshal(data)"
+      expected: TrueNegative
+
+- id: "go-etree-read-from-untrusted"
+  name: "etree.ReadFrom Without Entity Limits"
+  description: "Using etree.Document.ReadFrom on untrusted input without entity limits can lead to XXE attacks and billion laughs denial of service. Validate XML input before parsing."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression field: (field_identifier) @fn (#eq? @fn \"ReadFrom\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/611.html"
+  test_cases:
+    - code: "doc.ReadFrom(r.Body)"
+      expected: TruePositive
+    - code: "document.ReadFrom(file)"
+      expected: TruePositive
+    - code: "xmlDoc.ReadFrom(bytes.NewReader(data))"
+      expected: TruePositive
+    - code: "doc.WriteTo(w)"
+      expected: TrueNegative
+    - code: "json.NewDecoder(r.Body)"
+      expected: TrueNegative
+    - code: "io.Copy(dst, src)"
+      expected: TrueNegative
+
+- id: "go-etree-read-from-string"
+  name: "etree.ReadFromString with Untrusted Input"
+  description: "Using etree.Document.ReadFromString on untrusted input without entity limits can lead to XXE attacks. Validate and sanitize XML strings before parsing."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression field: (field_identifier) @fn (#eq? @fn \"ReadFromString\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/611.html"
+  test_cases:
+    - code: "doc.ReadFromString(xmlString)"
+      expected: TruePositive
+    - code: "document.ReadFromString(userInput)"
+      expected: TruePositive
+    - code: "xmlDoc.ReadFromString(rawXML)"
+      expected: TruePositive
+    - code: "doc.ReadFromString(\"<root><item>safe</item></root>\")"
+      expected: TrueNegative
+    - code: "json.Unmarshal(data, &config)"
+      expected: TrueNegative
+    - code: "doc.WriteTo(w)"
+      expected: TrueNegative
+
+- id: "go-xml-decoder-decode-untrusted"
+  name: "xml.Decoder.Decode with Untrusted Input"
+  description: "Using xml.Decoder.Decode on untrusted input without entity restrictions can lead to XXE attacks. Validate XML input and consider using a safe XML parser."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression field: (field_identifier) @fn (#eq? @fn \"Decode\")) arguments: (argument_list (unary_expression operand: (identifier) @target))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/611.html"
+  test_cases:
+    - code: "decoder.Decode(&config)"
+      expected: TruePositive
+    - code: "dec.Decode(&request)"
+      expected: TruePositive
+    - code: "xmlDecoder.Decode(&result)"
+      expected: TruePositive
+    - code: "json.NewDecoder(r.Body).Decode(&config)"
+      expected: TrueNegative
+    - code: "gob.NewDecoder(conn).Decode(&msg)"
+      expected: TrueNegative
+    - code: "xml.Marshal(data)"
+      expected: TrueNegative
+
+- id: "go-xml-copy-token"
+  name: "xml.CopyToken Without Filtering"
+  description: "Using xml.CopyToken to process untrusted XML tokens without filtering entity declarations can propagate XXE payloads. Filter out processing instructions and entity declarations."
+  severity: Low
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"xml\") field: (field_identifier) @fn (#eq? @fn \"CopyToken\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/611.html"
+  test_cases:
+    - code: "newToken := xml.CopyToken(token)"
+      expected: TruePositive
+    - code: "copied := xml.CopyToken(t)"
+      expected: TruePositive
+    - code: "tok := xml.CopyToken(xmlToken)"
+      expected: TruePositive
+    - code: "xml.NewEncoder(w)"
+      expected: TrueNegative
+    - code: "xml.Marshal(data)"
+      expected: TrueNegative
+    - code: "json.NewDecoder(r.Body)"
+      expected: TrueNegative

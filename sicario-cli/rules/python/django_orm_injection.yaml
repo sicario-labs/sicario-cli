@@ -1,0 +1,275 @@
+# Django ORM Injection Rules for Python
+# Covers: extra(), raw(), RawSQL, cursor.execute with string formatting
+#
+# CWE-89: Improper Neutralization of Special Elements used in an SQL Command
+# OWASP A03:2021 - Injection
+
+- id: "py-django-extra-injection"
+  name: "Django QuerySet.extra() with String Formatting"
+  description: "Using string formatting in Django's extra() method allows SQL injection. Use parameterized queries or ORM methods instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute attribute: (identifier) @method (#eq? @method \"extra\")) arguments: (argument_list (keyword_argument name: (identifier) @kw (#match? @kw \"^(where|select|tables|order_by)$\") value: (list (binary_expression) @binexpr)))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.djangoproject.com/en/4.2/ref/models/querysets/#extra"
+  test_cases:
+    - code: "User.objects.extra(where=[\"name = '%s'\" % user_input])"
+      expected: TruePositive
+    - code: "User.objects.extra(select={\"full\": \"first || '%s'\" % name})"
+      expected: TruePositive
+    - code: "Entry.objects.extra(where=[\"id = \" + entry_id])"
+      expected: TruePositive
+    - code: "User.objects.extra(where=[\"name = %s\"], params=[user_input])"
+      expected: TrueNegative
+    - code: "User.objects.filter(name=user_input)"
+      expected: TrueNegative
+    - code: "User.objects.extra(select={\"count\": \"COUNT(*)\"})"
+      expected: TrueNegative
+
+- id: "py-django-extra-fstring"
+  name: "Django QuerySet.extra() with f-string"
+  description: "Using f-strings in Django's extra() method allows SQL injection. Use parameterized queries or ORM methods instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute attribute: (identifier) @method (#eq? @method \"extra\")) arguments: (argument_list (keyword_argument name: (identifier) @kw (#match? @kw \"^(where|select|tables|order_by)$\") value: (list (string (interpolation) @interp))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.djangoproject.com/en/4.2/ref/models/querysets/#extra"
+  test_cases:
+    - code: "User.objects.extra(where=[f\"name = '{user_input}'\"])"
+      expected: TruePositive
+    - code: "User.objects.extra(select={\"val\": f\"col = {value}\"})"
+      expected: TruePositive
+    - code: "Entry.objects.extra(where=[f\"id = {entry_id}\"])"
+      expected: TruePositive
+    - code: "User.objects.extra(where=[\"name = %s\"], params=[user_input])"
+      expected: TrueNegative
+    - code: "User.objects.filter(name=user_input)"
+      expected: TrueNegative
+    - code: "User.objects.extra(where=[\"active = true\"])"
+      expected: TrueNegative
+
+- id: "py-django-raw-fstring"
+  name: "Django QuerySet.raw() with f-string"
+  description: "Using f-strings in Django's raw() method allows SQL injection. Pass parameters as the second argument instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute attribute: (identifier) @method (#eq? @method \"raw\")) arguments: (argument_list (string (interpolation) @interp) .)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.djangoproject.com/en/4.2/topics/db/sql/#passing-parameters-into-raw"
+  test_cases:
+    - code: "User.objects.raw(f\"SELECT * FROM auth_user WHERE id = {user_id}\")"
+      expected: TruePositive
+    - code: "Person.objects.raw(f\"SELECT * FROM person WHERE name = '{name}'\")"
+      expected: TruePositive
+    - code: "Entry.objects.raw(f\"DELETE FROM entries WHERE id = {eid}\")"
+      expected: TruePositive
+    - code: "User.objects.raw(\"SELECT * FROM auth_user WHERE id = %s\", [user_id])"
+      expected: TrueNegative
+    - code: "User.objects.filter(id=user_id)"
+      expected: TrueNegative
+    - code: "User.objects.raw(\"SELECT * FROM auth_user\")"
+      expected: TrueNegative
+
+- id: "py-django-raw-format"
+  name: "Django QuerySet.raw() with .format() or % Formatting"
+  description: "Using .format() or % formatting in Django's raw() method allows SQL injection. Pass parameters as the second argument instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute attribute: (identifier) @method (#eq? @method \"raw\")) arguments: (argument_list (call function: (attribute attribute: (identifier) @fmt (#eq? @fmt \"format\"))) .)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.djangoproject.com/en/4.2/topics/db/sql/#passing-parameters-into-raw"
+  test_cases:
+    - code: "User.objects.raw(\"SELECT * FROM auth_user WHERE id = {}\".format(user_id))"
+      expected: TruePositive
+    - code: "Person.objects.raw(\"SELECT * FROM person WHERE name = '{}'\".format(name))"
+      expected: TruePositive
+    - code: "Entry.objects.raw(\"SELECT * FROM entries WHERE cat = {cat}\".format(cat=cat))"
+      expected: TruePositive
+    - code: "User.objects.raw(\"SELECT * FROM auth_user WHERE id = %s\", [user_id])"
+      expected: TrueNegative
+    - code: "User.objects.all()"
+      expected: TrueNegative
+    - code: "msg = \"query {}\".format(name)"
+      expected: TrueNegative
+
+- id: "py-django-raw-percent"
+  name: "Django QuerySet.raw() with % String Interpolation"
+  description: "Using % string interpolation in Django's raw() method allows SQL injection. Pass parameters as the second argument instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute attribute: (identifier) @method (#eq? @method \"raw\")) arguments: (argument_list (binary_expression left: (string) @sql right: (_) @params operator: \"%\") .)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.djangoproject.com/en/4.2/topics/db/sql/#passing-parameters-into-raw"
+  test_cases:
+    - code: "User.objects.raw(\"SELECT * FROM auth_user WHERE id = %s\" % user_id)"
+      expected: TruePositive
+    - code: "Person.objects.raw(\"SELECT * FROM person WHERE name = '%s'\" % name)"
+      expected: TruePositive
+    - code: "Entry.objects.raw(\"SELECT * FROM entries WHERE id = %d\" % eid)"
+      expected: TruePositive
+    - code: "User.objects.raw(\"SELECT * FROM auth_user WHERE id = %s\", [user_id])"
+      expected: TrueNegative
+    - code: "User.objects.filter(id=user_id)"
+      expected: TrueNegative
+    - code: "log = \"query %s\" % name"
+      expected: TrueNegative
+
+- id: "py-django-rawsql-fstring"
+  name: "Django RawSQL Expression with f-string"
+  description: "Using f-strings in Django's RawSQL expression allows SQL injection. Use parameterized queries instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"RawSQL\") arguments: (argument_list (string (interpolation) @interp) .)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.djangoproject.com/en/4.2/ref/models/expressions/#raw-sql-expressions"
+  test_cases:
+    - code: "RawSQL(f\"SELECT col FROM tbl WHERE id = {user_id}\")"
+      expected: TruePositive
+    - code: "RawSQL(f\"price * {discount}\")"
+      expected: TruePositive
+    - code: "RawSQL(f\"COALESCE(val, {default_val})\")"
+      expected: TruePositive
+    - code: "RawSQL(\"SELECT col FROM tbl WHERE id = %s\", [user_id])"
+      expected: TrueNegative
+    - code: "RawSQL(\"price * %s\", [discount])"
+      expected: TrueNegative
+    - code: "RawSQL(\"COALESCE(val, 0)\")"
+      expected: TrueNegative
+
+- id: "py-django-rawsql-format"
+  name: "Django RawSQL Expression with .format()"
+  description: "Using .format() in Django's RawSQL expression allows SQL injection. Use parameterized queries instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"RawSQL\") arguments: (argument_list (call function: (attribute attribute: (identifier) @fmt (#eq? @fmt \"format\"))) .)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.djangoproject.com/en/4.2/ref/models/expressions/#raw-sql-expressions"
+  test_cases:
+    - code: "RawSQL(\"SELECT col FROM tbl WHERE id = {}\".format(user_id))"
+      expected: TruePositive
+    - code: "RawSQL(\"price * {}\".format(discount))"
+      expected: TruePositive
+    - code: "RawSQL(\"COALESCE(val, {})\".format(default_val))"
+      expected: TruePositive
+    - code: "RawSQL(\"SELECT col FROM tbl WHERE id = %s\", [user_id])"
+      expected: TrueNegative
+    - code: "RawSQL(\"price * %s\", [discount])"
+      expected: TrueNegative
+    - code: "msg = \"RawSQL {}\".format(name)"
+      expected: TrueNegative
+
+- id: "py-django-cursor-execute-fstring"
+  name: "Django cursor.execute() with f-string"
+  description: "Using f-strings in cursor.execute() allows SQL injection. Pass parameters as the second argument instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute attribute: (identifier) @method (#eq? @method \"execute\")) arguments: (argument_list (string (interpolation) @interp) .)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.djangoproject.com/en/4.2/topics/db/sql/#executing-custom-sql-directly"
+  test_cases:
+    - code: "cursor.execute(f\"SELECT * FROM users WHERE id = {user_id}\")"
+      expected: TruePositive
+    - code: "cursor.execute(f\"DELETE FROM sessions WHERE token = '{token}'\")"
+      expected: TruePositive
+    - code: "cursor.execute(f\"UPDATE users SET name = '{name}' WHERE id = {uid}\")"
+      expected: TruePositive
+    - code: "cursor.execute(\"SELECT * FROM users WHERE id = %s\", [user_id])"
+      expected: TrueNegative
+    - code: "cursor.execute(\"SELECT * FROM users\")"
+      expected: TrueNegative
+    - code: "cursor.execute(\"INSERT INTO logs VALUES (%s, %s)\", [msg, ts])"
+      expected: TrueNegative
+
+- id: "py-django-cursor-execute-format"
+  name: "Django cursor.execute() with .format()"
+  description: "Using .format() in cursor.execute() allows SQL injection. Pass parameters as the second argument instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute attribute: (identifier) @method (#eq? @method \"execute\")) arguments: (argument_list (call function: (attribute attribute: (identifier) @fmt (#eq? @fmt \"format\"))) .)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.djangoproject.com/en/4.2/topics/db/sql/#executing-custom-sql-directly"
+  test_cases:
+    - code: "cursor.execute(\"SELECT * FROM users WHERE id = {}\".format(user_id))"
+      expected: TruePositive
+    - code: "cursor.execute(\"DELETE FROM sessions WHERE token = '{}'\".format(token))"
+      expected: TruePositive
+    - code: "cursor.execute(\"UPDATE users SET name = '{}'\".format(name))"
+      expected: TruePositive
+    - code: "cursor.execute(\"SELECT * FROM users WHERE id = %s\", [user_id])"
+      expected: TrueNegative
+    - code: "cursor.execute(\"SELECT * FROM users\")"
+      expected: TrueNegative
+    - code: "log = \"execute {}\".format(query_name)"
+      expected: TrueNegative
+
+- id: "py-django-cursor-execute-percent"
+  name: "Django cursor.execute() with % String Interpolation"
+  description: "Using % string interpolation in cursor.execute() allows SQL injection. Pass parameters as the second argument instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute attribute: (identifier) @method (#eq? @method \"execute\")) arguments: (argument_list (binary_expression left: (string) @sql right: (_) @params operator: \"%\") .)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.djangoproject.com/en/4.2/topics/db/sql/#executing-custom-sql-directly"
+  test_cases:
+    - code: "cursor.execute(\"SELECT * FROM users WHERE id = %s\" % user_id)"
+      expected: TruePositive
+    - code: "cursor.execute(\"DELETE FROM sessions WHERE token = '%s'\" % token)"
+      expected: TruePositive
+    - code: "cursor.execute(\"UPDATE users SET name = '%s'\" % name)"
+      expected: TruePositive
+    - code: "cursor.execute(\"SELECT * FROM users WHERE id = %s\", [user_id])"
+      expected: TrueNegative
+    - code: "cursor.execute(\"SELECT * FROM users\")"
+      expected: TrueNegative
+    - code: "msg = \"execute %s\" % query_name"
+      expected: TrueNegative

@@ -1,0 +1,140 @@
+# Mass Assignment Rules for Python
+# Covers: unvalidated **kwargs in Django model creation, Flask-SQLAlchemy bulk updates
+#
+# CWE-915: Improperly Controlled Modification of Dynamically-Determined Object Attributes
+# OWASP A04:2021 - Insecure Design
+
+- id: "py-django-model-create-kwargs"
+  name: "Django Model.objects.create() with **kwargs"
+  description: "Passing unvalidated **kwargs to Django model creation allows mass assignment attacks. Explicitly specify allowed fields."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute attribute: (identifier) @method (#eq? @method \"create\")) arguments: (argument_list (dictionary_splat) @splat)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-915"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/20-Testing_for_Mass_Assignment"
+  test_cases:
+    - code: "User.objects.create(**request.data)"
+      expected: TruePositive
+    - code: "Profile.objects.create(**kwargs)"
+      expected: TruePositive
+    - code: "Order.objects.create(**form.cleaned_data)"
+      expected: TruePositive
+    - code: "User.objects.create(name=data['name'], email=data['email'])"
+      expected: TrueNegative
+    - code: "User.objects.create(name=name)"
+      expected: TrueNegative
+    - code: "User.objects.filter(active=True)"
+      expected: TrueNegative
+
+- id: "py-django-model-init-kwargs"
+  name: "Django Model() Constructor with **kwargs"
+  description: "Passing unvalidated **kwargs to Django model constructor allows mass assignment attacks. Explicitly specify allowed fields."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#match? @fn \"^[A-Z]\") arguments: (argument_list (dictionary_splat (identifier) @src (#match? @src \"^(request|data|kwargs|params|body|payload|form_data)$\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-915"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/20-Testing_for_Mass_Assignment"
+  test_cases:
+    - code: "User(**request)"
+      expected: TruePositive
+    - code: "Profile(**data)"
+      expected: TruePositive
+    - code: "Order(**kwargs)"
+      expected: TruePositive
+    - code: "User(name=data['name'], email=data['email'])"
+      expected: TrueNegative
+    - code: "User(name=name)"
+      expected: TrueNegative
+    - code: "Config(**settings)"
+      expected: TrueNegative
+
+- id: "py-django-update-kwargs"
+  name: "Django QuerySet.update() with **kwargs"
+  description: "Passing unvalidated **kwargs to Django QuerySet.update() allows mass assignment attacks. Explicitly specify allowed fields."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute attribute: (identifier) @method (#eq? @method \"update\")) arguments: (argument_list (dictionary_splat) @splat)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-915"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/20-Testing_for_Mass_Assignment"
+  test_cases:
+    - code: "User.objects.filter(id=uid).update(**request.data)"
+      expected: TruePositive
+    - code: "Profile.objects.filter(user=user).update(**kwargs)"
+      expected: TruePositive
+    - code: "Order.objects.filter(pk=pk).update(**form.cleaned_data)"
+      expected: TruePositive
+    - code: "User.objects.filter(id=uid).update(name=data['name'])"
+      expected: TrueNegative
+    - code: "User.objects.filter(id=uid).update(active=False)"
+      expected: TrueNegative
+    - code: "User.objects.filter(active=True).count()"
+      expected: TrueNegative
+
+- id: "py-flask-sqlalchemy-bulk-update"
+  name: "Flask-SQLAlchemy Bulk Update from Request Data"
+  description: "Updating model attributes from unvalidated request data allows mass assignment. Explicitly specify allowed fields."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(for_statement body: (block (expression_statement (call function: (attribute object: (identifier) @obj attribute: (identifier) @method (#eq? @method \"update\")) arguments: (argument_list (identifier) @data (#match? @data \"^(data|request_data|payload|params|body)$\")))))) @for"
+    captures:
+      - "for"
+  cwe_id: "CWE-915"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/20-Testing_for_Mass_Assignment"
+  test_cases:
+    - code: "for key, val in data.items():\n    setattr(user, key, val)"
+      expected: TrueNegative
+    - code: "user.name = data['name']"
+      expected: TrueNegative
+    - code: "db.session.add(user)"
+      expected: TrueNegative
+    - code: "for item in items:\n    item.update(data)"
+      expected: TruePositive
+    - code: "for record in records:\n    record.update(request_data)"
+      expected: TruePositive
+    - code: "for obj in objects:\n    obj.update(payload)"
+      expected: TruePositive
+
+- id: "py-setattr-loop"
+  name: "setattr() in Loop with Unvalidated Data"
+  description: "Using setattr() in a loop with unvalidated data allows mass assignment. Validate attribute names against an allowlist."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(for_statement body: (block (expression_statement (call function: (identifier) @fn (#eq? @fn \"setattr\"))))) @for"
+    captures:
+      - "for"
+  cwe_id: "CWE-915"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/20-Testing_for_Mass_Assignment"
+  test_cases:
+    - code: "for key, val in data.items():\n    setattr(user, key, val)"
+      expected: TruePositive
+    - code: "for k, v in request.json.items():\n    setattr(obj, k, v)"
+      expected: TruePositive
+    - code: "for attr, value in kwargs.items():\n    setattr(instance, attr, value)"
+      expected: TruePositive
+    - code: "setattr(user, 'name', data['name'])"
+      expected: TrueNegative
+    - code: "user.name = data['name']"
+      expected: TrueNegative
+    - code: "for item in items:\n    process(item)"
+      expected: TrueNegative

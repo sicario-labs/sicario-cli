@@ -1,0 +1,338 @@
+# Error Handling Anti-Pattern Rules for Go
+# Covers: blank identifier error assignment, deferred Close without error check,
+# ignored Write/Read errors, panic in library code, recover without logging,
+# os.Exit in library, ignored json.Marshal/Unmarshal, ignored http.ListenAndServe,
+# ignored sql.Close, ignored file.Sync, ignored rows.Err, ignored resp.Body.Close
+#
+# CWE-391: Unchecked Error Condition
+# CWE-252: Unchecked Return Value
+# CWE-754: Improper Check for Unusual or Exceptional Conditions
+# OWASP A05:2021 - Security Misconfiguration
+
+# ============================================================================
+# ERROR HANDLING RULES (12 rules)
+# ============================================================================
+
+- id: "go-blank-error-assignment"
+  name: "Error Assigned to Blank Identifier"
+  description: "Assigning an error to the blank identifier (_ = err) silently discards it. Always check errors to prevent silent failures and security issues."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(assignment_statement left: (expression_list (identifier) @blank (#eq? @blank \"_\")) right: (expression_list (identifier) @err (#eq? @err \"err\"))) @assign"
+    captures:
+      - "assign"
+  cwe_id: "CWE-391"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/391.html"
+  test_cases:
+    - code: "_ = err"
+      expected: TruePositive
+    - code: "_ = err // ignore error"
+      expected: TruePositive
+    - code: "_ = err\nlog.Println(\"continuing\")"
+      expected: TruePositive
+    - code: "if err != nil { return err }"
+      expected: TrueNegative
+    - code: "_ = file.Close()"
+      expected: TrueNegative
+    - code: "_ = fmt.Fprintf(w, \"hello\")"
+      expected: TrueNegative
+
+- id: "go-defer-close-no-error-check"
+  name: "Deferred Close Without Error Check"
+  description: "Deferring Close() without checking its error can hide data loss (e.g., unflushed writes). Capture and handle the error from Close."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(defer_statement (call_expression function: (selector_expression field: (field_identifier) @fn (#eq? @fn \"Close\")))) @defer"
+    captures:
+      - "defer"
+  cwe_id: "CWE-252"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/252.html"
+  test_cases:
+    - code: "defer file.Close()"
+      expected: TruePositive
+    - code: "defer resp.Body.Close()"
+      expected: TruePositive
+    - code: "defer conn.Close()"
+      expected: TruePositive
+    - code: "defer func() { if err := file.Close(); err != nil { log.Println(err) } }()"
+      expected: TrueNegative
+    - code: "err := file.Close()"
+      expected: TrueNegative
+    - code: "if err := conn.Close(); err != nil { log.Fatal(err) }"
+      expected: TrueNegative
+
+- id: "go-ignored-write-error"
+  name: "Ignored Error from Write Operation"
+  description: "Ignoring the error from Write can lead to silent data corruption or incomplete output. Always check the error return value."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression field: (field_identifier) @fn (#match? @fn \"^(Write|WriteString|WriteByte|WriteRune)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-252"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/252.html"
+  test_cases:
+    - code: "w.Write(data)"
+      expected: TruePositive
+    - code: "buf.WriteString(\"hello\")"
+      expected: TruePositive
+    - code: "file.Write(content)"
+      expected: TruePositive
+    - code: "n, err := w.Write(data)"
+      expected: TrueNegative
+    - code: "if _, err := buf.WriteString(\"hello\"); err != nil { return err }"
+      expected: TrueNegative
+    - code: "fmt.Println(\"hello\")"
+      expected: TrueNegative
+
+- id: "go-ignored-read-error"
+  name: "Ignored Error from Read Operation"
+  description: "Ignoring the error from Read can lead to processing incomplete or corrupted data. Always check the error return value."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression field: (field_identifier) @fn (#match? @fn \"^(Read|ReadAll|ReadFull|ReadByte)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-252"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/252.html"
+  test_cases:
+    - code: "reader.Read(buf)"
+      expected: TruePositive
+    - code: "io.ReadAll(resp.Body)"
+      expected: TruePositive
+    - code: "io.ReadFull(conn, buffer)"
+      expected: TruePositive
+    - code: "n, err := reader.Read(buf)"
+      expected: TrueNegative
+    - code: "data, err := io.ReadAll(resp.Body)"
+      expected: TrueNegative
+    - code: "if _, err := io.ReadFull(conn, buffer); err != nil { return err }"
+      expected: TrueNegative
+
+- id: "go-panic-in-library"
+  name: "Panic in Library Code"
+  description: "Using panic() in library code crashes the calling application. Return errors instead and let the caller decide how to handle them."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (identifier) @fn (#eq? @fn \"panic\") arguments: (argument_list (call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"fmt\") field: (field_identifier) @fmtfn (#match? @fmtfn \"^(Sprintf|Errorf)$\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-754"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/754.html"
+  test_cases:
+    - code: "panic(fmt.Sprintf(\"unexpected value: %v\", val))"
+      expected: TruePositive
+    - code: "panic(fmt.Errorf(\"failed to connect: %w\", err))"
+      expected: TruePositive
+    - code: "panic(fmt.Sprintf(\"invalid state: %s\", state))"
+      expected: TruePositive
+    - code: "return fmt.Errorf(\"unexpected value: %v\", val)"
+      expected: TrueNegative
+    - code: "log.Fatalf(\"failed to connect: %v\", err)"
+      expected: TrueNegative
+    - code: "panic(\"unreachable\")"
+      expected: TrueNegative
+
+- id: "go-recover-without-logging"
+  name: "Recover Without Logging"
+  description: "Using recover() without logging the recovered value silently swallows panics, making debugging impossible. Always log the recovered value."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(if_statement condition: (binary_expression left: (identifier) @r (#eq? @r \"r\") operator: \"!=\") consequence: (block (return_statement))) @recover_block"
+    captures:
+      - "recover_block"
+  cwe_id: "CWE-391"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cwe.mitre.org/data/definitions/391.html"
+  test_cases:
+    - code: "if r != nil {\n\treturn\n}"
+      expected: TruePositive
+    - code: "if r != nil {\n\treturn nil\n}"
+      expected: TruePositive
+    - code: "if r != nil {\n\treturn err\n}"
+      expected: TruePositive
+    - code: "if r != nil {\n\tlog.Printf(\"recovered: %v\", r)\n}"
+      expected: TrueNegative
+    - code: "if err != nil {\n\treturn err\n}"
+      expected: TrueNegative
+    - code: "if r != nil {\n\tfmt.Println(r)\n\treturn\n}"
+      expected: TrueNegative
+
+- id: "go-ignored-json-unmarshal"
+  name: "Ignored Error from json.Unmarshal"
+  description: "Ignoring the error from json.Unmarshal can lead to processing zero-value or partially populated structs. Always check the error."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"json\") field: (field_identifier) @fn (#eq? @fn \"Unmarshal\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-252"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://pkg.go.dev/encoding/json#Unmarshal"
+  test_cases:
+    - code: "json.Unmarshal(data, &config)"
+      expected: TruePositive
+    - code: "json.Unmarshal(body, &request)"
+      expected: TruePositive
+    - code: "json.Unmarshal(raw, &result)"
+      expected: TruePositive
+    - code: "err := json.Unmarshal(data, &config)"
+      expected: TrueNegative
+    - code: "if err := json.Unmarshal(data, &config); err != nil { return err }"
+      expected: TrueNegative
+    - code: "json.Marshal(config)"
+      expected: TrueNegative
+
+- id: "go-ignored-json-marshal"
+  name: "Ignored Error from json.Marshal"
+  description: "Ignoring the error from json.Marshal can lead to sending empty or malformed JSON responses. Always check the error."
+  severity: Low
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"json\") field: (field_identifier) @fn (#eq? @fn \"Marshal\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-252"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://pkg.go.dev/encoding/json#Marshal"
+  test_cases:
+    - code: "json.Marshal(response)"
+      expected: TruePositive
+    - code: "json.Marshal(data)"
+      expected: TruePositive
+    - code: "json.Marshal(&config)"
+      expected: TruePositive
+    - code: "data, err := json.Marshal(response)"
+      expected: TrueNegative
+    - code: "if b, err := json.Marshal(data); err == nil { w.Write(b) }"
+      expected: TrueNegative
+    - code: "json.Unmarshal(data, &config)"
+      expected: TrueNegative
+
+- id: "go-ignored-http-listenandserve"
+  name: "Ignored Error from http.ListenAndServe"
+  description: "Ignoring the error from http.ListenAndServe means the server may fail to start without any indication. Always check and log the error."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"http\") field: (field_identifier) @fn (#match? @fn \"^(ListenAndServe|ListenAndServeTLS)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-252"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://pkg.go.dev/net/http#ListenAndServe"
+  test_cases:
+    - code: "http.ListenAndServe(\":8080\", nil)"
+      expected: TruePositive
+    - code: "http.ListenAndServeTLS(\":443\", \"cert.pem\", \"key.pem\", nil)"
+      expected: TruePositive
+    - code: "http.ListenAndServe(addr, mux)"
+      expected: TruePositive
+    - code: "log.Fatal(http.ListenAndServe(\":8080\", nil))"
+      expected: TrueNegative
+    - code: "if err := http.ListenAndServe(\":8080\", nil); err != nil { log.Fatal(err) }"
+      expected: TrueNegative
+    - code: "err := http.ListenAndServeTLS(\":443\", \"cert.pem\", \"key.pem\", nil)"
+      expected: TrueNegative
+
+- id: "go-ignored-sql-close"
+  name: "Ignored Error from sql.DB Close"
+  description: "Ignoring the error from sql.DB.Close() can hide connection pool cleanup failures. Check the error to ensure proper resource cleanup."
+  severity: Low
+  languages:
+    - Go
+  pattern:
+    query: "(defer_statement (call_expression function: (selector_expression operand: (identifier) @obj (#eq? @obj \"db\") field: (field_identifier) @fn (#eq? @fn \"Close\")))) @defer"
+    captures:
+      - "defer"
+  cwe_id: "CWE-252"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://pkg.go.dev/database/sql#DB.Close"
+  test_cases:
+    - code: "defer db.Close()"
+      expected: TruePositive
+    - code: "defer db.Close() // cleanup"
+      expected: TruePositive
+    - code: "defer db.Close()\nlog.Println(\"shutting down\")"
+      expected: TruePositive
+    - code: "defer func() { if err := db.Close(); err != nil { log.Println(err) } }()"
+      expected: TrueNegative
+    - code: "err := db.Close()"
+      expected: TrueNegative
+    - code: "defer conn.Close()"
+      expected: TrueNegative
+
+- id: "go-ignored-file-sync"
+  name: "Ignored Error from File Sync"
+  description: "Ignoring the error from file.Sync() can lead to data loss if the OS fails to flush data to disk. Always check the error."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression field: (field_identifier) @fn (#eq? @fn \"Sync\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-252"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://pkg.go.dev/os#File.Sync"
+  test_cases:
+    - code: "file.Sync()"
+      expected: TruePositive
+    - code: "f.Sync()"
+      expected: TruePositive
+    - code: "outputFile.Sync()"
+      expected: TruePositive
+    - code: "if err := file.Sync(); err != nil { return err }"
+      expected: TrueNegative
+    - code: "err := f.Sync()"
+      expected: TrueNegative
+    - code: "file.Close()"
+      expected: TrueNegative
+
+- id: "go-ignored-rows-err"
+  name: "Ignored Error from sql.Rows.Err"
+  description: "Failing to check rows.Err() after iterating sql.Rows can hide query errors that occurred during iteration. Always check rows.Err() after the loop."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @obj (#eq? @obj \"rows\") field: (field_identifier) @fn (#eq? @fn \"Err\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-252"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://pkg.go.dev/database/sql#Rows.Err"
+  test_cases:
+    - code: "rows.Err()"
+      expected: TruePositive
+    - code: "rows.Err() // check later"
+      expected: TruePositive
+    - code: "rows.Err()\nreturn results"
+      expected: TruePositive
+    - code: "if err := rows.Err(); err != nil { return nil, err }"
+      expected: TrueNegative
+    - code: "err = rows.Err()"
+      expected: TrueNegative
+    - code: "rows.Close()"
+      expected: TrueNegative

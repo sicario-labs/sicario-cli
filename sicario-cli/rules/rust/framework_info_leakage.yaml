@@ -1,0 +1,1292 @@
+# Actix-web/Axum Framework and Information Leakage Rules for Rust
+# Covers: Actix-web (auth, CORS, XSS, CSRF, sessions, rate limiting, CSP),
+# Axum (auth, CORS, rate limiting, TLS, body limits),
+# Information Leakage (Debug on secrets, Display exposing secrets, logging secrets,
+# verbose errors, serialization of secrets)
+#
+# CWE-306: Missing Authentication for Critical Function
+# CWE-89: SQL Injection
+# CWE-942: Overly Permissive CORS Policy
+# CWE-79: Cross-Site Scripting (XSS)
+# CWE-352: Cross-Site Request Forgery (CSRF)
+# CWE-614: Sensitive Cookie in HTTPS Session Without 'Secure' Attribute
+# CWE-770: Allocation of Resources Without Limits
+# CWE-22: Path Traversal
+# CWE-16: Configuration
+# CWE-209: Generation of Error Message Containing Sensitive Information
+# CWE-532: Insertion of Sensitive Information into Log File
+# CWE-215: Insertion of Sensitive Information Into Debugging Code
+# CWE-200: Exposure of Sensitive Information to an Unauthorized Actor
+# OWASP A01:2021 - Broken Access Control
+# OWASP A05:2021 - Security Misconfiguration
+# OWASP A07:2021 - Identification and Authentication Failures
+
+# ============================================================================
+# ACTIX-WEB FRAMEWORK RULES (12 rules)
+# ============================================================================
+
+- id: "rust-actix-no-auth-extractor"
+  name: "Actix-web Route Handler Without Authentication"
+  description: "Route handler accepts HttpRequest or web::Json but has no Identity, Session, or custom auth extractor parameter. Sensitive endpoints should require authentication."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(attribute_item (attribute (identifier) @attr (#match? @attr \"^(get|post|put|delete|patch)$\"))) @route"
+    captures:
+      - "route"
+  cwe_id: "CWE-306"
+  owasp_category: A07_IdentificationAndAuthenticationFailures
+  help_uri: "https://actix.rs/docs/extractors/"
+  test_cases:
+    - code: "#[get(\"/admin/users\")]\nasync fn list_users(db: web::Data<Pool>) -> impl Responder {\n    HttpResponse::Ok().json(get_all_users(&db).await)\n}"
+      expected: TruePositive
+    - code: "#[post(\"/api/transfer\")]\nasync fn transfer(body: web::Json<TransferReq>) -> impl Responder {\n    HttpResponse::Ok().finish()\n}"
+      expected: TruePositive
+    - code: "#[delete(\"/api/account\")]\nasync fn delete_account(req: HttpRequest) -> impl Responder {\n    HttpResponse::Ok().finish()\n}"
+      expected: TruePositive
+    - code: "#[get(\"/health\")]\nasync fn health() -> impl Responder {\n    HttpResponse::Ok().body(\"ok\")\n}"
+      expected: TrueNegative
+    - code: "#[get(\"/api/profile\")]\nasync fn profile(user: Identity, db: web::Data<Pool>) -> impl Responder {\n    HttpResponse::Ok().json(user)\n}"
+      expected: TrueNegative
+    - code: "#[post(\"/api/data\")]\nasync fn create(auth: AuthenticatedUser, body: web::Json<Data>) -> impl Responder {\n    HttpResponse::Created().finish()\n}"
+      expected: TrueNegative
+
+- id: "rust-actix-path-param-sql"
+  name: "Actix-web Path Parameter in SQL Query"
+  description: "Using actix-web Path<> extractor value directly in a format! SQL string allows SQL injection. Use parameterized queries instead."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (field_expression field: (field_identifier) @method (#match? @method \"^(query|execute|query_one)$\")) arguments: (arguments (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://actix.rs/docs/extractors/#path"
+  test_cases:
+    - code: "async fn get_user(path: web::Path<i32>, db: web::Data<Pool>) -> impl Responder {\n    let id = path.into_inner();\n    db.query(&format!(\"SELECT * FROM users WHERE id = {}\", id), &[]).await\n}"
+      expected: TruePositive
+    - code: "async fn delete_item(path: web::Path<String>, pool: web::Data<DbPool>) -> impl Responder {\n    pool.execute(&format!(\"DELETE FROM items WHERE slug = '{}'\", path.into_inner()), &[]).await\n}"
+      expected: TruePositive
+    - code: "async fn search(path: web::Path<String>, db: web::Data<Pool>) -> impl Responder {\n    db.query_one(&format!(\"SELECT * FROM products WHERE name LIKE '%{}%'\", path.into_inner()), &[]).await\n}"
+      expected: TruePositive
+    - code: "async fn get_user(path: web::Path<i32>, db: web::Data<Pool>) -> impl Responder {\n    db.query(\"SELECT * FROM users WHERE id = $1\", &[&path.into_inner()]).await\n}"
+      expected: TrueNegative
+    - code: "async fn get_item(path: web::Path<i32>, db: web::Data<Pool>) -> impl Responder {\n    sqlx::query!(\"SELECT * FROM items WHERE id = $1\", path.into_inner()).fetch_one(&**db).await\n}"
+      expected: TrueNegative
+    - code: "async fn get_user(path: web::Path<i32>, db: web::Data<Pool>) -> impl Responder {\n    let user = User::find_by_id(path.into_inner(), &db).await;\n    HttpResponse::Ok().json(user)\n}"
+      expected: TrueNegative
+
+- id: "rust-actix-missing-cors"
+  name: "Actix-web App Without CORS Middleware"
+  description: "Actix-web application created with App::new() without .wrap(Cors::...) middleware. APIs accessed by browsers need explicit CORS configuration."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @type name: (identifier) @method (#eq? @type \"App\") (#eq? @method \"new\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-942"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.rs/actix-cors/latest/actix_cors/"
+  test_cases:
+    - code: "App::new().service(web::resource(\"/api\").route(web::get().to(handler)))"
+      expected: TruePositive
+    - code: "App::new()\n    .service(api_scope)\n    .service(health_check)"
+      expected: TruePositive
+    - code: "let app = App::new().configure(config);"
+      expected: TruePositive
+    - code: "App::new()\n    .wrap(Cors::default())\n    .service(web::resource(\"/api\").route(web::get().to(handler)))"
+      expected: TrueNegative
+    - code: "App::new()\n    .wrap(Cors::permissive())\n    .service(api_scope)"
+      expected: TrueNegative
+    - code: "App::new()\n    .wrap(actix_cors::Cors::default().allowed_origin(\"https://example.com\"))\n    .service(api_scope)"
+      expected: TrueNegative
+
+- id: "rust-actix-debug-endpoint"
+  name: "Actix-web Exposed Debug/Admin Endpoint"
+  description: "Route registered at /debug or /admin path without authentication middleware. Debug and admin endpoints must be protected or removed in production."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (field_expression field: (field_identifier) @method (#eq? @method \"resource\")) arguments: (arguments (string_literal) @path (#match? @path \"(debug|admin|internal|_health_detail)\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-306"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+  test_cases:
+    - code: "web::resource(\"/debug/vars\").route(web::get().to(debug_vars))"
+      expected: TruePositive
+    - code: "web::resource(\"/admin/users\").route(web::get().to(list_all_users))"
+      expected: TruePositive
+    - code: "web::resource(\"/internal/metrics\").route(web::get().to(metrics_handler))"
+      expected: TruePositive
+    - code: "web::resource(\"/api/users\").route(web::get().to(list_users))"
+      expected: TrueNegative
+    - code: "web::resource(\"/admin/users\").wrap(auth_middleware).route(web::get().to(list_all_users))"
+      expected: TrueNegative
+    - code: "web::resource(\"/health\").route(web::get().to(health_check))"
+      expected: TrueNegative
+
+- id: "rust-actix-format-response-xss"
+  name: "Actix-web HttpResponse with format! User Input (XSS)"
+  description: "Using format! to embed user input into HttpResponse body without escaping enables XSS. Use a template engine with auto-escaping or return JSON."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @type name: (identifier) @method (#eq? @type \"HttpResponse\") (#match? @method \"^(Ok|Created|BadRequest)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/www-community/attacks/xss/"
+  test_cases:
+    - code: "HttpResponse::Ok().body(format!(\"<h1>Hello, {}</h1>\", user_name))"
+      expected: TruePositive
+    - code: "HttpResponse::Ok().content_type(\"text/html\").body(format!(\"<div>{}</div>\", comment))"
+      expected: TruePositive
+    - code: "HttpResponse::BadRequest().body(format!(\"Error: {}\", user_input))"
+      expected: TruePositive
+    - code: "HttpResponse::Ok().json(serde_json::json!({\"name\": user_name}))"
+      expected: TrueNegative
+    - code: "HttpResponse::Ok().body(\"<h1>Welcome</h1>\")"
+      expected: TrueNegative
+    - code: "HttpResponse::Ok().body(tera.render(\"index.html\", &context)?)"
+      expected: TrueNegative
+
+- id: "rust-actix-no-csrf"
+  name: "Actix-web Missing CSRF Protection"
+  description: "Actix-web application with form-handling POST routes but no CSRF middleware. State-changing endpoints accepting form data should have CSRF protection."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (field_expression field: (field_identifier) @method (#eq? @method \"post\")) arguments: (arguments)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-352"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/csrf"
+  test_cases:
+    - code: "web::resource(\"/login\").route(web::post().to(login_handler))"
+      expected: TruePositive
+    - code: "web::resource(\"/transfer\").route(web::post().to(transfer_funds))"
+      expected: TruePositive
+    - code: "web::resource(\"/settings\").route(web::post().to(update_settings))"
+      expected: TruePositive
+    - code: "web::resource(\"/login\").wrap(csrf_middleware).route(web::post().to(login_handler))"
+      expected: TrueNegative
+    - code: "web::resource(\"/api/data\").route(web::post().to(create_data))  // API with token auth"
+      expected: TrueNegative
+    - code: "web::resource(\"/webhook\").route(web::post().to(webhook_handler))  // Webhook with signature verification"
+      expected: TrueNegative
+
+- id: "rust-actix-verbose-error"
+  name: "Actix-web Verbose Error Response"
+  description: "Returning InternalServerError with debug-formatted error details exposes internal information to clients. Return generic error messages and log details server-side."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @type name: (identifier) @method (#eq? @type \"HttpResponse\") (#eq? @method \"InternalServerError\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-209"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://owasp.org/www-community/Improper_Error_Handling"
+  test_cases:
+    - code: "HttpResponse::InternalServerError().body(format!(\"{:?}\", err))"
+      expected: TruePositive
+    - code: "HttpResponse::InternalServerError().body(format!(\"Database error: {}\", db_err))"
+      expected: TruePositive
+    - code: "HttpResponse::InternalServerError().json(serde_json::json!({\"error\": format!(\"{}\", e)}))"
+      expected: TruePositive
+    - code: "HttpResponse::InternalServerError().body(\"An internal error occurred\")"
+      expected: TrueNegative
+    - code: "HttpResponse::InternalServerError().json(serde_json::json!({\"error\": \"internal_error\"}))"
+      expected: TrueNegative
+    - code: "HttpResponse::InternalServerError().finish()"
+      expected: TrueNegative
+
+- id: "rust-actix-insecure-session"
+  name: "Actix-web Session Without Secure Cookie Settings"
+  description: "Session cookie configured without secure=true or http_only=true. Session cookies must be marked Secure and HttpOnly to prevent interception and XSS theft."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @type name: (identifier) @method (#eq? @type \"CookieSession\") (#eq? @method \"signed\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-614"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.rs/actix-session/latest/actix_session/"
+  test_cases:
+    - code: "CookieSession::signed(&[0; 32]).name(\"session\")"
+      expected: TruePositive
+    - code: "CookieSession::signed(key).name(\"auth\")"
+      expected: TruePositive
+    - code: "CookieSession::signed(&secret_key).max_age(3600)"
+      expected: TruePositive
+    - code: "CookieSession::signed(&[0; 32]).secure(true).http_only(true).name(\"session\")"
+      expected: TrueNegative
+    - code: "SessionMiddleware::builder(redis_store, secret_key.clone()).cookie_secure(true).build()"
+      expected: TrueNegative
+    - code: "CookieSession::signed(key).secure(true).http_only(true).same_site(SameSite::Strict)"
+      expected: TrueNegative
+
+- id: "rust-actix-no-rate-limit"
+  name: "Actix-web Missing Rate Limiting"
+  description: "Actix-web application without rate limiting middleware. Public-facing APIs should implement rate limiting to prevent abuse and DoS."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @type name: (identifier) @method (#eq? @type \"App\") (#eq? @method \"new\"))) @app"
+    captures:
+      - "app"
+  cwe_id: "CWE-770"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.rs/actix-governor/latest/actix_governor/"
+  test_cases:
+    - code: "App::new()\n    .service(web::resource(\"/api/login\").route(web::post().to(login)))"
+      expected: TruePositive
+    - code: "App::new()\n    .wrap(Cors::default())\n    .service(api_scope)"
+      expected: TruePositive
+    - code: "App::new().configure(configure_routes)"
+      expected: TruePositive
+    - code: "App::new()\n    .wrap(Governor::new(&governor_conf))\n    .service(api_scope)"
+      expected: TrueNegative
+    - code: "App::new()\n    .wrap(RateLimiter::new(store.clone()))\n    .service(api_scope)"
+      expected: TrueNegative
+    - code: "App::new()\n    .wrap(actix_governor::Governor::new(&conf))\n    .service(api_scope)"
+      expected: TrueNegative
+
+- id: "rust-actix-static-user-path"
+  name: "Actix-web Static Files from User-Controlled Path"
+  description: "Serving static files using a path derived from user input enables path traversal attacks. Validate and sanitize file paths before serving."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @type name: (identifier) @method (#eq? @type \"NamedFile\") (#eq? @method \"open\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
+  test_cases:
+    - code: "async fn download(path: web::Path<String>) -> actix_web::Result<NamedFile> {\n    Ok(NamedFile::open(format!(\"./uploads/{}\", path.into_inner()))?)\n}"
+      expected: TruePositive
+    - code: "async fn serve(req: HttpRequest) -> actix_web::Result<NamedFile> {\n    let file = req.match_info().query(\"filename\");\n    Ok(NamedFile::open(file)?)\n}"
+      expected: TruePositive
+    - code: "async fn get_file(path: web::Path<String>) -> actix_web::Result<NamedFile> {\n    Ok(NamedFile::open(path.into_inner())?)\n}"
+      expected: TruePositive
+    - code: "async fn serve_static() -> actix_web::Result<NamedFile> {\n    Ok(NamedFile::open(\"static/index.html\")?)\n}"
+      expected: TrueNegative
+    - code: "actix_files::Files::new(\"/static\", \"./static\").show_files_listing()"
+      expected: TrueNegative
+    - code: "async fn download(path: web::Path<String>) -> actix_web::Result<NamedFile> {\n    let sanitized = sanitize_path(&path.into_inner())?;\n    Ok(NamedFile::open(sanitized)?)\n}"
+      expected: TrueNegative
+
+- id: "rust-actix-permissive-cors"
+  name: "Actix-web Permissive CORS (allow_any_origin)"
+  description: "Using Cors::permissive() or .allow_any_origin() allows any website to make authenticated requests to your API. Restrict origins to trusted domains."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @type name: (identifier) @method (#eq? @type \"Cors\") (#eq? @method \"permissive\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-942"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.rs/actix-cors/latest/actix_cors/struct.Cors.html"
+  test_cases:
+    - code: "App::new().wrap(Cors::permissive()).service(api_scope)"
+      expected: TruePositive
+    - code: "let cors = Cors::permissive();\nApp::new().wrap(cors)"
+      expected: TruePositive
+    - code: "App::new()\n    .wrap(Cors::permissive())\n    .service(web::resource(\"/api/sensitive\").route(web::get().to(handler)))"
+      expected: TruePositive
+    - code: "App::new().wrap(Cors::default().allowed_origin(\"https://myapp.com\")).service(api_scope)"
+      expected: TrueNegative
+    - code: "Cors::default()\n    .allowed_origin(\"https://trusted.example.com\")\n    .allowed_methods(vec![\"GET\", \"POST\"])"
+      expected: TrueNegative
+    - code: "Cors::default()\n    .allowed_origin_fn(|origin, _req_head| origin.as_bytes().ends_with(b\".example.com\"))"
+      expected: TrueNegative
+
+- id: "rust-actix-missing-csp"
+  name: "Actix-web Missing Content-Security-Policy Header"
+  description: "HttpResponse returned without Content-Security-Policy header. CSP helps prevent XSS by restricting resource loading sources."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @type name: (identifier) @method (#eq? @type \"HttpResponse\") (#eq? @method \"Ok\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-16"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP"
+  test_cases:
+    - code: "HttpResponse::Ok().content_type(\"text/html\").body(html_content)"
+      expected: TruePositive
+    - code: "HttpResponse::Ok().body(rendered_template)"
+      expected: TruePositive
+    - code: "HttpResponse::Ok().content_type(\"text/html\").body(format!(\"<html>{}</html>\", body))"
+      expected: TruePositive
+    - code: "HttpResponse::Ok()\n    .insert_header((\"Content-Security-Policy\", \"default-src 'self'\"))\n    .body(html_content)"
+      expected: TrueNegative
+    - code: "HttpResponse::Ok().json(data)"
+      expected: TrueNegative
+    - code: "HttpResponse::Ok()\n    .insert_header((\"Content-Security-Policy\", \"script-src 'self'; style-src 'self'\"))\n    .content_type(\"text/html\")\n    .body(html)"
+      expected: TrueNegative
+
+
+# ============================================================================
+# AXUM FRAMEWORK RULES (12 rules)
+# ============================================================================
+
+- id: "rust-axum-no-auth-extractor"
+  name: "Axum Route Handler Without Authentication"
+  description: "Axum handler function for sensitive endpoint without authentication extractor or middleware layer. Use Extension<User> or custom auth extractor."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (field_expression field: (field_identifier) @method (#match? @method \"^(get|post|put|delete|patch)$\")) arguments: (arguments (identifier) @handler)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-306"
+  owasp_category: A07_IdentificationAndAuthenticationFailures
+  help_uri: "https://docs.rs/axum/latest/axum/extract/index.html"
+  test_cases:
+    - code: "Router::new().route(\"/admin/users\", get(list_users))"
+      expected: TruePositive
+    - code: "Router::new().route(\"/api/transfer\", post(transfer_funds))"
+      expected: TruePositive
+    - code: "Router::new().route(\"/api/delete-account\", delete(remove_account))"
+      expected: TruePositive
+    - code: "Router::new().route(\"/api/profile\", get(profile)).layer(auth_layer)"
+      expected: TrueNegative
+    - code: "Router::new().route(\"/health\", get(health_check))"
+      expected: TrueNegative
+    - code: "async fn profile(Extension(user): Extension<AuthUser>) -> impl IntoResponse {\n    Json(user)\n}"
+      expected: TrueNegative
+
+- id: "rust-axum-path-param-sql"
+  name: "Axum Path Parameter in SQL Query"
+  description: "Using axum Path<> extractor value directly in a format! SQL string allows SQL injection. Use parameterized queries with bind parameters."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (field_expression field: (field_identifier) @method (#match? @method \"^(query|execute|query_one|query_opt)$\")) arguments: (arguments (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.rs/axum/latest/axum/extract/struct.Path.html"
+  test_cases:
+    - code: "async fn get_user(Path(id): Path<i32>, State(pool): State<PgPool>) -> impl IntoResponse {\n    pool.query(&format!(\"SELECT * FROM users WHERE id = {}\", id), &[]).await\n}"
+      expected: TruePositive
+    - code: "async fn delete_item(Path(slug): Path<String>, State(db): State<DbPool>) -> impl IntoResponse {\n    db.execute(&format!(\"DELETE FROM items WHERE slug = '{}'\", slug), &[]).await\n}"
+      expected: TruePositive
+    - code: "async fn search(Path(term): Path<String>, State(pool): State<PgPool>) -> impl IntoResponse {\n    pool.query_one(&format!(\"SELECT * FROM products WHERE name = '{}'\", term), &[]).await\n}"
+      expected: TruePositive
+    - code: "async fn get_user(Path(id): Path<i32>, State(pool): State<PgPool>) -> impl IntoResponse {\n    sqlx::query!(\"SELECT * FROM users WHERE id = $1\", id).fetch_one(&pool).await\n}"
+      expected: TrueNegative
+    - code: "async fn get_user(Path(id): Path<i32>, State(pool): State<PgPool>) -> impl IntoResponse {\n    pool.query(\"SELECT * FROM users WHERE id = $1\", &[&id]).await\n}"
+      expected: TrueNegative
+    - code: "async fn get_user(Path(id): Path<i32>, State(db): State<DbPool>) -> impl IntoResponse {\n    User::find_by_id(id, &db).await\n}"
+      expected: TrueNegative
+
+- id: "rust-axum-missing-cors-layer"
+  name: "Axum Router Without CORS Layer"
+  description: "Axum Router created without CorsLayer from tower-http. APIs accessed by browsers need explicit CORS configuration."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @type name: (identifier) @method (#eq? @type \"Router\") (#eq? @method \"new\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-942"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.rs/tower-http/latest/tower_http/cors/struct.CorsLayer.html"
+  test_cases:
+    - code: "Router::new().route(\"/api/data\", get(handler))"
+      expected: TruePositive
+    - code: "let app = Router::new()\n    .route(\"/api/users\", get(list_users))\n    .route(\"/api/items\", post(create_item));"
+      expected: TruePositive
+    - code: "Router::new().nest(\"/api\", api_routes)"
+      expected: TruePositive
+    - code: "Router::new()\n    .route(\"/api/data\", get(handler))\n    .layer(CorsLayer::new().allow_origin(\"https://example.com\".parse::<HeaderValue>().unwrap()))"
+      expected: TrueNegative
+    - code: "Router::new()\n    .route(\"/api/data\", get(handler))\n    .layer(CorsLayer::permissive())"
+      expected: TrueNegative
+    - code: "Router::new()\n    .route(\"/api/data\", get(handler))\n    .layer(tower_http::cors::CorsLayer::new())"
+      expected: TrueNegative
+
+- id: "rust-axum-debug-endpoint"
+  name: "Axum Exposed Debug/Admin Route"
+  description: "Route registered at /debug or /admin path without authentication layer. Debug and admin endpoints must be protected or removed in production."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (field_expression field: (field_identifier) @method (#eq? @method \"route\")) arguments: (arguments (string_literal) @path (#match? @path \"(debug|admin|internal)\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-306"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+  test_cases:
+    - code: "Router::new().route(\"/debug/state\", get(dump_state))"
+      expected: TruePositive
+    - code: "Router::new().route(\"/admin/users\", get(list_all_users))"
+      expected: TruePositive
+    - code: "Router::new().route(\"/internal/metrics\", get(metrics))"
+      expected: TruePositive
+    - code: "Router::new().route(\"/api/users\", get(list_users))"
+      expected: TrueNegative
+    - code: "Router::new().route(\"/admin/users\", get(list_all_users)).layer(auth_layer)"
+      expected: TrueNegative
+    - code: "Router::new().route(\"/health\", get(health_check))"
+      expected: TrueNegative
+
+- id: "rust-axum-format-response"
+  name: "Axum Response with format! User Input"
+  description: "Using format! to embed user input into HTML response body enables XSS. Use a template engine with auto-escaping or return JSON."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @type name: (identifier) @method (#eq? @type \"Html\") (#match? @method \"^(from|new)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.rs/axum/latest/axum/response/struct.Html.html"
+  test_cases:
+    - code: "async fn greet(Path(name): Path<String>) -> Html<String> {\n    Html::from(format!(\"<h1>Hello, {}</h1>\", name))\n}"
+      expected: TruePositive
+    - code: "async fn render(Query(params): Query<Params>) -> Html<String> {\n    Html::from(format!(\"<div>{}</div>\", params.content))\n}"
+      expected: TruePositive
+    - code: "async fn page(Path(title): Path<String>) -> Html<String> {\n    Html::from(format!(\"<title>{}</title><body>Content</body>\", title))\n}"
+      expected: TruePositive
+    - code: "async fn index() -> Html<&'static str> {\n    Html::from(\"<h1>Welcome</h1>\")\n}"
+      expected: TrueNegative
+    - code: "async fn greet(Path(name): Path<String>) -> Json<Greeting> {\n    Json(Greeting { name })\n}"
+      expected: TrueNegative
+    - code: "async fn page() -> Html<String> {\n    Html::from(tera.render(\"index.html\", &context).unwrap())\n}"
+      expected: TrueNegative
+
+- id: "rust-axum-verbose-error"
+  name: "Axum Verbose Error Response"
+  description: "Returning detailed error information in IntoResponse implementation exposes internal details to clients. Return generic error messages and log details server-side."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(macro_invocation macro: (identifier) @mac (#eq? @mac \"format\") arguments: (token_tree (string_literal) @fmt (#match? @fmt \"(error|Error|ERROR|failed|Failed|FAILED|exception|Exception)\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-209"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://owasp.org/www-community/Improper_Error_Handling"
+  test_cases:
+    - code: "impl IntoResponse for AppError {\n    fn into_response(self) -> Response {\n        (StatusCode::INTERNAL_SERVER_ERROR, format!(\"Error: {:?}\", self.0)).into_response()\n    }\n}"
+      expected: TruePositive
+    - code: "async fn handler() -> Result<Json<Data>, (StatusCode, String)> {\n    Err((StatusCode::INTERNAL_SERVER_ERROR, format!(\"Database error: {}\", e)))\n}"
+      expected: TruePositive
+    - code: "(StatusCode::INTERNAL_SERVER_ERROR, format!(\"Failed to process: {:?}\", err)).into_response()"
+      expected: TruePositive
+    - code: "impl IntoResponse for AppError {\n    fn into_response(self) -> Response {\n        (StatusCode::INTERNAL_SERVER_ERROR, \"An internal error occurred\").into_response()\n    }\n}"
+      expected: TrueNegative
+    - code: "(StatusCode::INTERNAL_SERVER_ERROR, Json(json!({\"error\": \"internal_error\"}))).into_response()"
+      expected: TrueNegative
+    - code: "tracing::error!(\"Failed to process request: {:?}\", err);\n(StatusCode::INTERNAL_SERVER_ERROR, \"Something went wrong\").into_response()"
+      expected: TrueNegative
+
+- id: "rust-axum-no-rate-limit"
+  name: "Axum Missing Rate Limiting Layer"
+  description: "Axum Router without rate limiting layer. Public-facing APIs should implement rate limiting to prevent abuse and denial of service."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @type name: (identifier) @method (#eq? @type \"Router\") (#eq? @method \"new\"))) @router"
+    captures:
+      - "router"
+  cwe_id: "CWE-770"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.rs/tower_governor/latest/tower_governor/"
+  test_cases:
+    - code: "Router::new()\n    .route(\"/api/login\", post(login))\n    .route(\"/api/register\", post(register))"
+      expected: TruePositive
+    - code: "let app = Router::new().route(\"/api/data\", get(data_handler));"
+      expected: TruePositive
+    - code: "Router::new().nest(\"/api\", api_routes).layer(CorsLayer::permissive())"
+      expected: TruePositive
+    - code: "Router::new()\n    .route(\"/api/login\", post(login))\n    .layer(GovernorLayer::new(&governor_conf))"
+      expected: TrueNegative
+    - code: "Router::new()\n    .route(\"/api/data\", get(handler))\n    .layer(RateLimitLayer::new(100, Duration::from_secs(60)))"
+      expected: TrueNegative
+    - code: "Router::new()\n    .route(\"/api/data\", get(handler))\n    .layer(tower::limit::RateLimitLayer::new(10, Duration::from_secs(1)))"
+      expected: TrueNegative
+
+- id: "rust-axum-static-user-path"
+  name: "Axum Serving Static Files from User-Controlled Path"
+  description: "Using ServeFile or ServeDir with user-controlled path enables path traversal. Validate and sanitize file paths before serving."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @type name: (identifier) @method (#eq? @type \"ServeFile\") (#eq? @method \"new\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://docs.rs/tower-http/latest/tower_http/services/struct.ServeFile.html"
+  test_cases:
+    - code: "async fn download(Path(file): Path<String>) -> impl IntoResponse {\n    ServeFile::new(format!(\"./uploads/{}\", file))\n}"
+      expected: TruePositive
+    - code: "async fn serve(Path(name): Path<String>) -> impl IntoResponse {\n    ServeFile::new(name)\n}"
+      expected: TruePositive
+    - code: "async fn get_doc(Path(path): Path<String>) -> impl IntoResponse {\n    ServeFile::new(format!(\"/data/{}\", path))\n}"
+      expected: TruePositive
+    - code: "Router::new().nest_service(\"/static\", ServeDir::new(\"assets\"))"
+      expected: TrueNegative
+    - code: "ServeFile::new(\"static/index.html\")"
+      expected: TrueNegative
+    - code: "async fn download(Path(file): Path<String>) -> impl IntoResponse {\n    let safe_path = sanitize_filename(&file);\n    ServeFile::new(format!(\"./uploads/{}\", safe_path))\n}"
+      expected: TrueNegative
+
+- id: "rust-axum-permissive-cors"
+  name: "Axum Permissive CORS (CorsLayer::permissive)"
+  description: "Using CorsLayer::permissive() allows any origin to make requests including with credentials. Restrict to specific trusted origins."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @type name: (identifier) @method (#eq? @type \"CorsLayer\") (#eq? @method \"permissive\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-942"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.rs/tower-http/latest/tower_http/cors/struct.CorsLayer.html"
+  test_cases:
+    - code: "Router::new().route(\"/api\", get(handler)).layer(CorsLayer::permissive())"
+      expected: TruePositive
+    - code: "let cors = CorsLayer::permissive();\nRouter::new().layer(cors)"
+      expected: TruePositive
+    - code: "let app = Router::new()\n    .route(\"/api/sensitive\", post(sensitive_handler))\n    .layer(CorsLayer::permissive());"
+      expected: TruePositive
+    - code: "CorsLayer::new().allow_origin(\"https://myapp.com\".parse::<HeaderValue>().unwrap())"
+      expected: TrueNegative
+    - code: "CorsLayer::new()\n    .allow_origin([\"https://app.example.com\".parse().unwrap()])\n    .allow_methods([Method::GET, Method::POST])"
+      expected: TrueNegative
+    - code: "CorsLayer::new().allow_origin(AllowOrigin::predicate(|origin, _| {\n    origin.as_bytes().ends_with(b\".example.com\")\n}))"
+      expected: TrueNegative
+
+- id: "rust-axum-missing-csp"
+  name: "Axum Missing Content-Security-Policy Header"
+  description: "HTML response returned without Content-Security-Policy header. CSP helps prevent XSS by restricting resource loading sources."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @type name: (identifier) @method (#eq? @type \"Html\") (#match? @method \"^(from|new)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-16"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP"
+  test_cases:
+    - code: "async fn page() -> Html<String> {\n    Html::from(render_template())\n}"
+      expected: TruePositive
+    - code: "async fn index() -> Html<&'static str> {\n    Html::from(include_str!(\"../templates/index.html\"))\n}"
+      expected: TruePositive
+    - code: "async fn dashboard() -> Html<String> {\n    Html::from(tera.render(\"dashboard.html\", &ctx).unwrap())\n}"
+      expected: TruePositive
+    - code: "async fn page() -> impl IntoResponse {\n    let mut headers = HeaderMap::new();\n    headers.insert(\"Content-Security-Policy\", \"default-src 'self'\".parse().unwrap());\n    (headers, Html::from(render_template()))\n}"
+      expected: TrueNegative
+    - code: "async fn api_data() -> Json<Data> {\n    Json(get_data())\n}"
+      expected: TrueNegative
+    - code: "async fn page() -> impl IntoResponse {\n    Response::builder()\n        .header(\"Content-Security-Policy\", \"default-src 'self'\")\n        .body(html_body)\n        .unwrap()\n}"
+      expected: TrueNegative
+
+- id: "rust-axum-no-body-limit"
+  name: "Axum Extracting Raw Body Without Size Limit"
+  description: "Extracting request body as Bytes or String without DefaultBodyLimit layer allows clients to send arbitrarily large payloads causing OOM."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(function_item parameters: (parameters (parameter type: (type_identifier) @type (#match? @type \"^(Bytes|String|Body)$\")))) @func"
+    captures:
+      - "func"
+  cwe_id: "CWE-770"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.rs/axum/latest/axum/extract/struct.DefaultBodyLimit.html"
+  test_cases:
+    - code: "async fn upload(body: Bytes) -> impl IntoResponse {\n    save_file(&body).await\n}"
+      expected: TruePositive
+    - code: "async fn process(body: String) -> impl IntoResponse {\n    parse_data(&body)\n}"
+      expected: TruePositive
+    - code: "async fn ingest(body: Body) -> impl IntoResponse {\n    stream_to_disk(body).await\n}"
+      expected: TruePositive
+    - code: "async fn upload(body: Bytes) -> impl IntoResponse {\n    save_file(&body).await\n}\n// Router has .layer(DefaultBodyLimit::max(1024 * 1024))"
+      expected: TrueNegative
+    - code: "async fn get_user(Path(id): Path<i32>) -> Json<User> {\n    Json(find_user(id))\n}"
+      expected: TrueNegative
+    - code: "async fn upload(mut multipart: Multipart) -> impl IntoResponse {\n    while let Some(field) = multipart.next_field().await.unwrap() { }\n}"
+      expected: TrueNegative
+
+- id: "rust-axum-no-tls"
+  name: "Axum Server Without TLS Configuration"
+  description: "Axum server binding to address without TLS. Production servers should use HTTPS to encrypt traffic in transit."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @type name: (identifier) @method (#eq? @type \"Server\") (#eq? @method \"bind\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-319"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://docs.rs/axum-server/latest/axum_server/"
+  test_cases:
+    - code: "axum::Server::bind(&\"0.0.0.0:8080\".parse().unwrap()).serve(app.into_make_service()).await;"
+      expected: TruePositive
+    - code: "Server::bind(&addr).serve(app.into_make_service()).await.unwrap();"
+      expected: TruePositive
+    - code: "let server = Server::bind(&\"0.0.0.0:3000\".parse().unwrap());\nserver.serve(router.into_make_service()).await;"
+      expected: TruePositive
+    - code: "axum_server::bind_rustls(addr, tls_config).serve(app.into_make_service()).await;"
+      expected: TrueNegative
+    - code: "axum_server::bind_openssl(addr, ssl_config).serve(app.into_make_service()).await;"
+      expected: TrueNegative
+    - code: "// TLS terminated at load balancer\naxum::Server::bind(&\"127.0.0.1:8080\".parse().unwrap()).serve(app.into_make_service()).await;"
+      expected: TrueNegative
+
+
+# ============================================================================
+# INFORMATION LEAKAGE RULES (10 rules)
+# ============================================================================
+
+- id: "rust-debug-derive-secrets"
+  name: "Debug Trait Derived on Type Containing Secrets"
+  description: "Deriving Debug on a struct with fields named password, secret, token, api_key, or private_key will print sensitive values in logs and error messages. Implement Debug manually to redact secrets."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(attribute_item (attribute (identifier) @attr (#eq? @attr \"derive\"))) @derive"
+    captures:
+      - "derive"
+  cwe_id: "CWE-215"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+  test_cases:
+    - code: "#[derive(Debug, Clone)]\nstruct UserCredentials {\n    username: String,\n    password: String,\n}"
+      expected: TruePositive
+    - code: "#[derive(Debug)]\nstruct ApiConfig {\n    endpoint: String,\n    api_key: String,\n}"
+      expected: TruePositive
+    - code: "#[derive(Debug, Serialize)]\nstruct TokenPayload {\n    user_id: u64,\n    secret_token: String,\n}"
+      expected: TruePositive
+    - code: "#[derive(Clone)]\nstruct UserCredentials {\n    username: String,\n    password: String,\n}\nimpl fmt::Debug for UserCredentials {\n    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {\n        f.debug_struct(\"UserCredentials\").field(\"username\", &self.username).field(\"password\", &\"[REDACTED]\").finish()\n    }\n}"
+      expected: TrueNegative
+    - code: "#[derive(Debug, Clone)]\nstruct PublicProfile {\n    username: String,\n    display_name: String,\n}"
+      expected: TrueNegative
+    - code: "#[derive(Debug)]\nstruct AppConfig {\n    host: String,\n    port: u16,\n    database_url: String,\n}"
+      expected: TrueNegative
+
+- id: "rust-display-impl-secrets"
+  name: "Display Implementation Exposing Sensitive Fields"
+  description: "Implementing Display on a type that formats secret fields (password, token, key) exposes sensitive data when the value is printed or converted to string."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(impl_item trait: (type_identifier) @trait (#eq? @trait \"Display\") body: (declaration_list (function_item name: (identifier) @fn (#eq? @fn \"fmt\") body: (block (expression_statement (macro_invocation macro: (identifier) @mac (#eq? @mac \"write\"))))))) @impl"
+    captures:
+      - "impl"
+  cwe_id: "CWE-200"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+  test_cases:
+    - code: "impl fmt::Display for Credentials {\n    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {\n        write!(f, \"user={}, password={}\", self.username, self.password)\n    }\n}"
+      expected: TruePositive
+    - code: "impl fmt::Display for ApiToken {\n    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {\n        write!(f, \"token: {}\", self.secret_token)\n    }\n}"
+      expected: TruePositive
+    - code: "impl fmt::Display for Config {\n    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {\n        write!(f, \"endpoint={}, key={}\", self.endpoint, self.api_key)\n    }\n}"
+      expected: TruePositive
+    - code: "impl fmt::Display for Credentials {\n    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {\n        write!(f, \"user={}, password=[REDACTED]\", self.username)\n    }\n}"
+      expected: TrueNegative
+    - code: "impl fmt::Display for PublicUser {\n    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {\n        write!(f, \"User({})\", self.username)\n    }\n}"
+      expected: TrueNegative
+    - code: "impl fmt::Display for AppError {\n    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {\n        write!(f, \"Application error occurred\")\n    }\n}"
+      expected: TrueNegative
+
+- id: "rust-log-sensitive-data"
+  name: "Logging Sensitive Data (Passwords/Tokens/Keys)"
+  description: "Logging sensitive fields like passwords, tokens, or API keys writes secrets to log files where they may be accessed by unauthorized parties."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(macro_invocation macro: (scoped_identifier name: (identifier) @mac (#match? @mac \"^(info|debug|warn|error|trace)$\"))) @log"
+    captures:
+      - "log"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingAndMonitoringFailures
+  help_uri: "https://owasp.org/Top10/A09_2021-Security_Logging_and_Monitoring_Failures/"
+  test_cases:
+    - code: "log::info!(\"User login: {} with password: {}\", username, password);"
+      expected: TruePositive
+    - code: "log::debug!(\"API request with token: {}\", api_token);"
+      expected: TruePositive
+    - code: "log::warn!(\"Auth failed for key: {}\", secret_key);"
+      expected: TruePositive
+    - code: "log::info!(\"User {} logged in successfully\", username);"
+      expected: TrueNegative
+    - code: "log::debug!(\"Processing request for user_id: {}\", user_id);"
+      expected: TrueNegative
+    - code: "log::error!(\"Authentication failed for user: {}\", username);"
+      expected: TrueNegative
+
+- id: "rust-tracing-sensitive-data"
+  name: "Tracing Span/Event with Sensitive Data"
+  description: "Including sensitive fields in tracing spans or events writes secrets to structured logs and distributed tracing systems."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(macro_invocation macro: (scoped_identifier name: (identifier) @mac (#match? @mac \"^(info|debug|warn|error|trace|info_span|debug_span|warn_span|error_span)$\"))) @trace"
+    captures:
+      - "trace"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingAndMonitoringFailures
+  help_uri: "https://docs.rs/tracing/latest/tracing/"
+  test_cases:
+    - code: "tracing::info!(password = %password, \"User authenticated\");"
+      expected: TruePositive
+    - code: "tracing::debug!(api_key = %key, \"Making API call\");"
+      expected: TruePositive
+    - code: "tracing::error!(token = %auth_token, \"Token validation failed\");"
+      expected: TruePositive
+    - code: "tracing::info!(user_id = %id, \"User authenticated\");"
+      expected: TrueNegative
+    - code: "tracing::debug!(endpoint = %url, \"Making API call\");"
+      expected: TrueNegative
+    - code: "tracing::error!(error_code = %code, \"Request failed\");"
+      expected: TrueNegative
+
+- id: "rust-println-sensitive"
+  name: "println!/eprintln! with Sensitive Data"
+  description: "Using println! or eprintln! to output sensitive data like passwords, tokens, or keys writes secrets to stdout/stderr where they may be captured in CI logs."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(macro_invocation macro: (identifier) @mac (#match? @mac \"^(println|eprintln|print|eprint)$\")) @print"
+    captures:
+      - "print"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingAndMonitoringFailures
+  help_uri: "https://owasp.org/Top10/A09_2021-Security_Logging_and_Monitoring_Failures/"
+  test_cases:
+    - code: "println!(\"Password: {}\", user.password);"
+      expected: TruePositive
+    - code: "eprintln!(\"Token: {}\", auth_token);"
+      expected: TruePositive
+    - code: "println!(\"API Key = {}\", config.api_key);"
+      expected: TruePositive
+    - code: "println!(\"Server started on port {}\", port);"
+      expected: TrueNegative
+    - code: "eprintln!(\"Error: connection refused\");"
+      expected: TrueNegative
+    - code: "println!(\"Processing {} files\", count);"
+      expected: TrueNegative
+
+- id: "rust-serialize-secrets"
+  name: "Serializable Struct with Secret Fields"
+  description: "Deriving Serialize on a struct containing secret fields (password, token, key, secret) may expose sensitive data in JSON/YAML output, API responses, or logs."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(attribute_item (attribute (identifier) @attr (#eq? @attr \"derive\"))) @derive"
+    captures:
+      - "derive"
+  cwe_id: "CWE-200"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://serde.rs/field-attrs.html#skip_serializing"
+  test_cases:
+    - code: "#[derive(Serialize, Deserialize)]\nstruct User {\n    username: String,\n    password_hash: String,\n    api_key: String,\n}"
+      expected: TruePositive
+    - code: "#[derive(Serialize)]\nstruct AuthResponse {\n    user_id: u64,\n    refresh_token: String,\n}"
+      expected: TruePositive
+    - code: "#[derive(Serialize, Clone)]\nstruct DbConfig {\n    host: String,\n    password: String,\n}"
+      expected: TruePositive
+    - code: "#[derive(Serialize, Deserialize)]\nstruct User {\n    username: String,\n    #[serde(skip_serializing)]\n    password_hash: String,\n}"
+      expected: TrueNegative
+    - code: "#[derive(Serialize)]\nstruct PublicProfile {\n    username: String,\n    display_name: String,\n    avatar_url: String,\n}"
+      expected: TrueNegative
+    - code: "#[derive(Serialize)]\nstruct ApiResponse {\n    status: String,\n    data: Vec<Item>,\n}"
+      expected: TrueNegative
+
+- id: "rust-error-chain-expose"
+  name: "Error Chain Exposed to Client Response"
+  description: "Converting an error chain to string and returning it in an HTTP response exposes internal implementation details including database errors, file paths, and stack traces."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (field_expression field: (field_identifier) @method (#eq? @method \"body\")) arguments: (arguments (call_expression function: (field_expression field: (field_identifier) @to_str (#eq? @to_str \"to_string\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-209"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://owasp.org/www-community/Improper_Error_Handling"
+  test_cases:
+    - code: "HttpResponse::InternalServerError().body(err.to_string())"
+      expected: TruePositive
+    - code: "HttpResponse::BadRequest().body(validation_error.to_string())"
+      expected: TruePositive
+    - code: "HttpResponse::ServiceUnavailable().body(db_error.to_string())"
+      expected: TruePositive
+    - code: "HttpResponse::InternalServerError().body(\"An unexpected error occurred\")"
+      expected: TrueNegative
+    - code: "HttpResponse::BadRequest().json(json!({\"error\": \"invalid_input\"}))"
+      expected: TrueNegative
+    - code: "tracing::error!(%err);\nHttpResponse::InternalServerError().finish()"
+      expected: TrueNegative
+
+- id: "rust-debug-format-response"
+  name: "Debug Format ({:?}) in HTTP Response Body"
+  description: "Using {:?} debug formatting in HTTP response bodies exposes internal type names, memory addresses, and implementation details to clients."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(macro_invocation macro: (identifier) @mac (#eq? @mac \"format\") arguments: (token_tree (string_literal) @fmt (#match? @fmt \"\\{.*:.*\\?.*\\}\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-209"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://owasp.org/www-community/Improper_Error_Handling"
+  test_cases:
+    - code: "HttpResponse::InternalServerError().body(format!(\"{:?}\", error))"
+      expected: TruePositive
+    - code: "(StatusCode::INTERNAL_SERVER_ERROR, format!(\"{:#?}\", err)).into_response()"
+      expected: TruePositive
+    - code: "HttpResponse::BadRequest().body(format!(\"Validation failed: {:?}\", errors))"
+      expected: TruePositive
+    - code: "tracing::debug!(\"Error details: {:?}\", error);"
+      expected: TrueNegative
+    - code: "HttpResponse::Ok().body(format!(\"Processed {} items\", count))"
+      expected: TrueNegative
+    - code: "log::error!(\"Internal error: {:?}\", err);\nHttpResponse::InternalServerError().body(\"Internal error\")"
+      expected: TrueNegative
+
+- id: "rust-panic-message-leak"
+  name: "Panic Message Containing Sensitive Context"
+  description: "Using panic!, unwrap(), or expect() with messages containing sensitive variable names may expose secrets in crash reports and error handlers that forward panic info to clients."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(macro_invocation macro: (identifier) @mac (#eq? @mac \"panic\") arguments: (token_tree (string_literal) @msg)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-209"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://owasp.org/www-community/Improper_Error_Handling"
+  test_cases:
+    - code: "panic!(\"Failed to decrypt with key: {}\", secret_key);"
+      expected: TruePositive
+    - code: "panic!(\"Database connection failed: {}\", connection_string);"
+      expected: TruePositive
+    - code: "panic!(\"Token validation error: {}\", token);"
+      expected: TruePositive
+    - code: "panic!(\"Unexpected state: invariant violated\");"
+      expected: TrueNegative
+    - code: "panic!(\"Index out of bounds: {}\", index);"
+      expected: TrueNegative
+    - code: "unreachable!(\"This branch should never execute\");"
+      expected: TrueNegative
+
+- id: "rust-env-var-secret-log"
+  name: "Environment Variable Secret Logged or Printed"
+  description: "Reading a secret from an environment variable and immediately logging or printing it exposes the secret in log output."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"env\") (#eq? @fn \"var\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingAndMonitoringFailures
+  help_uri: "https://owasp.org/Top10/A09_2021-Security_Logging_and_Monitoring_Failures/"
+  test_cases:
+    - code: "let key = env::var(\"API_SECRET\").unwrap();\nprintln!(\"Using key: {}\", key);"
+      expected: TruePositive
+    - code: "let token = env::var(\"AUTH_TOKEN\").expect(\"AUTH_TOKEN must be set\");\nlog::info!(\"Token loaded: {}\", token);"
+      expected: TruePositive
+    - code: "let password = env::var(\"DB_PASSWORD\").unwrap();\neprintln!(\"DB password: {}\", password);"
+      expected: TruePositive
+    - code: "let key = env::var(\"API_SECRET\").unwrap();\n// key used directly, never logged"
+      expected: TrueNegative
+    - code: "let port = env::var(\"PORT\").unwrap_or(\"8080\".to_string());\nprintln!(\"Listening on port {}\", port);"
+      expected: TrueNegative
+    - code: "let db_url = env::var(\"DATABASE_URL\").unwrap();\nlog::info!(\"Connected to database\");"
+      expected: TrueNegative
+
+
+# ============================================================================
+# ADDITIONAL ACTIX-WEB FRAMEWORK RULES (4 rules)
+# ============================================================================
+
+- id: "rust-actix-hardcoded-secret-key"
+  name: "Actix-web Hardcoded Secret Key"
+  description: "Using a hardcoded byte array or string literal as a session/cookie signing key. Secret keys must be loaded from environment variables or a secrets manager."
+  severity: Critical
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @type name: (identifier) @method (#eq? @type \"CookieSession\") (#eq? @method \"signed\")) arguments: (arguments (reference_expression (array_expression)))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-321"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "CookieSession::signed(&[0; 32]).secure(true)"
+      expected: TruePositive
+    - code: "CookieSession::signed(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32])"
+      expected: TruePositive
+    - code: "CookieSession::signed(&[0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])"
+      expected: TruePositive
+    - code: "CookieSession::signed(&secret_key_from_env).secure(true)"
+      expected: TrueNegative
+    - code: "CookieSession::signed(Key::generate().master()).secure(true)"
+      expected: TrueNegative
+    - code: "let key = std::env::var(\"SESSION_KEY\").unwrap();\nCookieSession::signed(key.as_bytes())"
+      expected: TrueNegative
+
+- id: "rust-actix-unvalidated-json-size"
+  name: "Actix-web JSON Extractor Without Size Limit"
+  description: "Using web::Json<T> extractor without configuring JsonConfig with a size limit allows clients to send arbitrarily large JSON payloads causing OOM."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(function_item parameters: (parameters (parameter type: (generic_type type: (scoped_type_identifier path: (identifier) @mod name: (type_identifier) @type (#eq? @mod \"web\") (#eq? @type \"Json\")))))) @func"
+    captures:
+      - "func"
+  cwe_id: "CWE-770"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.rs/actix-web/latest/actix_web/web/struct.JsonConfig.html"
+  test_cases:
+    - code: "async fn create_item(body: web::Json<LargePayload>) -> impl Responder {\n    process(&body).await;\n    HttpResponse::Created().finish()\n}"
+      expected: TruePositive
+    - code: "async fn upload_data(payload: web::Json<Vec<Record>>) -> impl Responder {\n    save_records(&payload).await;\n    HttpResponse::Ok().finish()\n}"
+      expected: TruePositive
+    - code: "async fn bulk_import(data: web::Json<BulkImport>) -> impl Responder {\n    import_all(&data).await\n}"
+      expected: TruePositive
+    - code: "// In App configuration:\nApp::new().app_data(web::JsonConfig::default().limit(4096))"
+      expected: TrueNegative
+    - code: "async fn get_user(path: web::Path<i32>) -> impl Responder {\n    HttpResponse::Ok().json(find_user(path.into_inner()))\n}"
+      expected: TrueNegative
+    - code: "async fn create_item(body: web::Json<SmallDto>) -> impl Responder {\n    // JsonConfig::default().limit(1024) configured in app\n    HttpResponse::Created().finish()\n}"
+      expected: TrueNegative
+
+- id: "rust-actix-exposed-server-header"
+  name: "Actix-web Default Server Header Exposed"
+  description: "Actix-web exposes a Server header revealing framework name and version by default. Disable or customize it to prevent information disclosure."
+  severity: Low
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @type name: (identifier) @method (#eq? @type \"HttpServer\") (#eq? @method \"new\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-200"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.rs/actix-web/latest/actix_web/struct.HttpServer.html"
+  test_cases:
+    - code: "HttpServer::new(|| App::new().service(api_scope)).bind(\"0.0.0.0:8080\")?.run().await"
+      expected: TruePositive
+    - code: "HttpServer::new(move || App::new().configure(config)).bind(addr)?.run().await"
+      expected: TruePositive
+    - code: "let server = HttpServer::new(|| App::new());\nserver.bind(\"0.0.0.0:3000\")?.run().await"
+      expected: TruePositive
+    - code: "HttpServer::new(|| App::new()).server_hostname(\"api\").disable_signals().bind(addr)?.run().await"
+      expected: TrueNegative
+    - code: "HttpServer::new(|| {\n    App::new().wrap(middleware::DefaultHeaders::new().add((\"Server\", \"custom\")))\n}).bind(addr)?.run().await"
+      expected: TrueNegative
+    - code: "// Server header stripped by reverse proxy\nHttpServer::new(|| App::new()).bind(\"127.0.0.1:8080\")?.run().await"
+      expected: TrueNegative
+
+- id: "rust-actix-open-redirect"
+  name: "Actix-web Unvalidated Redirect"
+  description: "Redirecting to a URL derived from user input without validation enables open redirect attacks. Validate redirect targets against an allowlist of trusted domains."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @type name: (identifier) @method (#eq? @type \"HttpResponse\") (#match? @method \"^(Found|MovedPermanently|TemporaryRedirect|SeeOther|PermanentRedirect)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-601"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html"
+  test_cases:
+    - code: "async fn redirect(query: web::Query<RedirectParams>) -> impl Responder {\n    HttpResponse::Found().insert_header((\"Location\", query.url.as_str())).finish()\n}"
+      expected: TruePositive
+    - code: "async fn login_redirect(params: web::Query<LoginParams>) -> impl Responder {\n    HttpResponse::TemporaryRedirect().insert_header((\"Location\", params.next.as_str())).finish()\n}"
+      expected: TruePositive
+    - code: "async fn go(path: web::Path<String>) -> impl Responder {\n    HttpResponse::MovedPermanently().insert_header((\"Location\", path.into_inner())).finish()\n}"
+      expected: TruePositive
+    - code: "async fn redirect() -> impl Responder {\n    HttpResponse::Found().insert_header((\"Location\", \"/dashboard\")).finish()\n}"
+      expected: TrueNegative
+    - code: "async fn redirect(query: web::Query<Params>) -> impl Responder {\n    let url = validate_redirect_url(&query.url)?;\n    HttpResponse::Found().insert_header((\"Location\", url)).finish()\n}"
+      expected: TrueNegative
+    - code: "HttpResponse::SeeOther().insert_header((\"Location\", \"/login\")).finish()"
+      expected: TrueNegative
+
+# ============================================================================
+# ADDITIONAL AXUM FRAMEWORK RULES (4 rules)
+# ============================================================================
+
+- id: "rust-axum-hardcoded-state-secret"
+  name: "Axum State with Hardcoded Secret"
+  description: "Passing a hardcoded secret string or byte array as Axum shared state. Secrets must be loaded from environment variables or a secrets manager at runtime."
+  severity: Critical
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (field_expression field: (field_identifier) @method (#eq? @method \"with_state\")) arguments: (arguments (struct_expression body: (field_initializer_list (field_initializer field: (field_identifier) @field (#match? @field \"(secret|key|token|password)\") value: (string_literal)))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-321"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "Router::new().route(\"/api\", get(handler)).with_state(AppState { secret_key: \"hardcoded-secret-123\".to_string() })"
+      expected: TruePositive
+    - code: "Router::new().with_state(Config { jwt_secret: \"my-jwt-secret\".to_string(), db_url: db_url })"
+      expected: TruePositive
+    - code: "let app = Router::new().with_state(State { api_key: \"sk-1234567890abcdef\".to_string() });"
+      expected: TruePositive
+    - code: "let secret = std::env::var(\"JWT_SECRET\").unwrap();\nRouter::new().with_state(AppState { secret_key: secret })"
+      expected: TrueNegative
+    - code: "Router::new().with_state(AppState { db_pool: pool, config: config })"
+      expected: TrueNegative
+    - code: "Router::new().with_state(AppState::from_env().await?)"
+      expected: TrueNegative
+
+- id: "rust-axum-open-redirect"
+  name: "Axum Unvalidated Redirect Response"
+  description: "Constructing a redirect response using user-supplied URL without validation enables open redirect attacks. Validate redirect targets against trusted domains."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @type name: (identifier) @method (#eq? @type \"Redirect\") (#match? @method \"^(to|temporary|permanent)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-601"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html"
+  test_cases:
+    - code: "async fn redirect(Query(params): Query<RedirectParams>) -> Redirect {\n    Redirect::to(&params.url)\n}"
+      expected: TruePositive
+    - code: "async fn login_redirect(Query(q): Query<LoginQuery>) -> Redirect {\n    Redirect::temporary(&q.next)\n}"
+      expected: TruePositive
+    - code: "async fn go(Path(url): Path<String>) -> Redirect {\n    Redirect::permanent(&url)\n}"
+      expected: TruePositive
+    - code: "async fn home() -> Redirect {\n    Redirect::to(\"/dashboard\")\n}"
+      expected: TrueNegative
+    - code: "async fn redirect(Query(params): Query<Params>) -> Result<Redirect, AppError> {\n    let safe_url = validate_url(&params.url)?;\n    Ok(Redirect::to(&safe_url))\n}"
+      expected: TrueNegative
+    - code: "Redirect::temporary(\"/login\")"
+      expected: TrueNegative
+
+- id: "rust-axum-missing-request-id"
+  name: "Axum Router Without Request ID Middleware"
+  description: "Axum Router without request ID propagation makes it difficult to correlate logs and trace security incidents across distributed services."
+  severity: Low
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @type name: (identifier) @method (#eq? @type \"Router\") (#eq? @method \"new\"))) @router"
+    captures:
+      - "router"
+  cwe_id: "CWE-778"
+  owasp_category: A09_SecurityLoggingAndMonitoringFailures
+  help_uri: "https://docs.rs/tower-http/latest/tower_http/request_id/index.html"
+  test_cases:
+    - code: "Router::new()\n    .route(\"/api/users\", get(list_users))\n    .route(\"/api/orders\", get(list_orders))"
+      expected: TruePositive
+    - code: "let app = Router::new().route(\"/api/data\", post(create_data));"
+      expected: TruePositive
+    - code: "Router::new().nest(\"/api\", api_routes).layer(CorsLayer::new())"
+      expected: TruePositive
+    - code: "Router::new()\n    .route(\"/api/users\", get(list_users))\n    .layer(SetRequestIdLayer::new(x_request_id.clone(), MakeRequestUuid))"
+      expected: TrueNegative
+    - code: "Router::new()\n    .route(\"/api/data\", get(handler))\n    .layer(TraceLayer::new_for_http())"
+      expected: TrueNegative
+    - code: "Router::new()\n    .route(\"/api/data\", get(handler))\n    .layer(PropagateRequestIdLayer::new(x_request_id))"
+      expected: TrueNegative
+
+- id: "rust-axum-unvalidated-multipart"
+  name: "Axum Multipart Upload Without Validation"
+  description: "Processing multipart file uploads without validating file type, size, or content allows malicious file uploads that may lead to RCE or storage exhaustion."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(function_item parameters: (parameters (parameter type: (type_identifier) @type (#eq? @type \"Multipart\")))) @func"
+    captures:
+      - "func"
+  cwe_id: "CWE-434"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://owasp.org/www-community/vulnerabilities/Unrestricted_File_Upload"
+  test_cases:
+    - code: "async fn upload(mut multipart: Multipart) -> impl IntoResponse {\n    while let Some(field) = multipart.next_field().await.unwrap() {\n        let data = field.bytes().await.unwrap();\n        std::fs::write(format!(\"./uploads/{}\", field.file_name().unwrap()), &data).unwrap();\n    }\n}"
+      expected: TruePositive
+    - code: "async fn import(mut multipart: Multipart) -> impl IntoResponse {\n    let field = multipart.next_field().await.unwrap().unwrap();\n    let bytes = field.bytes().await.unwrap();\n    save_to_disk(&bytes).await\n}"
+      expected: TruePositive
+    - code: "async fn avatar(mut multipart: Multipart) -> impl IntoResponse {\n    let field = multipart.next_field().await.unwrap().unwrap();\n    let name = field.file_name().unwrap().to_string();\n    let data = field.bytes().await.unwrap();\n    tokio::fs::write(format!(\"./avatars/{}\", name), data).await.unwrap();\n    StatusCode::OK\n}"
+      expected: TruePositive
+    - code: "async fn upload(mut multipart: Multipart) -> Result<impl IntoResponse, AppError> {\n    let field = multipart.next_field().await?.ok_or(AppError::NoFile)?;\n    validate_content_type(field.content_type())?;\n    validate_file_size(field.bytes().await?, MAX_SIZE)?;\n    Ok(StatusCode::OK)\n}"
+      expected: TrueNegative
+    - code: "async fn get_users() -> Json<Vec<User>> {\n    Json(fetch_users().await)\n}"
+      expected: TrueNegative
+    - code: "async fn upload(mut multipart: Multipart) -> Result<impl IntoResponse, AppError> {\n    let field = multipart.next_field().await?.ok_or(AppError::NoFile)?;\n    let ext = validate_extension(field.file_name())?;\n    let data = field.bytes().await?;\n    if data.len() > MAX_UPLOAD_SIZE { return Err(AppError::TooLarge); }\n    Ok(StatusCode::OK)\n}"
+      expected: TrueNegative
+
+
+# ============================================================================
+# ADDITIONAL INFORMATION LEAKAGE / FRAMEWORK RULES (4 rules)
+# ============================================================================
+
+- id: "rust-backtrace-in-response"
+  name: "Backtrace Exposed in HTTP Response"
+  description: "Including std::backtrace::Backtrace or RUST_BACKTRACE output in HTTP responses exposes internal code structure, file paths, and function names to attackers."
+  severity: High
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (scoped_identifier path: (identifier) @mod1 name: (identifier) @mod2 (#eq? @mod1 \"std\") (#eq? @mod2 \"backtrace\")) name: (identifier) @fn (#eq? @fn \"Backtrace\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-209"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://owasp.org/www-community/Improper_Error_Handling"
+  test_cases:
+    - code: "impl IntoResponse for AppError {\n    fn into_response(self) -> Response {\n        let bt = std::backtrace::Backtrace::capture();\n        (StatusCode::INTERNAL_SERVER_ERROR, format!(\"{}\", bt)).into_response()\n    }\n}"
+      expected: TruePositive
+    - code: "HttpResponse::InternalServerError().body(format!(\"Error: {}\\nBacktrace: {}\", err, std::backtrace::Backtrace::capture()))"
+      expected: TruePositive
+    - code: "let trace = std::backtrace::Backtrace::force_capture();\nHttpResponse::InternalServerError().body(trace.to_string())"
+      expected: TruePositive
+    - code: "let bt = std::backtrace::Backtrace::capture();\ntracing::error!(\"Internal error: {}\\n{}\", err, bt);\nHttpResponse::InternalServerError().body(\"Internal error\")"
+      expected: TrueNegative
+    - code: "tracing::error!(backtrace = %std::backtrace::Backtrace::capture(), \"Error occurred\");\n(StatusCode::INTERNAL_SERVER_ERROR, \"Something went wrong\").into_response()"
+      expected: TrueNegative
+    - code: "log::error!(\"Panic: {:?}\", std::backtrace::Backtrace::capture());"
+      expected: TrueNegative
+
+- id: "rust-actix-cookie-no-same-site"
+  name: "Actix-web Cookie Without SameSite Attribute"
+  description: "Setting cookies without SameSite attribute allows cross-site request forgery. Set SameSite to Strict or Lax for session and authentication cookies."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @type name: (identifier) @method (#eq? @type \"Cookie\") (#eq? @method \"new\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-1275"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite"
+  test_cases:
+    - code: "let cookie = Cookie::new(\"session_id\", token);\nHttpResponse::Ok().cookie(cookie).finish()"
+      expected: TruePositive
+    - code: "let mut cookie = Cookie::new(\"auth\", jwt_token);\ncookie.set_http_only(true);\nHttpResponse::Ok().cookie(cookie).finish()"
+      expected: TruePositive
+    - code: "Cookie::new(\"user_pref\", preference_value)"
+      expected: TruePositive
+    - code: "let mut cookie = Cookie::new(\"session_id\", token);\ncookie.set_same_site(SameSite::Strict);\ncookie.set_http_only(true);\ncookie.set_secure(true);"
+      expected: TrueNegative
+    - code: "Cookie::build(\"session\", token).same_site(SameSite::Lax).http_only(true).secure(true).finish()"
+      expected: TrueNegative
+    - code: "let cookie = Cookie::build(\"csrf_token\", csrf).same_site(SameSite::Strict).finish();"
+      expected: TrueNegative
+
+- id: "rust-axum-extension-without-type-safety"
+  name: "Axum Extension Without Type-Safe State"
+  description: "Using Extension<T> for shared state instead of State<T> loses compile-time guarantees that all routes have access to required state, potentially causing runtime panics."
+  severity: Low
+  languages:
+    - Rust
+  pattern:
+    query: "(function_item parameters: (parameters (parameter type: (generic_type type: (type_identifier) @type (#eq? @type \"Extension\"))))) @func"
+    captures:
+      - "func"
+  cwe_id: "CWE-754"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://docs.rs/axum/latest/axum/extract/struct.State.html"
+  test_cases:
+    - code: "async fn handler(Extension(db): Extension<DatabasePool>) -> impl IntoResponse {\n    let users = db.query(\"SELECT * FROM users\").await;\n    Json(users)\n}"
+      expected: TruePositive
+    - code: "async fn create(Extension(pool): Extension<PgPool>, Json(body): Json<CreateReq>) -> impl IntoResponse {\n    pool.execute(\"INSERT INTO items ...\").await\n}"
+      expected: TruePositive
+    - code: "async fn get_config(Extension(config): Extension<Arc<AppConfig>>) -> Json<Config> {\n    Json(config.as_ref().clone())\n}"
+      expected: TruePositive
+    - code: "async fn handler(State(db): State<DatabasePool>) -> impl IntoResponse {\n    let users = db.query(\"SELECT * FROM users\").await;\n    Json(users)\n}"
+      expected: TrueNegative
+    - code: "async fn create(State(pool): State<PgPool>, Json(body): Json<CreateReq>) -> impl IntoResponse {\n    pool.execute(\"INSERT INTO items ...\").await\n}"
+      expected: TrueNegative
+    - code: "async fn handler(Extension(user): Extension<AuthenticatedUser>) -> impl IntoResponse {\n    // Auth extractor is fine as Extension\n    Json(user)\n}"
+      expected: TrueNegative
+
+- id: "rust-tower-http-sensitive-headers"
+  name: "Sensitive Headers Not Redacted in Logs"
+  description: "Using tower-http TraceLayer without configuring sensitive header redaction logs Authorization, Cookie, and Set-Cookie headers in plain text."
+  severity: Medium
+  languages:
+    - Rust
+  pattern:
+    query: "(call_expression function: (scoped_identifier path: (identifier) @type name: (identifier) @method (#eq? @type \"TraceLayer\") (#eq? @method \"new_for_http\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingAndMonitoringFailures
+  help_uri: "https://docs.rs/tower-http/latest/tower_http/sensitive_headers/index.html"
+  test_cases:
+    - code: "Router::new()\n    .route(\"/api\", get(handler))\n    .layer(TraceLayer::new_for_http())"
+      expected: TruePositive
+    - code: "let trace_layer = TraceLayer::new_for_http();\nRouter::new().layer(trace_layer)"
+      expected: TruePositive
+    - code: "Router::new()\n    .route(\"/api/auth\", post(login))\n    .layer(TraceLayer::new_for_http())"
+      expected: TruePositive
+    - code: "Router::new()\n    .route(\"/api\", get(handler))\n    .layer(SetSensitiveRequestHeadersLayer::new([AUTHORIZATION, COOKIE]))\n    .layer(TraceLayer::new_for_http())"
+      expected: TrueNegative
+    - code: "Router::new()\n    .layer(TraceLayer::new_for_http().on_request(|req: &Request<_>, _span: &Span| {\n        // Custom logging that redacts sensitive headers\n    }))"
+      expected: TrueNegative
+    - code: "Router::new()\n    .layer(\n        ServiceBuilder::new()\n            .layer(SetSensitiveHeadersLayer::new([AUTHORIZATION]))\n            .layer(TraceLayer::new_for_http())\n    )"
+      expected: TrueNegative

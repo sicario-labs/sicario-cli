@@ -1,0 +1,276 @@
+# Insecure Cryptography Rules for Python
+# Covers: hashlib.md5/sha1 for passwords, random module for security, weak Fernet key derivation
+#
+# CWE-327: Use of a Broken or Risky Cryptographic Algorithm
+# CWE-330: Use of Insufficiently Random Values
+# OWASP A02:2021 - Cryptographic Failures
+
+- id: "py-hashlib-md5"
+  name: "hashlib.md5() for Password Hashing"
+  description: "MD5 is cryptographically broken and should not be used for password hashing. Use bcrypt, scrypt, or argon2 instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"hashlib\") attribute: (identifier) @fn (#eq? @fn \"md5\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "hashlib.md5(password.encode()).hexdigest()"
+      expected: TruePositive
+    - code: "hashlib.md5(data).digest()"
+      expected: TruePositive
+    - code: "h = hashlib.md5()"
+      expected: TruePositive
+    - code: "bcrypt.hashpw(password, bcrypt.gensalt())"
+      expected: TrueNegative
+    - code: "hashlib.sha256(data).hexdigest()"
+      expected: TrueNegative
+    - code: "hashlib.pbkdf2_hmac('sha256', password, salt, 100000)"
+      expected: TrueNegative
+
+- id: "py-hashlib-sha1"
+  name: "hashlib.sha1() for Password Hashing"
+  description: "SHA1 is cryptographically weak and should not be used for password hashing. Use bcrypt, scrypt, or argon2 instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"hashlib\") attribute: (identifier) @fn (#eq? @fn \"sha1\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "hashlib.sha1(password.encode()).hexdigest()"
+      expected: TruePositive
+    - code: "hashlib.sha1(data).digest()"
+      expected: TruePositive
+    - code: "h = hashlib.sha1()"
+      expected: TruePositive
+    - code: "bcrypt.hashpw(password, bcrypt.gensalt())"
+      expected: TrueNegative
+    - code: "hashlib.sha256(data).hexdigest()"
+      expected: TrueNegative
+    - code: "hashlib.pbkdf2_hmac('sha256', password, salt, 100000)"
+      expected: TrueNegative
+
+- id: "py-hashlib-new-md5"
+  name: "hashlib.new('md5') Usage"
+  description: "Creating MD5 hash via hashlib.new() is cryptographically broken. Use SHA-256 or stronger algorithms."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"hashlib\") attribute: (identifier) @fn (#eq? @fn \"new\")) arguments: (argument_list (string) @algo (#match? @algo \"'md5'\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "hashlib.new('md5')"
+      expected: TruePositive
+    - code: "hashlib.new('md5', data)"
+      expected: TruePositive
+    - code: "h = hashlib.new('md5')"
+      expected: TruePositive
+    - code: "hashlib.new('sha256')"
+      expected: TrueNegative
+    - code: "hashlib.new('sha512')"
+      expected: TrueNegative
+    - code: "hashlib.sha256(data)"
+      expected: TrueNegative
+
+- id: "py-hashlib-new-sha1"
+  name: "hashlib.new('sha1') Usage"
+  description: "Creating SHA1 hash via hashlib.new() is cryptographically weak. Use SHA-256 or stronger algorithms."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"hashlib\") attribute: (identifier) @fn (#eq? @fn \"new\")) arguments: (argument_list (string) @algo (#match? @algo \"'sha1'\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "hashlib.new('sha1')"
+      expected: TruePositive
+    - code: "hashlib.new('sha1', data)"
+      expected: TruePositive
+    - code: "h = hashlib.new('sha1')"
+      expected: TruePositive
+    - code: "hashlib.new('sha256')"
+      expected: TrueNegative
+    - code: "hashlib.new('sha512')"
+      expected: TrueNegative
+    - code: "hashlib.sha256(data)"
+      expected: TrueNegative
+
+- id: "py-random-security"
+  name: "random Module for Security-Sensitive Operations"
+  description: "The random module uses a Mersenne Twister PRNG which is predictable. Use secrets or os.urandom() for security-sensitive operations."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"random\") attribute: (identifier) @fn (#match? @fn \"^(randint|random|randrange|choice|choices|sample|getrandbits|uniform)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-330"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://docs.python.org/3/library/secrets.html"
+  test_cases:
+    - code: "token = random.randint(0, 999999)"
+      expected: TruePositive
+    - code: "key = random.getrandbits(128)"
+      expected: TruePositive
+    - code: "code = random.choice(string.ascii_letters)"
+      expected: TruePositive
+    - code: "token = secrets.token_hex(32)"
+      expected: TrueNegative
+    - code: "key = os.urandom(32)"
+      expected: TrueNegative
+    - code: "secrets.choice(string.ascii_letters)"
+      expected: TrueNegative
+
+- id: "py-random-seed-static"
+  name: "random.seed() with Static Value"
+  description: "Seeding random with a static value makes output predictable. Use secrets module for security-sensitive operations."
+  severity: Medium
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"random\") attribute: (identifier) @fn (#eq? @fn \"seed\")) arguments: (argument_list (integer) @val)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-330"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://docs.python.org/3/library/random.html#random.seed"
+  test_cases:
+    - code: "random.seed(42)"
+      expected: TruePositive
+    - code: "random.seed(0)"
+      expected: TruePositive
+    - code: "random.seed(12345)"
+      expected: TruePositive
+    - code: "random.seed(os.urandom(16))"
+      expected: TrueNegative
+    - code: "random.seed()"
+      expected: TrueNegative
+    - code: "np.random.seed(42)"
+      expected: TrueNegative
+
+- id: "py-weak-fernet-key"
+  name: "Weak Fernet Key Derivation"
+  description: "Deriving Fernet keys from passwords without proper KDF (like PBKDF2 with sufficient iterations) is insecure. Use cryptography.hazmat.primitives.kdf.pbkdf2.PBKDF2HMAC."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"Fernet\") arguments: (argument_list (call function: (attribute object: (identifier) @mod (#eq? @mod \"base64\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cryptography.io/en/latest/fernet/"
+  test_cases:
+    - code: "Fernet(base64.urlsafe_b64encode(password.encode()))"
+      expected: TruePositive
+    - code: "Fernet(base64.b64encode(key_bytes))"
+      expected: TruePositive
+    - code: "Fernet(base64.urlsafe_b64encode(b'weak-key-padding!'))"
+      expected: TruePositive
+    - code: "Fernet(Fernet.generate_key())"
+      expected: TrueNegative
+    - code: "Fernet(derived_key)"
+      expected: TrueNegative
+    - code: "base64.urlsafe_b64encode(data)"
+      expected: TrueNegative
+
+- id: "py-des-usage"
+  name: "DES/3DES Encryption Usage"
+  description: "DES and 3DES are deprecated and insecure. Use AES-256-GCM or ChaCha20-Poly1305 instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute attribute: (identifier) @fn (#match? @fn \"^(DES|DES3|TripleDES)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cryptography.io/en/latest/hazmat/primitives/symmetric-encryption/"
+  test_cases:
+    - code: "DES.new(key, DES.MODE_ECB)"
+      expected: TruePositive
+    - code: "DES3.new(key, DES3.MODE_CBC, iv)"
+      expected: TruePositive
+    - code: "TripleDES.new(key)"
+      expected: TruePositive
+    - code: "AES.new(key, AES.MODE_GCM)"
+      expected: TrueNegative
+    - code: "ChaCha20_Poly1305.new(key=key)"
+      expected: TrueNegative
+    - code: "Fernet(key)"
+      expected: TrueNegative
+
+- id: "py-ecb-mode"
+  name: "ECB Mode Encryption"
+  description: "ECB mode does not provide semantic security — identical plaintext blocks produce identical ciphertext. Use CBC, GCM, or CTR mode instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(attribute attribute: (identifier) @mode (#eq? @mode \"MODE_ECB\")) @attr"
+    captures:
+      - "attr"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cryptography.io/en/latest/hazmat/primitives/symmetric-encryption/"
+  test_cases:
+    - code: "AES.new(key, AES.MODE_ECB)"
+      expected: TruePositive
+    - code: "cipher = DES.new(key, DES.MODE_ECB)"
+      expected: TruePositive
+    - code: "Blowfish.new(key, Blowfish.MODE_ECB)"
+      expected: TruePositive
+    - code: "AES.new(key, AES.MODE_GCM)"
+      expected: TrueNegative
+    - code: "AES.new(key, AES.MODE_CBC, iv)"
+      expected: TrueNegative
+    - code: "AES.new(key, AES.MODE_CTR)"
+      expected: TrueNegative
+
+- id: "py-hardcoded-crypto-key"
+  name: "Hardcoded Encryption Key"
+  description: "Hardcoding encryption keys in source code exposes them in version control. Load keys from environment variables or a secrets manager."
+  severity: Critical
+  languages:
+    - Python
+  pattern:
+    query: "(assignment left: (identifier) @name (#match? @name \"^(key|secret_key|encryption_key|aes_key|crypto_key|private_key)$\") right: (string) @val) @assign"
+    captures:
+      - "assign"
+  cwe_id: "CWE-798"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "encryption_key = 'my-secret-key-1234567890abcdef'"
+      expected: TruePositive
+    - code: "aes_key = \"0123456789abcdef0123456789abcdef\""
+      expected: TruePositive
+    - code: "crypto_key = 'super-secret-key'"
+      expected: TruePositive
+    - code: "encryption_key = os.environ.get('ENCRYPTION_KEY')"
+      expected: TrueNegative
+    - code: "aes_key = generate_key()"
+      expected: TrueNegative
+    - code: "name = 'my-key'"
+      expected: TrueNegative

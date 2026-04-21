@@ -1,0 +1,350 @@
+# Insecure Cryptography Rules for Java
+# Covers: MD5/SHA1 via MessageDigest, DES/3DES, ECB mode, hardcoded keys,
+# java.util.Random for security, weak key sizes, insecure SecureRandom seeds,
+# deprecated crypto algorithms
+#
+# CWE-327: Use of a Broken or Risky Cryptographic Algorithm
+# CWE-328: Use of Weak Hash
+# CWE-330: Use of Insufficiently Random Values
+# OWASP A02:2021 - Cryptographic Failures
+
+# ============================================================================
+# Weak Hash Algorithms (3 rules)
+# ============================================================================
+
+- id: "java-crypto-md5-messagedigest"
+  name: "MessageDigest.getInstance(\"MD5\")"
+  description: "MD5 is cryptographically broken and must not be used for password hashing or integrity verification. Use SHA-256 or bcrypt instead."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#eq? @obj \"MessageDigest\") name: (identifier) @method (#eq? @method \"getInstance\") arguments: (argument_list (string_literal) @algo (#match? @algo \"(?i)MD5\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-328"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "MessageDigest.getInstance(\"MD5\");"
+      expected: TruePositive
+    - code: "MessageDigest md = MessageDigest.getInstance(\"MD5\");"
+      expected: TruePositive
+    - code: "MessageDigest.getInstance(\"md5\");"
+      expected: TruePositive
+    - code: "MessageDigest.getInstance(\"SHA-256\");"
+      expected: TrueNegative
+    - code: "MessageDigest.getInstance(\"SHA-512\");"
+      expected: TrueNegative
+    - code: "MessageDigest.isEqual(a, b);"
+      expected: TrueNegative
+
+- id: "java-crypto-sha1-messagedigest"
+  name: "MessageDigest.getInstance(\"SHA-1\")"
+  description: "SHA-1 is cryptographically weak and must not be used for password hashing or digital signatures. Use SHA-256 or bcrypt instead."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#eq? @obj \"MessageDigest\") name: (identifier) @method (#eq? @method \"getInstance\") arguments: (argument_list (string_literal) @algo (#match? @algo \"(?i)(SHA-?1|SHA1)\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-328"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "MessageDigest.getInstance(\"SHA-1\");"
+      expected: TruePositive
+    - code: "MessageDigest.getInstance(\"SHA1\");"
+      expected: TruePositive
+    - code: "MessageDigest md = MessageDigest.getInstance(\"SHA-1\");"
+      expected: TruePositive
+    - code: "MessageDigest.getInstance(\"SHA-256\");"
+      expected: TrueNegative
+    - code: "MessageDigest.getInstance(\"SHA-512\");"
+      expected: TrueNegative
+    - code: "MessageDigest.isEqual(a, b);"
+      expected: TrueNegative
+
+- id: "java-crypto-md2-messagedigest"
+  name: "MessageDigest.getInstance(\"MD2\")"
+  description: "MD2 is obsolete and cryptographically broken. Use SHA-256 or stronger hash algorithms."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#eq? @obj \"MessageDigest\") name: (identifier) @method (#eq? @method \"getInstance\") arguments: (argument_list (string_literal) @algo (#match? @algo \"(?i)MD2\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-328"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "MessageDigest.getInstance(\"MD2\");"
+      expected: TruePositive
+    - code: "MessageDigest md = MessageDigest.getInstance(\"MD2\");"
+      expected: TruePositive
+    - code: "MessageDigest.getInstance(\"md2\");"
+      expected: TruePositive
+    - code: "MessageDigest.getInstance(\"SHA-256\");"
+      expected: TrueNegative
+    - code: "MessageDigest.getInstance(\"SHA-384\");"
+      expected: TrueNegative
+    - code: "MessageDigest.isEqual(a, b);"
+      expected: TrueNegative
+
+
+# ============================================================================
+# Weak Encryption Algorithms (3 rules)
+# ============================================================================
+
+- id: "java-crypto-des-cipher"
+  name: "Cipher.getInstance with DES"
+  description: "DES uses a 56-bit key and is trivially breakable. Use AES-256 with GCM mode instead."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#eq? @obj \"Cipher\") name: (identifier) @method (#eq? @method \"getInstance\") arguments: (argument_list (string_literal) @algo (#match? @algo \"^\\\"DES\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "Cipher.getInstance(\"DES\");"
+      expected: TruePositive
+    - code: "Cipher.getInstance(\"DES/ECB/PKCS5Padding\");"
+      expected: TruePositive
+    - code: "Cipher.getInstance(\"DESede/CBC/PKCS5Padding\");"
+      expected: TruePositive
+    - code: "Cipher.getInstance(\"AES/GCM/NoPadding\");"
+      expected: TrueNegative
+    - code: "Cipher.getInstance(\"AES/CBC/PKCS5Padding\");"
+      expected: TrueNegative
+    - code: "Cipher.getMaxAllowedKeyLength(\"AES\");"
+      expected: TrueNegative
+
+- id: "java-crypto-ecb-mode"
+  name: "Cipher.getInstance with ECB Mode"
+  description: "ECB mode does not provide semantic security — identical plaintext blocks produce identical ciphertext. Use GCM or CBC with a random IV."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#eq? @obj \"Cipher\") name: (identifier) @method (#eq? @method \"getInstance\") arguments: (argument_list (string_literal) @algo (#match? @algo \"/ECB/\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "Cipher.getInstance(\"AES/ECB/PKCS5Padding\");"
+      expected: TruePositive
+    - code: "Cipher.getInstance(\"AES/ECB/NoPadding\");"
+      expected: TruePositive
+    - code: "Cipher.getInstance(\"Blowfish/ECB/PKCS5Padding\");"
+      expected: TruePositive
+    - code: "Cipher.getInstance(\"AES/GCM/NoPadding\");"
+      expected: TrueNegative
+    - code: "Cipher.getInstance(\"AES/CBC/PKCS5Padding\");"
+      expected: TrueNegative
+    - code: "Cipher.getInstance(\"ChaCha20-Poly1305\");"
+      expected: TrueNegative
+
+- id: "java-crypto-rc4-cipher"
+  name: "Cipher.getInstance with RC4/ARCFOUR"
+  description: "RC4 has known biases and is prohibited by RFC 7465. Use AES-256-GCM instead."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#eq? @obj \"Cipher\") name: (identifier) @method (#eq? @method \"getInstance\") arguments: (argument_list (string_literal) @algo (#match? @algo \"(?i)(RC4|ARCFOUR|RC2)\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "Cipher.getInstance(\"RC4\");"
+      expected: TruePositive
+    - code: "Cipher.getInstance(\"ARCFOUR\");"
+      expected: TruePositive
+    - code: "Cipher.getInstance(\"RC2/CBC/PKCS5Padding\");"
+      expected: TruePositive
+    - code: "Cipher.getInstance(\"AES/GCM/NoPadding\");"
+      expected: TrueNegative
+    - code: "Cipher.getInstance(\"AES/CBC/PKCS5Padding\");"
+      expected: TrueNegative
+    - code: "Cipher.getMaxAllowedKeyLength(\"AES\");"
+      expected: TrueNegative
+
+# ============================================================================
+# Hardcoded Keys and Weak Randomness (3 rules)
+# ============================================================================
+
+- id: "java-crypto-hardcoded-secretkey"
+  name: "Hardcoded SecretKeySpec"
+  description: "Hardcoding encryption keys in source code exposes them to anyone with access to the binary. Use a key management service or derive keys from a secure source."
+  severity: Critical
+  languages:
+    - Java
+  pattern:
+    query: "(object_creation_expression type: (type_identifier) @type (#eq? @type \"SecretKeySpec\") arguments: (argument_list (method_invocation object: (string_literal) @key name: (identifier) @method (#eq? @method \"getBytes\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-321"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Key_Management_Cheat_Sheet.html"
+  test_cases:
+    - code: "new SecretKeySpec(\"mySecretKey12345\".getBytes(), \"AES\");"
+      expected: TruePositive
+    - code: "new SecretKeySpec(\"hardcoded-key!!\".getBytes(\"UTF-8\"), \"AES\");"
+      expected: TruePositive
+    - code: "new SecretKeySpec(\"0123456789abcdef\".getBytes(), \"DES\");"
+      expected: TruePositive
+    - code: "new SecretKeySpec(keyBytes, \"AES\");"
+      expected: TrueNegative
+    - code: "KeyGenerator.getInstance(\"AES\").generateKey();"
+      expected: TrueNegative
+    - code: "new SecretKeySpec(derivedKey, \"AES\");"
+      expected: TrueNegative
+
+- id: "java-crypto-util-random"
+  name: "java.util.Random for Security Operations"
+  description: "java.util.Random is not cryptographically secure. Use java.security.SecureRandom for tokens, keys, nonces, and other security-sensitive values."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(object_creation_expression type: (type_identifier) @type (#eq? @type \"Random\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-330"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "new Random();"
+      expected: TruePositive
+    - code: "Random rng = new Random();"
+      expected: TruePositive
+    - code: "Random random = new Random(System.currentTimeMillis());"
+      expected: TruePositive
+    - code: "new SecureRandom();"
+      expected: TrueNegative
+    - code: "SecureRandom.getInstanceStrong();"
+      expected: TrueNegative
+    - code: "ThreadLocalRandom.current();"
+      expected: TrueNegative
+
+- id: "java-crypto-securerandom-seed"
+  name: "SecureRandom with Static Seed"
+  description: "Seeding SecureRandom with a static value makes its output predictable. Let SecureRandom self-seed from the OS entropy source."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"setSeed\") arguments: (argument_list (integer_literal) @seed)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-330"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "secureRandom.setSeed(12345);"
+      expected: TruePositive
+    - code: "sr.setSeed(0);"
+      expected: TruePositive
+    - code: "random.setSeed(42);"
+      expected: TruePositive
+    - code: "secureRandom.nextBytes(bytes);"
+      expected: TrueNegative
+    - code: "new SecureRandom();"
+      expected: TrueNegative
+    - code: "SecureRandom.getInstanceStrong();"
+      expected: TrueNegative
+
+# ============================================================================
+# Weak Key Sizes and Deprecated Algorithms (3 rules)
+# ============================================================================
+
+- id: "java-crypto-weak-rsa-keysize"
+  name: "RSA Key Size Below 2048 Bits"
+  description: "RSA keys shorter than 2048 bits are considered insecure. Use at least 2048-bit keys, preferably 4096-bit."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"initialize\") arguments: (argument_list (integer_literal) @size (#match? @size \"^(512|768|1024)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-326"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "keyGen.initialize(1024);"
+      expected: TruePositive
+    - code: "keyPairGen.initialize(512);"
+      expected: TruePositive
+    - code: "generator.initialize(768);"
+      expected: TruePositive
+    - code: "keyGen.initialize(2048);"
+      expected: TrueNegative
+    - code: "keyGen.initialize(4096);"
+      expected: TrueNegative
+    - code: "keyGen.initialize(256);"
+      expected: TrueNegative
+
+- id: "java-crypto-pbkdf2-low-iterations"
+  name: "PBKDF2 with Low Iteration Count"
+  description: "PBKDF2 with fewer than 600,000 iterations is vulnerable to brute-force attacks. Use at least 600,000 iterations per OWASP recommendations."
+  severity: Medium
+  languages:
+    - Java
+  pattern:
+    query: "(object_creation_expression type: (type_identifier) @type (#eq? @type \"PBEKeySpec\") arguments: (argument_list (_) (_) (integer_literal) @iter (#match? @iter \"^[0-9]{1,4}$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-916"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "new PBEKeySpec(password, salt, 1000, 256);"
+      expected: TruePositive
+    - code: "new PBEKeySpec(password, salt, 100, 128);"
+      expected: TruePositive
+    - code: "new PBEKeySpec(password, salt, 5000, 256);"
+      expected: TruePositive
+    - code: "new PBEKeySpec(password, salt, 600000, 256);"
+      expected: TrueNegative
+    - code: "new PBEKeySpec(password, salt, 100000, 256);"
+      expected: TrueNegative
+    - code: "new PBEKeySpec(password);"
+      expected: TrueNegative
+
+- id: "java-crypto-null-cipher"
+  name: "NullCipher Usage"
+  description: "NullCipher performs no encryption at all. It is only intended for testing. Use a real cipher like AES-GCM in production."
+  severity: Critical
+  languages:
+    - Java
+  pattern:
+    query: "(object_creation_expression type: (type_identifier) @type (#eq? @type \"NullCipher\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "new NullCipher();"
+      expected: TruePositive
+    - code: "Cipher cipher = new NullCipher();"
+      expected: TruePositive
+    - code: "NullCipher nc = new NullCipher();"
+      expected: TruePositive
+    - code: "Cipher.getInstance(\"AES/GCM/NoPadding\");"
+      expected: TrueNegative
+    - code: "new SecretKeySpec(key, \"AES\");"
+      expected: TrueNegative
+    - code: "cipher.doFinal(data);"
+      expected: TrueNegative

@@ -1,0 +1,180 @@
+# LDAP Injection Rules for Java
+# Covers: DirContext.search, Spring LDAP template queries, LdapTemplate.search,
+# InitialDirContext.search, LDAP filter construction
+#
+# CWE-90: Improper Neutralization of Special Elements used in an LDAP Query
+# OWASP A03:2021 - Injection
+
+# ============================================================================
+# DirContext.search LDAP Injection (2 rules)
+# ============================================================================
+
+- id: "java-ldap-dircontext-search-concat"
+  name: "DirContext.search with Concatenated Filter"
+  description: "Concatenating user input into LDAP search filters allows LDAP injection. Use parameterized search filters with filterArgs or escape special characters."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"search\") arguments: (argument_list (_) (binary_expression left: (string_literal) @filter (#match? @filter \"^\\\"\\\\(\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-90"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/LDAP_Injection_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "ctx.search(\"ou=users\", \"(uid=\" + username + \")\", controls);"
+      expected: TruePositive
+    - code: "dirContext.search(\"dc=example,dc=com\", \"(cn=\" + name + \")\", controls);"
+      expected: TruePositive
+    - code: "context.search(baseDn, \"(mail=\" + email + \")\", searchControls);"
+      expected: TruePositive
+    - code: "ctx.search(\"ou=users\", \"(uid={0})\", new Object[]{username}, controls);"
+      expected: TrueNegative
+    - code: "ctx.search(\"ou=users\", \"(objectClass=person)\", controls);"
+      expected: TrueNegative
+    - code: "ctx.close();"
+      expected: TrueNegative
+
+- id: "java-ldap-dircontext-search-format"
+  name: "DirContext.search with String.format Filter"
+  description: "Using String.format to build LDAP filters allows LDAP injection. Use parameterized search filters with filterArgs."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"search\") arguments: (argument_list (_) (method_invocation object: (identifier) @fmt (#eq? @fmt \"String\") name: (identifier) @fn (#eq? @fn \"format\") arguments: (argument_list (string_literal) @filter (#match? @filter \"^\\\"\\\\(\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-90"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/LDAP_Injection_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "ctx.search(\"ou=users\", String.format(\"(uid=%s)\", username), controls);"
+      expected: TruePositive
+    - code: "dirContext.search(baseDn, String.format(\"(cn=%s)\", name), controls);"
+      expected: TruePositive
+    - code: "context.search(\"dc=example\", String.format(\"(mail=%s)\", email), searchControls);"
+      expected: TruePositive
+    - code: "ctx.search(\"ou=users\", \"(uid={0})\", new Object[]{username}, controls);"
+      expected: TrueNegative
+    - code: "String msg = String.format(\"Searching for %s\", name);"
+      expected: TrueNegative
+    - code: "ctx.close();"
+      expected: TrueNegative
+
+# ============================================================================
+# Spring LDAP Template Injection (2 rules)
+# ============================================================================
+
+- id: "java-ldap-ldaptemplate-search-concat"
+  name: "LdapTemplate.search with Concatenated Filter"
+  description: "Concatenating user input into Spring LdapTemplate search filters allows LDAP injection. Use LdapQueryBuilder with filter().where() for safe queries."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#match? @obj \"(?i)(ldapTemplate|ldap|template)\") name: (identifier) @method (#eq? @method \"search\") arguments: (argument_list (_) (binary_expression left: (string_literal) @filter (#match? @filter \"^\\\"\\\\(\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-90"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.spring.io/spring-ldap/docs/current/reference/#basic-queries"
+  test_cases:
+    - code: "ldapTemplate.search(\"ou=users\", \"(uid=\" + username + \")\", mapper);"
+      expected: TruePositive
+    - code: "ldapTemplate.search(baseDn, \"(cn=\" + name + \")\", attributeMapper);"
+      expected: TruePositive
+    - code: "template.search(\"dc=example\", \"(mail=\" + email + \")\", mapper);"
+      expected: TruePositive
+    - code: "ldapTemplate.search(query().where(\"uid\").is(username), mapper);"
+      expected: TrueNegative
+    - code: "ldapTemplate.search(\"ou=users\", \"(objectClass=person)\", mapper);"
+      expected: TrueNegative
+    - code: "ldapTemplate.authenticate(query, password);"
+      expected: TrueNegative
+
+- id: "java-ldap-ldaptemplate-search-variable-filter"
+  name: "LdapTemplate.search with Variable Filter"
+  description: "Passing a variable filter to LdapTemplate.search may allow LDAP injection if the filter is user-controlled. Use LdapQueryBuilder for safe queries."
+  severity: Medium
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#match? @obj \"(?i)(ldapTemplate|ldap|template)\") name: (identifier) @method (#eq? @method \"search\") arguments: (argument_list (_) (identifier) @filter)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-90"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.spring.io/spring-ldap/docs/current/reference/#basic-queries"
+  test_cases:
+    - code: "ldapTemplate.search(\"ou=users\", userFilter, mapper);"
+      expected: TruePositive
+    - code: "ldapTemplate.search(baseDn, searchFilter, attributeMapper);"
+      expected: TruePositive
+    - code: "template.search(\"dc=example\", filter, mapper);"
+      expected: TruePositive
+    - code: "ldapTemplate.search(query().where(\"uid\").is(username), mapper);"
+      expected: TrueNegative
+    - code: "ldapTemplate.search(\"ou=users\", \"(objectClass=person)\", mapper);"
+      expected: TrueNegative
+    - code: "ldapTemplate.authenticate(query, password);"
+      expected: TrueNegative
+
+# ============================================================================
+# LDAP Filter Construction (2 rules)
+# ============================================================================
+
+- id: "java-ldap-filter-concat"
+  name: "LDAP Filter String Concatenation"
+  description: "Building LDAP filter strings via concatenation with user input allows LDAP injection. Use parameterized filters or escape special LDAP characters."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(variable_declarator value: (binary_expression left: (string_literal) @filter (#match? @filter \"^\\\"\\\\(\") right: (_) @right)) @decl"
+    captures:
+      - "decl"
+  cwe_id: "CWE-90"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/LDAP_Injection_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "String filter = \"(uid=\" + username + \")\";"
+      expected: TruePositive
+    - code: "String ldapFilter = \"(cn=\" + name + \")\";"
+      expected: TruePositive
+    - code: "String query = \"(&(objectClass=person)(mail=\" + email + \"))\";"
+      expected: TruePositive
+    - code: "String filter = \"(objectClass=person)\";"
+      expected: TrueNegative
+    - code: "String greeting = \"Hello \" + name;"
+      expected: TrueNegative
+    - code: "String path = \"/api/\" + endpoint;"
+      expected: TrueNegative
+
+- id: "java-ldap-filter-format"
+  name: "LDAP Filter with String.format"
+  description: "Using String.format to build LDAP filters allows LDAP injection. Use parameterized filters or escape special LDAP characters."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#eq? @obj \"String\") name: (identifier) @method (#eq? @method \"format\") arguments: (argument_list (string_literal) @filter (#match? @filter \"^\\\"\\\\(\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-90"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/LDAP_Injection_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "String.format(\"(uid=%s)\", username);"
+      expected: TruePositive
+    - code: "String.format(\"(cn=%s)\", name);"
+      expected: TruePositive
+    - code: "String.format(\"(&(objectClass=person)(mail=%s))\", email);"
+      expected: TruePositive
+    - code: "String.format(\"Hello %s\", name);"
+      expected: TrueNegative
+    - code: "String.format(\"/api/%s/data\", id);"
+      expected: TrueNegative
+    - code: "String.format(\"Processing %d items\", count);"
+      expected: TrueNegative

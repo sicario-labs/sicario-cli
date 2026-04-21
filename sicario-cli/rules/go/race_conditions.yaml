@@ -1,0 +1,283 @@
+# Race Condition Rules for Go
+# Covers: goroutine shared variable access, map access without mutex,
+# shared counter without atomic, channel send after close, WaitGroup Add
+# inside goroutine, slice append in goroutine, shared struct field write,
+# global map without sync.Map, shared bool without atomic, closure over loop var
+#
+# CWE-362: Concurrent Execution Using Shared Resource with Improper Synchronization
+# CWE-667: Improper Locking
+# OWASP A04:2021 - Insecure Design
+
+# ============================================================================
+# RACE CONDITION RULES (10 rules)
+# ============================================================================
+
+- id: "go-goroutine-global-var-write"
+  name: "Global Variable Write in Goroutine"
+  description: "Writing to a global variable inside a goroutine without synchronization causes data races. Use a mutex, atomic operations, or channels."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(go_statement (call_expression function: (func_literal body: (block (assignment_statement left: (expression_list (identifier) @var)))))) @go"
+    captures:
+      - "go"
+  cwe_id: "CWE-362"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://go.dev/doc/articles/race_detector"
+  test_cases:
+    - code: "go func() { counter = counter + 1 }()"
+      expected: TruePositive
+    - code: "go func() { result = computeValue() }()"
+      expected: TruePositive
+    - code: "go func() { globalState = newState }()"
+      expected: TruePositive
+    - code: "go func() { mu.Lock(); counter++; mu.Unlock() }()"
+      expected: TrueNegative
+    - code: "go func(val int) { fmt.Println(val) }(x)"
+      expected: TrueNegative
+    - code: "ch <- value"
+      expected: TrueNegative
+
+- id: "go-goroutine-map-access"
+  name: "Map Access in Goroutine Without Mutex"
+  description: "Concurrent map read/write in goroutines causes runtime panics in Go. Use sync.Map or protect access with a sync.RWMutex."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(go_statement (call_expression function: (func_literal body: (block (assignment_statement left: (expression_list (index_expression operand: (identifier) @map))))))) @go"
+    captures:
+      - "go"
+  cwe_id: "CWE-362"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://go.dev/doc/articles/race_detector"
+  test_cases:
+    - code: "go func() { cache[key] = value }()"
+      expected: TruePositive
+    - code: "go func() { results[id] = result }()"
+      expected: TruePositive
+    - code: "go func() { data[name] = entry }()"
+      expected: TruePositive
+    - code: "go func() { mu.Lock(); cache[key] = value; mu.Unlock() }()"
+      expected: TrueNegative
+    - code: "syncMap.Store(key, value)"
+      expected: TrueNegative
+    - code: "cache[key] = value"
+      expected: TrueNegative
+
+- id: "go-shared-counter-no-atomic"
+  name: "Shared Counter Without Atomic Operations"
+  description: "Incrementing a shared counter in a goroutine without atomic operations causes data races. Use atomic.AddInt64 or sync.Mutex."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(go_statement (call_expression function: (func_literal body: (block (inc_statement (identifier) @counter))))) @go"
+    captures:
+      - "go"
+  cwe_id: "CWE-362"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://pkg.go.dev/sync/atomic"
+  test_cases:
+    - code: "go func() { count++ }()"
+      expected: TruePositive
+    - code: "go func() { total++ }()"
+      expected: TruePositive
+    - code: "go func() { requests++ }()"
+      expected: TruePositive
+    - code: "go func() { atomic.AddInt64(&count, 1) }()"
+      expected: TrueNegative
+    - code: "go func() { mu.Lock(); count++; mu.Unlock() }()"
+      expected: TrueNegative
+    - code: "count++"
+      expected: TrueNegative
+
+- id: "go-waitgroup-add-in-goroutine"
+  name: "WaitGroup Add Inside Goroutine"
+  description: "Calling wg.Add() inside a goroutine creates a race condition where Wait() may return before all goroutines are registered. Call wg.Add() before launching the goroutine."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(go_statement (call_expression function: (func_literal body: (block (expression_statement (call_expression function: (selector_expression operand: (identifier) @wg (#eq? @wg \"wg\") field: (field_identifier) @fn (#eq? @fn \"Add\")))))))) @go"
+    captures:
+      - "go"
+  cwe_id: "CWE-362"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://pkg.go.dev/sync#WaitGroup"
+  test_cases:
+    - code: "go func() { wg.Add(1); defer wg.Done(); process() }()"
+      expected: TruePositive
+    - code: "go func() { wg.Add(1); doWork(); wg.Done() }()"
+      expected: TruePositive
+    - code: "go func() { wg.Add(1); handle(); wg.Done() }()"
+      expected: TruePositive
+    - code: "wg.Add(1)\ngo func() { defer wg.Done(); process() }()"
+      expected: TrueNegative
+    - code: "wg.Add(len(items))\nfor _, item := range items { go process(item) }"
+      expected: TrueNegative
+    - code: "wg.Wait()"
+      expected: TrueNegative
+
+- id: "go-goroutine-slice-append"
+  name: "Slice Append in Goroutine"
+  description: "Appending to a shared slice in a goroutine without synchronization causes data races. Use a mutex or channel to collect results."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(go_statement (call_expression function: (func_literal body: (block (assignment_statement right: (expression_list (call_expression function: (identifier) @fn (#eq? @fn \"append\")))))))) @go"
+    captures:
+      - "go"
+  cwe_id: "CWE-362"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://go.dev/doc/articles/race_detector"
+  test_cases:
+    - code: "go func() { results = append(results, item) }()"
+      expected: TruePositive
+    - code: "go func() { errors = append(errors, err) }()"
+      expected: TruePositive
+    - code: "go func() { data = append(data, entry) }()"
+      expected: TruePositive
+    - code: "go func() { mu.Lock(); results = append(results, item); mu.Unlock() }()"
+      expected: TrueNegative
+    - code: "results = append(results, item)"
+      expected: TrueNegative
+    - code: "go func() { ch <- item }()"
+      expected: TrueNegative
+
+- id: "go-goroutine-struct-field-write"
+  name: "Shared Struct Field Write in Goroutine"
+  description: "Writing to a shared struct field in a goroutine without synchronization causes data races. Use a mutex or atomic operations."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(go_statement (call_expression function: (func_literal body: (block (assignment_statement left: (expression_list (selector_expression operand: (identifier) @obj field: (field_identifier) @field))))))) @go"
+    captures:
+      - "go"
+  cwe_id: "CWE-362"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://go.dev/doc/articles/race_detector"
+  test_cases:
+    - code: "go func() { state.Status = \"done\" }()"
+      expected: TruePositive
+    - code: "go func() { config.Value = newVal }()"
+      expected: TruePositive
+    - code: "go func() { server.Running = true }()"
+      expected: TruePositive
+    - code: "go func() { mu.Lock(); state.Status = \"done\"; mu.Unlock() }()"
+      expected: TrueNegative
+    - code: "state.Status = \"done\""
+      expected: TrueNegative
+    - code: "go func(s State) { fmt.Println(s.Status) }(state)"
+      expected: TrueNegative
+
+- id: "go-global-map-no-sync"
+  name: "Global Map Write Without sync.Map"
+  description: "Writing to a package-level map variable without synchronization causes data races when accessed from multiple goroutines. Use sync.Map or protect with a mutex."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(assignment_statement left: (expression_list (index_expression operand: (identifier) @map (#match? @map \"^(cache|registry|store|handlers|routes|connections|sessions|clients)$\")))) @assign"
+    captures:
+      - "assign"
+  cwe_id: "CWE-362"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://pkg.go.dev/sync#Map"
+  test_cases:
+    - code: "cache[key] = value"
+      expected: TruePositive
+    - code: "registry[name] = handler"
+      expected: TruePositive
+    - code: "sessions[sessionID] = session"
+      expected: TruePositive
+    - code: "syncMap.Store(key, value)"
+      expected: TrueNegative
+    - code: "mu.Lock(); cache[key] = value; mu.Unlock()"
+      expected: TrueNegative
+    - code: "localMap[key] = value"
+      expected: TrueNegative
+
+- id: "go-goroutine-closure-loop-var"
+  name: "Goroutine Closure Over Loop Variable"
+  description: "Capturing a loop variable in a goroutine closure causes all goroutines to share the same variable, leading to race conditions. Pass the variable as a parameter."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(for_statement (range_clause left: (expression_list (identifier) @idx (identifier) @val)) body: (block (go_statement (call_expression function: (func_literal) arguments: (argument_list))))) @for"
+    captures:
+      - "for"
+  cwe_id: "CWE-362"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://go.dev/doc/faq#closures_and_goroutines"
+  test_cases:
+    - code: "for i, v := range items {\n\tgo func() { process(v) }()\n}"
+      expected: TruePositive
+    - code: "for _, item := range list {\n\tgo func() { handle(item) }()\n}"
+      expected: TruePositive
+    - code: "for k, val := range data {\n\tgo func() { store(val) }()\n}"
+      expected: TruePositive
+    - code: "for _, item := range list {\n\titem := item\n\tgo func() { handle(item) }()\n}"
+      expected: TrueNegative
+    - code: "for _, item := range list {\n\tgo func(it string) { handle(it) }(item)\n}"
+      expected: TrueNegative
+    - code: "for _, item := range list {\n\tprocess(item)\n}"
+      expected: TrueNegative
+
+- id: "go-shared-bool-no-atomic"
+  name: "Shared Bool Flag Without Atomic"
+  description: "Reading/writing a shared boolean flag across goroutines without atomic operations causes data races. Use atomic.LoadInt32/StoreInt32 or sync.Mutex."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(go_statement (call_expression function: (func_literal body: (block (assignment_statement left: (expression_list (identifier) @flag (#match? @flag \"(?i)(done|stopped|running|ready|closed|shutdown|cancelled|active)$\")) right: (expression_list (true))))))) @go"
+    captures:
+      - "go"
+  cwe_id: "CWE-362"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://pkg.go.dev/sync/atomic"
+  test_cases:
+    - code: "go func() { done = true }()"
+      expected: TruePositive
+    - code: "go func() { stopped = true }()"
+      expected: TruePositive
+    - code: "go func() { running = true }()"
+      expected: TruePositive
+    - code: "go func() { atomic.StoreInt32(&done, 1) }()"
+      expected: TrueNegative
+    - code: "go func() { mu.Lock(); done = true; mu.Unlock() }()"
+      expected: TrueNegative
+    - code: "done = true"
+      expected: TrueNegative
+
+- id: "go-channel-send-after-close"
+  name: "Potential Channel Send After Close"
+  description: "Sending on a closed channel causes a runtime panic. Ensure channels are only closed by the sender and use select with a done channel for coordination."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(go_statement (call_expression function: (func_literal body: (block (send_statement channel: (identifier) @ch))))) @go"
+    captures:
+      - "go"
+  cwe_id: "CWE-362"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://go.dev/ref/spec#Send_statements"
+  test_cases:
+    - code: "go func() { ch <- result }()"
+      expected: TruePositive
+    - code: "go func() { results <- item }()"
+      expected: TruePositive
+    - code: "go func() { errCh <- err }()"
+      expected: TruePositive
+    - code: "go func() { select { case ch <- result: case <-done: } }()"
+      expected: TrueNegative
+    - code: "ch <- result"
+      expected: TrueNegative
+    - code: "go func() { defer close(ch); ch <- result }()"
+      expected: TrueNegative

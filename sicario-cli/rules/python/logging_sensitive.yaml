@@ -1,0 +1,248 @@
+# Logging Sensitive Data Rules for Python
+# Covers: passwords/tokens/API keys in logging.info, logging.debug, print, logger calls
+#
+# CWE-532: Insertion of Sensitive Information into Log File
+# OWASP A09:2021 - Security Logging and Monitoring Failures
+
+- id: "py-logging-password"
+  name: "Password Logged via logging Module"
+  description: "Logging passwords exposes credentials in log files. Remove sensitive data from log statements."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#match? @mod \"^(logging|logger|log)$\") attribute: (identifier) @fn (#match? @fn \"^(info|debug|warning|error|critical)$\")) arguments: (argument_list (string (interpolation (identifier) @var (#match? @var \"^(password|passwd|pwd|pass_word|user_password)$\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingMonitoringFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html"
+  test_cases:
+    - code: "logging.info(f\"User login with password={password}\")"
+      expected: TruePositive
+    - code: "logger.debug(f\"Auth attempt: {password}\")"
+      expected: TruePositive
+    - code: "log.warning(f\"Failed login for {passwd}\")"
+      expected: TruePositive
+    - code: "logging.info(\"User logged in successfully\")"
+      expected: TrueNegative
+    - code: "logging.info(f\"User {username} logged in\")"
+      expected: TrueNegative
+    - code: "logger.debug(\"Authentication completed\")"
+      expected: TrueNegative
+
+- id: "py-logging-token"
+  name: "Token Logged via logging Module"
+  description: "Logging tokens exposes authentication credentials in log files. Remove sensitive data from log statements."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#match? @mod \"^(logging|logger|log)$\") attribute: (identifier) @fn (#match? @fn \"^(info|debug|warning|error|critical)$\")) arguments: (argument_list (string (interpolation (identifier) @var (#match? @var \"^(token|access_token|refresh_token|auth_token|jwt_token|bearer_token|session_token)$\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingMonitoringFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html"
+  test_cases:
+    - code: "logging.info(f\"Token issued: {token}\")"
+      expected: TruePositive
+    - code: "logger.debug(f\"Access token: {access_token}\")"
+      expected: TruePositive
+    - code: "log.info(f\"JWT: {jwt_token}\")"
+      expected: TruePositive
+    - code: "logging.info(\"Token issued successfully\")"
+      expected: TrueNegative
+    - code: "logging.info(f\"Token for user {user_id}\")"
+      expected: TrueNegative
+    - code: "logger.debug(\"Token validation completed\")"
+      expected: TrueNegative
+
+- id: "py-logging-api-key"
+  name: "API Key Logged via logging Module"
+  description: "Logging API keys exposes credentials in log files. Remove sensitive data from log statements."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#match? @mod \"^(logging|logger|log)$\") attribute: (identifier) @fn (#match? @fn \"^(info|debug|warning|error|critical)$\")) arguments: (argument_list (string (interpolation (identifier) @var (#match? @var \"^(api_key|apikey|api_secret|secret_key|private_key)$\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingMonitoringFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html"
+  test_cases:
+    - code: "logging.info(f\"Using API key: {api_key}\")"
+      expected: TruePositive
+    - code: "logger.debug(f\"Secret: {api_secret}\")"
+      expected: TruePositive
+    - code: "log.info(f\"Key: {secret_key}\")"
+      expected: TruePositive
+    - code: "logging.info(\"API key configured\")"
+      expected: TrueNegative
+    - code: "logging.info(f\"API call to {endpoint}\")"
+      expected: TrueNegative
+    - code: "logger.debug(\"Key rotation completed\")"
+      expected: TrueNegative
+
+- id: "py-print-password"
+  name: "Password Logged via print()"
+  description: "Printing passwords exposes credentials in stdout/logs. Remove sensitive data from print statements."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"print\") arguments: (argument_list (string (interpolation (identifier) @var (#match? @var \"^(password|passwd|pwd|pass_word|user_password)$\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingMonitoringFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html"
+  test_cases:
+    - code: "print(f\"Password: {password}\")"
+      expected: TruePositive
+    - code: "print(f\"User password is {passwd}\")"
+      expected: TruePositive
+    - code: "print(f\"Debug: pwd={pwd}\")"
+      expected: TruePositive
+    - code: "print(\"Login successful\")"
+      expected: TrueNegative
+    - code: "print(f\"User {username} logged in\")"
+      expected: TrueNegative
+    - code: "print(\"Password reset email sent\")"
+      expected: TrueNegative
+
+- id: "py-print-token"
+  name: "Token Logged via print()"
+  description: "Printing tokens exposes authentication credentials in stdout/logs. Remove sensitive data from print statements."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"print\") arguments: (argument_list (string (interpolation (identifier) @var (#match? @var \"^(token|access_token|refresh_token|auth_token|jwt_token|bearer_token|session_token)$\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingMonitoringFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html"
+  test_cases:
+    - code: "print(f\"Token: {token}\")"
+      expected: TruePositive
+    - code: "print(f\"Access token: {access_token}\")"
+      expected: TruePositive
+    - code: "print(f\"JWT: {jwt_token}\")"
+      expected: TruePositive
+    - code: "print(\"Token issued\")"
+      expected: TrueNegative
+    - code: "print(f\"User {user_id} authenticated\")"
+      expected: TrueNegative
+    - code: "print(\"Token validation passed\")"
+      expected: TrueNegative
+
+- id: "py-print-api-key"
+  name: "API Key Logged via print()"
+  description: "Printing API keys exposes credentials in stdout/logs. Remove sensitive data from print statements."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"print\") arguments: (argument_list (string (interpolation (identifier) @var (#match? @var \"^(api_key|apikey|api_secret|secret_key|private_key)$\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingMonitoringFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html"
+  test_cases:
+    - code: "print(f\"API Key: {api_key}\")"
+      expected: TruePositive
+    - code: "print(f\"Secret: {api_secret}\")"
+      expected: TruePositive
+    - code: "print(f\"Key: {secret_key}\")"
+      expected: TruePositive
+    - code: "print(\"API key configured\")"
+      expected: TrueNegative
+    - code: "print(f\"Calling {endpoint}\")"
+      expected: TrueNegative
+    - code: "print(\"Key rotation done\")"
+      expected: TrueNegative
+
+- id: "py-logging-format-password"
+  name: "Password in logging % Format"
+  description: "Logging passwords via % formatting exposes credentials in log files. Remove sensitive data from log statements."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#match? @mod \"^(logging|logger|log)$\") attribute: (identifier) @fn (#match? @fn \"^(info|debug|warning|error|critical)$\")) arguments: (argument_list (binary_expression left: (string) @fmt (#match? @fmt \"(?i)(password|passwd|pwd|token|api_key|secret)\") right: (_) @val operator: \"%\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingMonitoringFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html"
+  test_cases:
+    - code: "logging.info(\"Password: %s\" % password)"
+      expected: TruePositive
+    - code: "logger.debug(\"Token: %s\" % token)"
+      expected: TruePositive
+    - code: "log.info(\"API_KEY: %s\" % api_key)"
+      expected: TruePositive
+    - code: "logging.info(\"User %s logged in\" % username)"
+      expected: TrueNegative
+    - code: "logging.info(\"Request completed\")"
+      expected: TrueNegative
+    - code: "msg = \"password: %s\" % pwd"
+      expected: TrueNegative
+
+- id: "py-logging-sensitive-concat"
+  name: "Sensitive Data in Logging String Concatenation"
+  description: "Concatenating sensitive data into log messages exposes credentials. Remove sensitive data from log statements."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#match? @mod \"^(logging|logger|log)$\") attribute: (identifier) @fn (#match? @fn \"^(info|debug|warning|error|critical)$\")) arguments: (argument_list (binary_expression left: (string) @msg (#match? @msg \"(?i)(password|passwd|pwd|token|api_key|secret)\") right: (_) @val operator: \"+\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingMonitoringFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html"
+  test_cases:
+    - code: "logging.info(\"Password: \" + password)"
+      expected: TruePositive
+    - code: "logger.debug(\"Token: \" + token)"
+      expected: TruePositive
+    - code: "log.info(\"API key: \" + api_key)"
+      expected: TruePositive
+    - code: "logging.info(\"User \" + username + \" logged in\")"
+      expected: TrueNegative
+    - code: "logging.info(\"Request completed\")"
+      expected: TrueNegative
+    - code: "msg = \"password: \" + pwd"
+      expected: TrueNegative
+
+- id: "py-print-sensitive-concat"
+  name: "Sensitive Data in print() String Concatenation"
+  description: "Concatenating sensitive data into print statements exposes credentials. Remove sensitive data from print calls."
+  severity: Medium
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"print\") arguments: (argument_list (binary_expression left: (string) @msg (#match? @msg \"(?i)(password|passwd|pwd|token|api_key|secret)\") right: (_) @val operator: \"+\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-532"
+  owasp_category: A09_SecurityLoggingMonitoringFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html"
+  test_cases:
+    - code: "print(\"Password: \" + password)"
+      expected: TruePositive
+    - code: "print(\"Token: \" + token)"
+      expected: TruePositive
+    - code: "print(\"API key: \" + api_key)"
+      expected: TruePositive
+    - code: "print(\"User \" + username + \" logged in\")"
+      expected: TrueNegative
+    - code: "print(\"Request completed\")"
+      expected: TrueNegative
+    - code: "msg = \"password: \" + pwd"
+      expected: TrueNegative

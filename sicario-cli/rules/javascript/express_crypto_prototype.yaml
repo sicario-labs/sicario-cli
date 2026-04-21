@@ -1,0 +1,479 @@
+# Express.js Security, Cryptography, and Prototype Pollution Rules for JavaScript/TypeScript
+# Covers: missing helmet, missing rate limiting, wildcard CORS, disabled CSRF,
+# verbose error responses, MD5/SHA1 for passwords, hardcoded keys, Math.random,
+# deprecated createCipher, weak key derivation, unsafe recursive merge,
+# unvalidated bracket notation, Object.assign with untrusted sources,
+# lodash merge with user input, JSON.parse used as object keys
+#
+# CWE-693: Protection Mechanism Failure
+# CWE-16: Configuration
+# CWE-327: Use of a Broken or Risky Cryptographic Algorithm
+# CWE-328: Use of Weak Hash
+# CWE-338: Use of Cryptographically Weak PRNG
+# CWE-1321: Improperly Controlled Modification of Object Prototype Attributes
+# OWASP A02:2021 - Cryptographic Failures
+# OWASP A03:2021 - Injection
+# OWASP A05:2021 - Security Misconfiguration
+
+# ============================================================================
+# Express.js Security Rules
+# ============================================================================
+
+- id: "js-express-no-helmet"
+  name: "Express App Without Helmet Middleware"
+  description: "Express application uses app.listen() without helmet middleware for security headers. Add helmet() to set secure HTTP headers and protect against common attacks."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj property: (property_identifier) @prop (#eq? @prop \"listen\")) arguments: (arguments (number) @port)) @listen"
+    captures:
+      - "listen"
+  cwe_id: "CWE-693"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://helmetjs.github.io/"
+  test_cases:
+    - code: "app.listen(3000);"
+      expected: TruePositive
+    - code: "app.listen(8080, () => console.log('running'));"
+      expected: TruePositive
+    - code: "server.listen(443);"
+      expected: TruePositive
+    - code: "app.use(helmet());"
+      expected: TrueNegative
+    - code: "const port = 3000;"
+      expected: TrueNegative
+    - code: "process.env.PORT || 3000;"
+      expected: TrueNegative
+
+- id: "js-express-no-rate-limit"
+  name: "Express App Without Rate Limiting"
+  description: "Express route handlers without rate limiting are vulnerable to brute-force and denial-of-service attacks. Use express-rate-limit middleware to throttle requests."
+  severity: Medium
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj property: (property_identifier) @prop (#eq? @prop \"post\")) arguments: (arguments (string) @route (#match? @route \"(login|auth|signin|signup|register|password|reset)\") (_) @handler)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-799"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://www.npmjs.com/package/express-rate-limit"
+  test_cases:
+    - code: "app.post('/login', (req, res) => { authenticate(req.body); });"
+      expected: TruePositive
+    - code: "app.post('/auth/signin', handleLogin);"
+      expected: TruePositive
+    - code: "app.post('/register', createUser);"
+      expected: TruePositive
+    - code: "app.post('/login', rateLimiter, handleLogin);"
+      expected: TrueNegative
+    - code: "app.get('/users', listUsers);"
+      expected: TrueNegative
+    - code: "app.post('/api/data', processData);"
+      expected: TrueNegative
+
+- id: "js-express-csrf-disabled"
+  name: "Express CSRF Protection Disabled"
+  description: "CSRF protection is explicitly disabled, leaving the application vulnerable to cross-site request forgery attacks. Enable CSRF protection for state-changing operations."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(object (pair key: (property_identifier) @key (#eq? @key \"csrf\") value: (_) @val (#match? @val \"false\"))) @config"
+    captures:
+      - "config"
+  cwe_id: "CWE-352"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://owasp.org/www-community/attacks/csrf"
+  test_cases:
+    - code: "const config = { csrf: false };"
+      expected: TruePositive
+    - code: "app.use(session({ csrf: false }));"
+      expected: TruePositive
+    - code: "const options = { csrf: false, secure: true };"
+      expected: TruePositive
+    - code: "const config = { csrf: true };"
+      expected: TrueNegative
+    - code: "app.use(csrf());"
+      expected: TrueNegative
+    - code: "const csrfToken = generateToken();"
+      expected: TrueNegative
+
+- id: "js-express-verbose-errors"
+  name: "Express Verbose Error Response with Stack Trace"
+  description: "Sending error stack traces to clients exposes internal application details. Use generic error messages in production and log details server-side."
+  severity: Medium
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression property: (property_identifier) @method (#match? @method \"(send|json)\")) arguments: (arguments (object (pair key: (property_identifier) @key (#match? @key \"(stack|stackTrace|error)\") value: (member_expression property: (property_identifier) @prop (#eq? @prop \"stack\")))))) @response"
+    captures:
+      - "response"
+  cwe_id: "CWE-209"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://owasp.org/www-community/Improper_Error_Handling"
+  test_cases:
+    - code: "res.send({ error: err.stack });"
+      expected: TruePositive
+    - code: "res.json({ stack: error.stack });"
+      expected: TruePositive
+    - code: "res.json({ stackTrace: e.stack });"
+      expected: TruePositive
+    - code: "res.json({ message: 'Internal server error' });"
+      expected: TrueNegative
+    - code: "console.error(err.stack);"
+      expected: TrueNegative
+    - code: "logger.error({ stack: err.stack });"
+      expected: TrueNegative
+
+- id: "js-express-wildcard-cors"
+  name: "Express Wildcard CORS Origin"
+  description: "Setting Access-Control-Allow-Origin to '*' allows any website to make requests to your API. Restrict CORS to specific trusted origins."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression property: (property_identifier) @method (#eq? @method \"setHeader\")) arguments: (arguments (string) @header (#match? @header \"Access-Control-Allow-Origin\") (string) @value (#eq? @value \"\\\"*\\\"\"))) @cors"
+    captures:
+      - "cors"
+  cwe_id: "CWE-942"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS"
+  test_cases:
+    - code: "res.setHeader('Access-Control-Allow-Origin', '*');"
+      expected: TruePositive
+    - code: "response.setHeader('Access-Control-Allow-Origin', '*');"
+      expected: TruePositive
+    - code: "ctx.setHeader('Access-Control-Allow-Origin', '*');"
+      expected: TruePositive
+    - code: "res.setHeader('Access-Control-Allow-Origin', 'https://example.com');"
+      expected: TrueNegative
+    - code: "res.setHeader('Content-Type', 'application/json');"
+      expected: TrueNegative
+    - code: "const origin = req.headers.origin;"
+      expected: TrueNegative
+
+
+# ============================================================================
+# Cryptography Rules
+# ============================================================================
+
+- id: "js-crypto-md5-password"
+  name: "MD5 Used for Password Hashing"
+  description: "MD5 is cryptographically broken and unsuitable for password hashing. Use bcrypt, scrypt, or argon2 for password hashing instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"crypto\") property: (property_identifier) @method (#eq? @method \"createHash\")) arguments: (arguments (string) @algo (#eq? @algo \"'md5'\"))) @hash"
+    captures:
+      - "hash"
+  cwe_id: "CWE-328"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "const hash = crypto.createHash('md5').update(password).digest('hex');"
+      expected: TruePositive
+    - code: "crypto.createHash('md5').update(userPassword).digest('hex');"
+      expected: TruePositive
+    - code: "const digest = crypto.createHash('md5').update(secret).digest('base64');"
+      expected: TruePositive
+    - code: "const hash = crypto.createHash('sha256').update(data).digest('hex');"
+      expected: TrueNegative
+    - code: "await bcrypt.hash(password, 12);"
+      expected: TrueNegative
+    - code: "const checksum = crypto.createHash('md5');"
+      expected: TrueNegative
+
+- id: "js-crypto-sha1-password"
+  name: "SHA1 Used for Password Hashing"
+  description: "SHA1 is cryptographically weak and unsuitable for password hashing. Use bcrypt, scrypt, or argon2 for password hashing instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"crypto\") property: (property_identifier) @method (#eq? @method \"createHash\")) arguments: (arguments (string) @algo (#eq? @algo \"'sha1'\"))) @hash"
+    captures:
+      - "hash"
+  cwe_id: "CWE-328"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "const hash = crypto.createHash('sha1').update(password).digest('hex');"
+      expected: TruePositive
+    - code: "crypto.createHash('sha1').update(token).digest('hex');"
+      expected: TruePositive
+    - code: "const digest = crypto.createHash('sha1').update(secret).digest('base64');"
+      expected: TruePositive
+    - code: "const hash = crypto.createHash('sha256').update(data).digest('hex');"
+      expected: TrueNegative
+    - code: "await bcrypt.hash(password, 10);"
+      expected: TrueNegative
+    - code: "crypto.createHash('sha512').update(content).digest('hex');"
+      expected: TrueNegative
+
+- id: "js-crypto-hardcoded-key"
+  name: "Hardcoded Encryption Key in Source Code"
+  description: "Encryption keys hardcoded in source code can be extracted by attackers. Store keys in environment variables, secret managers, or key vaults."
+  severity: Critical
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(variable_declarator name: (identifier) @name (#match? @name \"(?i)(encryption.?key|secret.?key|crypto.?key|aes.?key|private.?key|signing.?key)\") value: (string) @val) @decl"
+    captures:
+      - "decl"
+  cwe_id: "CWE-798"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "const encryptionKey = 'my-super-secret-key-12345';"
+      expected: TruePositive
+    - code: "const secretKey = 'aes-256-key-hardcoded-value';"
+      expected: TruePositive
+    - code: "const signingKey = 'jwt-signing-secret-abc123';"
+      expected: TruePositive
+    - code: "const encryptionKey = process.env.ENCRYPTION_KEY;"
+      expected: TrueNegative
+    - code: "const key = await keyVault.getSecret('encryption-key');"
+      expected: TrueNegative
+    - code: "const keyName = 'encryption_key';"
+      expected: TrueNegative
+
+- id: "js-crypto-math-random"
+  name: "Math.random() Used for Security-Sensitive Operations"
+  description: "Math.random() is not cryptographically secure and should not be used for tokens, secrets, or security-sensitive values. Use crypto.randomBytes() or crypto.getRandomValues() instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"Math\") property: (property_identifier) @prop (#eq? @prop \"random\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-338"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://developer.mozilla.org/en-US/docs/Web/API/Crypto/getRandomValues"
+  test_cases:
+    - code: "const token = Math.random().toString(36).substring(2);"
+      expected: TruePositive
+    - code: "const sessionId = Math.random().toString(16);"
+      expected: TruePositive
+    - code: "const nonce = Math.random() * 1000000;"
+      expected: TruePositive
+    - code: "const id = crypto.randomBytes(16).toString('hex');"
+      expected: TrueNegative
+    - code: "const uuid = crypto.randomUUID();"
+      expected: TrueNegative
+    - code: "const random = crypto.getRandomValues(new Uint8Array(32));"
+      expected: TrueNegative
+
+- id: "js-crypto-deprecated-createcipher"
+  name: "Deprecated crypto.createCipher Usage"
+  description: "crypto.createCipher is deprecated because it derives keys without a salt, making it vulnerable to dictionary attacks. Use crypto.createCipheriv with a proper IV instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"crypto\") property: (property_identifier) @method (#eq? @method \"createCipher\")) arguments: (arguments (string) @algo (_) @key)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://nodejs.org/api/crypto.html#cryptocreatecipherivalgorithm-key-iv-options"
+  test_cases:
+    - code: "const cipher = crypto.createCipher('aes-256-cbc', password);"
+      expected: TruePositive
+    - code: "const cipher = crypto.createCipher('aes-128-ecb', key);"
+      expected: TruePositive
+    - code: "const cipher = crypto.createCipher('des', secret);"
+      expected: TruePositive
+    - code: "const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);"
+      expected: TrueNegative
+    - code: "const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);"
+      expected: TrueNegative
+    - code: "const hash = crypto.createHash('sha256');"
+      expected: TrueNegative
+
+- id: "js-crypto-weak-key-derivation"
+  name: "Weak Key Derivation Without Proper Parameters"
+  description: "Using pbkdf2 with low iteration counts or short salt values weakens key derivation. Use at least 100,000 iterations with a 16+ byte random salt."
+  severity: Medium
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"crypto\") property: (property_identifier) @method (#eq? @method \"pbkdf2Sync\")) arguments: (arguments (_) @password (_) @salt (number) @iterations (#match? @iterations \"^[0-9]{1,4}$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-916"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "crypto.pbkdf2Sync(password, salt, 1000, 32, 'sha256');"
+      expected: TruePositive
+    - code: "crypto.pbkdf2Sync(pass, 'salt', 100, 64, 'sha512');"
+      expected: TruePositive
+    - code: "crypto.pbkdf2Sync(secret, s, 500, 32, 'sha256');"
+      expected: TruePositive
+    - code: "crypto.pbkdf2Sync(password, salt, 100000, 32, 'sha256');"
+      expected: TrueNegative
+    - code: "crypto.pbkdf2Sync(password, salt, 600000, 64, 'sha512');"
+      expected: TrueNegative
+    - code: "await argon2.hash(password);"
+      expected: TrueNegative
+
+
+# ============================================================================
+# Prototype Pollution Rules
+# ============================================================================
+
+- id: "js-prototype-unsafe-merge"
+  name: "Unsafe Recursive Merge Without Prototype Check"
+  description: "Recursive merge functions that don't check for __proto__, constructor, or prototype properties are vulnerable to prototype pollution. Validate keys before merging or use a safe merge library."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(subscript_expression object: (identifier) @obj index: (member_expression object: (identifier) @src property: (property_identifier) @prop (#match? @prop \"(key|k|prop|property|attr)\"))) @access"
+    captures:
+      - "access"
+  cwe_id: "CWE-1321"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Prototype_Pollution_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "target[source.key] = source[source.key];"
+      expected: TruePositive
+    - code: "obj[item.prop] = item[item.prop];"
+      expected: TruePositive
+    - code: "result[entry.property] = entry[entry.property];"
+      expected: TruePositive
+    - code: "if (key !== '__proto__') target[key] = source[key];"
+      expected: TrueNegative
+    - code: "Object.create(null);"
+      expected: TrueNegative
+    - code: "const safe = Object.assign(Object.create(null), source);"
+      expected: TrueNegative
+
+- id: "js-prototype-bracket-notation"
+  name: "Unvalidated Bracket Notation Property Access with User Input"
+  description: "Using bracket notation with user-controlled input (req.body, req.query, req.params) allows prototype pollution. Validate property names against a whitelist or use Map instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(subscript_expression object: (identifier) @obj index: (member_expression object: (member_expression object: (identifier) @req (#eq? @req \"req\") property: (property_identifier) @source (#match? @source \"(body|query|params)\")))) @access"
+    captures:
+      - "access"
+  cwe_id: "CWE-1321"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Prototype_Pollution_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "obj[req.body.key] = req.body.value;"
+      expected: TruePositive
+    - code: "config[req.query.setting] = true;"
+      expected: TruePositive
+    - code: "data[req.params.field] = value;"
+      expected: TruePositive
+    - code: "const allowed = ['name', 'email']; if (allowed.includes(key)) obj[key] = val;"
+      expected: TrueNegative
+    - code: "const map = new Map(); map.set(req.body.key, value);"
+      expected: TrueNegative
+    - code: "const value = obj.propertyName;"
+      expected: TrueNegative
+
+- id: "js-prototype-object-assign-untrusted"
+  name: "Object.assign with Untrusted Source from Request"
+  description: "Using Object.assign with request body or query parameters as source can lead to prototype pollution. Validate and sanitize input or use a schema validation library."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"Object\") property: (property_identifier) @method (#eq? @method \"assign\")) arguments: (arguments (_) @target (member_expression object: (identifier) @req (#eq? @req \"req\") property: (property_identifier) @source (#match? @source \"(body|query|params)\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-1321"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Prototype_Pollution_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "Object.assign(user, req.body);"
+      expected: TruePositive
+    - code: "Object.assign(config, req.query);"
+      expected: TruePositive
+    - code: "Object.assign(settings, req.params);"
+      expected: TruePositive
+    - code: "Object.assign(user, { name: req.body.name, email: req.body.email });"
+      expected: TrueNegative
+    - code: "Object.assign({}, safeDefaults);"
+      expected: TrueNegative
+    - code: "const merged = { ...defaults, ...validated };"
+      expected: TrueNegative
+
+- id: "js-prototype-lodash-merge-untrusted"
+  name: "Lodash/Underscore Merge with User-Controlled Objects"
+  description: "Using _.merge, _.extend, or _.defaultsDeep with user-controlled objects can lead to prototype pollution. Use _.pick to whitelist properties or validate input with a schema."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @lib (#eq? @lib \"_\") property: (property_identifier) @method (#match? @method \"(merge|extend|defaultsDeep|assign)\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-1321"
+  owasp_category: A03_Injection
+  help_uri: "https://security.snyk.io/vuln/SNYK-JS-LODASH-450202"
+  test_cases:
+    - code: "_.merge(target, userInput);"
+      expected: TruePositive
+    - code: "_.extend(config, req.body);"
+      expected: TruePositive
+    - code: "_.defaultsDeep(options, untrustedData);"
+      expected: TruePositive
+    - code: "_.pick(req.body, ['name', 'email']);"
+      expected: TrueNegative
+    - code: "_.get(obj, 'nested.property');"
+      expected: TrueNegative
+    - code: "_.cloneDeep(safeObject);"
+      expected: TrueNegative
+
+- id: "js-prototype-json-parse-keys"
+  name: "JSON.parse Result Used Directly as Object Keys"
+  description: "Using JSON.parse output directly to set object properties without validation can lead to prototype pollution if the JSON contains __proto__ or constructor keys. Validate parsed data with a schema."
+  severity: Medium
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"JSON\") property: (property_identifier) @method (#eq? @method \"parse\")) arguments: (arguments (member_expression object: (identifier) @req (#match? @req \"(req|request)\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-1321"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Prototype_Pollution_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "const data = JSON.parse(req.body);"
+      expected: TruePositive
+    - code: "const config = JSON.parse(req.rawBody);"
+      expected: TruePositive
+    - code: "const input = JSON.parse(request.body);"
+      expected: TruePositive
+    - code: "const data = JSON.parse(fs.readFileSync('config.json'));"
+      expected: TrueNegative
+    - code: "const obj = JSON.parse(JSON.stringify(safe));"
+      expected: TrueNegative
+    - code: "const validated = schema.validate(JSON.parse(input));"
+      expected: TrueNegative
+

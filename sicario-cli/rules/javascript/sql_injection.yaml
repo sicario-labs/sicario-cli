@@ -1,0 +1,629 @@
+# SQL Injection Rules for JavaScript/TypeScript
+# Covers: string concatenation in queries, template literal interpolation,
+# ORM raw queries (Sequelize, Knex, Prisma, TypeORM, Drizzle),
+# database drivers (pg, mysql, better-sqlite3, tedious),
+# and framework-specific patterns (Express, GraphQL, MongoDB $where)
+#
+# CWE-89: Improper Neutralization of Special Elements used in an SQL Command
+# OWASP A03:2021 - Injection
+
+- id: "js-sql-string-concat"
+  name: "SQL Query with String Concatenation"
+  description: "Building SQL queries via string concatenation with variables allows SQL injection. Use parameterized queries instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(binary_expression left: (string) @left (#match? @left \"(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|EXEC|UNION|FROM|WHERE|SET|INTO|VALUES)\") operator: \"+\" right: (_) @right) @sql_concat"
+    captures:
+      - "sql_concat"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "const query = \"SELECT * FROM users WHERE id = \" + userId;"
+      expected: TruePositive
+    - code: "const query = \"DELETE FROM sessions WHERE token = \" + token;"
+      expected: TruePositive
+    - code: "const query = \"INSERT INTO logs VALUES (\" + data + \")\";"
+      expected: TruePositive
+    - code: "const query = \"SELECT * FROM users WHERE id = ?\";"
+      expected: TrueNegative
+    - code: "const msg = \"Hello \" + name;"
+      expected: TrueNegative
+    - code: "db.query(\"SELECT * FROM users WHERE id = $1\", [userId]);"
+      expected: TrueNegative
+
+- id: "js-sql-template-literal"
+  name: "SQL Query with Template Literal Interpolation"
+  description: "Interpolating variables into SQL template literals allows SQL injection. Use parameterized queries instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(template_string (template_substitution) @interp) @tpl (#match? @tpl \"(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|EXEC|UNION|FROM|WHERE|SET|INTO|VALUES)\")"
+    captures:
+      - "tpl"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "const query = `SELECT * FROM users WHERE id = ${userId}`;"
+      expected: TruePositive
+    - code: "const query = `DELETE FROM ${table} WHERE id = ${id}`;"
+      expected: TruePositive
+    - code: "const query = `UPDATE users SET name = '${name}' WHERE id = ${id}`;"
+      expected: TruePositive
+    - code: "const query = `SELECT * FROM users WHERE id = $1`;"
+      expected: TrueNegative
+    - code: "const msg = `Hello ${name}`;"
+      expected: TrueNegative
+    - code: "const url = `https://api.example.com/${path}`;"
+      expected: TrueNegative
+
+
+- id: "js-sequelize-raw-query"
+  name: "Sequelize Raw Query with String Interpolation"
+  description: "Using string interpolation in Sequelize raw queries allows SQL injection. Use bind parameters or replacements instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj property: (property_identifier) @prop (#eq? @prop \"query\")) arguments: (arguments (template_string (template_substitution) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://sequelize.org/docs/v6/core-concepts/raw-queries/"
+  test_cases:
+    - code: "sequelize.query(`SELECT * FROM users WHERE id = ${userId}`);"
+      expected: TruePositive
+    - code: "sequelize.query(`DELETE FROM ${table} WHERE active = ${status}`);"
+      expected: TruePositive
+    - code: "db.query(`INSERT INTO logs (msg) VALUES ('${message}')`);"
+      expected: TruePositive
+    - code: "sequelize.query('SELECT * FROM users WHERE id = ?', { replacements: [userId] });"
+      expected: TrueNegative
+    - code: "sequelize.query('SELECT * FROM users WHERE id = $id', { bind: { id: userId } });"
+      expected: TrueNegative
+    - code: "sequelize.query('SELECT * FROM users');"
+      expected: TrueNegative
+
+- id: "js-sequelize-raw-query-concat"
+  name: "Sequelize Raw Query with String Concatenation"
+  description: "Concatenating user input into Sequelize raw queries allows SQL injection. Use bind parameters instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj property: (property_identifier) @prop (#eq? @prop \"query\")) arguments: (arguments (binary_expression left: (string) @sql operator: \"+\" right: (_) @input (#match? @sql \"(?i)(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://sequelize.org/docs/v6/core-concepts/raw-queries/"
+  test_cases:
+    - code: "sequelize.query(\"SELECT * FROM users WHERE id = \" + req.params.id);"
+      expected: TruePositive
+    - code: "sequelize.query(\"DELETE FROM users WHERE name = '\" + name + \"'\");"
+      expected: TruePositive
+    - code: "db.query(\"UPDATE users SET role = \" + role + \" WHERE id = \" + id);"
+      expected: TruePositive
+    - code: "sequelize.query('SELECT * FROM users WHERE id = ?', { replacements: [id] });"
+      expected: TrueNegative
+    - code: "sequelize.query('SELECT count(*) FROM users');"
+      expected: TrueNegative
+    - code: "console.log(\"query\" + \" done\");"
+      expected: TrueNegative
+
+- id: "js-knex-raw-interpolation"
+  name: "Knex Raw Query with String Interpolation"
+  description: "Interpolating variables into Knex raw queries allows SQL injection. Use Knex parameter binding instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj property: (property_identifier) @prop (#eq? @prop \"raw\")) arguments: (arguments (template_string (template_substitution) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://knexjs.org/guide/raw.html"
+  test_cases:
+    - code: "knex.raw(`SELECT * FROM users WHERE id = ${userId}`);"
+      expected: TruePositive
+    - code: "knex.raw(`DELETE FROM ${table} WHERE id = ${id}`);"
+      expected: TruePositive
+    - code: "db.raw(`UPDATE users SET name = '${name}'`);"
+      expected: TruePositive
+    - code: "knex.raw('SELECT * FROM users WHERE id = ?', [userId]);"
+      expected: TrueNegative
+    - code: "knex.raw('SELECT * FROM users WHERE id = :id', { id: userId });"
+      expected: TrueNegative
+    - code: "knex('users').where('id', userId);"
+      expected: TrueNegative
+
+- id: "js-knex-raw-concat"
+  name: "Knex Raw Query with String Concatenation"
+  description: "Concatenating user input into Knex raw queries allows SQL injection. Use Knex parameter binding instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj property: (property_identifier) @prop (#eq? @prop \"raw\")) arguments: (arguments (binary_expression left: (string) @sql operator: \"+\" right: (_) @input (#match? @sql \"(?i)(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://knexjs.org/guide/raw.html"
+  test_cases:
+    - code: "knex.raw(\"SELECT * FROM users WHERE id = \" + userId);"
+      expected: TruePositive
+    - code: "knex.raw(\"DELETE FROM users WHERE name = '\" + name + \"'\");"
+      expected: TruePositive
+    - code: "db.raw(\"INSERT INTO logs VALUES (\" + data + \")\");"
+      expected: TruePositive
+    - code: "knex.raw('SELECT * FROM users WHERE id = ?', [userId]);"
+      expected: TrueNegative
+    - code: "knex('users').select('*').where('id', userId);"
+      expected: TrueNegative
+    - code: "knex.raw('SELECT 1');"
+      expected: TrueNegative
+
+
+- id: "js-prisma-queryraw-interpolation"
+  name: "Prisma $queryRaw with String Interpolation"
+  description: "Using string interpolation in Prisma $queryRaw allows SQL injection. Use Prisma.sql tagged template or parameterized queries instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression property: (property_identifier) @prop (#match? @prop \"^\\$(queryRaw|executeRaw)$\")) arguments: (arguments (template_string (template_substitution) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://www.prisma.io/docs/concepts/components/prisma-client/raw-database-access"
+  test_cases:
+    - code: "prisma.$queryRaw(`SELECT * FROM users WHERE id = ${userId}`);"
+      expected: TruePositive
+    - code: "prisma.$executeRaw(`DELETE FROM sessions WHERE token = ${token}`);"
+      expected: TruePositive
+    - code: "prisma.$queryRaw(`UPDATE users SET role = '${role}' WHERE id = ${id}`);"
+      expected: TruePositive
+    - code: "prisma.$queryRaw`SELECT * FROM users WHERE id = ${userId}`;"
+      expected: TrueNegative
+    - code: "prisma.user.findMany({ where: { id: userId } });"
+      expected: TrueNegative
+    - code: "prisma.$queryRaw(Prisma.sql`SELECT * FROM users WHERE id = ${userId}`);"
+      expected: TrueNegative
+
+- id: "js-prisma-raw-concat"
+  name: "Prisma Raw Query with String Concatenation"
+  description: "Concatenating user input into Prisma raw queries allows SQL injection. Use Prisma.sql tagged template instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression property: (property_identifier) @prop (#match? @prop \"^\\$(queryRaw|executeRaw)$\")) arguments: (arguments (binary_expression left: (string) @sql operator: \"+\" right: (_) @input (#match? @sql \"(?i)(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://www.prisma.io/docs/concepts/components/prisma-client/raw-database-access"
+  test_cases:
+    - code: "prisma.$queryRaw(\"SELECT * FROM users WHERE id = \" + userId);"
+      expected: TruePositive
+    - code: "prisma.$executeRaw(\"DELETE FROM users WHERE id = \" + id);"
+      expected: TruePositive
+    - code: "prisma.$queryRaw(\"UPDATE users SET name = '\" + name + \"'\");"
+      expected: TruePositive
+    - code: "prisma.user.findUnique({ where: { id } });"
+      expected: TrueNegative
+    - code: "prisma.$queryRaw`SELECT * FROM users WHERE id = ${userId}`;"
+      expected: TrueNegative
+    - code: "console.log(\"$queryRaw\" + \" called\");"
+      expected: TrueNegative
+
+- id: "js-typeorm-query-interpolation"
+  name: "TypeORM Query with String Interpolation"
+  description: "Using string interpolation in TypeORM query or createQueryRunner execute calls allows SQL injection. Use parameterized queries instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression property: (property_identifier) @prop (#match? @prop \"^(query|execute)$\")) arguments: (arguments (template_string (template_substitution) @interp) . )) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://typeorm.io/select-query-builder"
+  test_cases:
+    - code: "connection.query(`SELECT * FROM users WHERE id = ${userId}`);"
+      expected: TruePositive
+    - code: "queryRunner.execute(`DELETE FROM sessions WHERE token = ${token}`);"
+      expected: TruePositive
+    - code: "manager.query(`UPDATE users SET role = '${role}' WHERE id = ${id}`);"
+      expected: TruePositive
+    - code: "connection.query('SELECT * FROM users WHERE id = $1', [userId]);"
+      expected: TrueNegative
+    - code: "repository.find({ where: { id: userId } });"
+      expected: TrueNegative
+    - code: "connection.query('SELECT * FROM users');"
+      expected: TrueNegative
+
+- id: "js-typeorm-querybuilder-raw"
+  name: "TypeORM createQueryBuilder with Raw Where Clause"
+  description: "Passing interpolated strings to TypeORM query builder where clauses allows SQL injection. Use parameter binding instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression property: (property_identifier) @prop (#eq? @prop \"where\")) arguments: (arguments (template_string (template_substitution) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://typeorm.io/select-query-builder"
+  test_cases:
+    - code: "repo.createQueryBuilder('user').where(`user.id = ${userId}`).getOne();"
+      expected: TruePositive
+    - code: "qb.where(`name = '${name}'`).getMany();"
+      expected: TruePositive
+    - code: "builder.where(`role = ${role} AND active = ${status}`).getMany();"
+      expected: TruePositive
+    - code: "repo.createQueryBuilder('user').where('user.id = :id', { id: userId }).getOne();"
+      expected: TrueNegative
+    - code: "qb.where('name = :name', { name }).getMany();"
+      expected: TrueNegative
+    - code: "repo.createQueryBuilder('user').where('user.active = true').getMany();"
+      expected: TrueNegative
+
+
+- id: "js-drizzle-sql-raw"
+  name: "Drizzle sql.raw with User Input"
+  description: "Using sql.raw() with user input in Drizzle ORM allows SQL injection. Use the sql tagged template with proper escaping instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"sql\") property: (property_identifier) @prop (#eq? @prop \"raw\")) arguments: (arguments (_) @arg)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://orm.drizzle.team/docs/sql"
+  test_cases:
+    - code: "sql.raw(userInput);"
+      expected: TruePositive
+    - code: "sql.raw(req.query.filter);"
+      expected: TruePositive
+    - code: "sql.raw(\"DROP TABLE users\");"
+      expected: TruePositive
+    - code: "sql`SELECT * FROM users WHERE id = ${userId}`;"
+      expected: TrueNegative
+    - code: "db.select().from(users).where(eq(users.id, userId));"
+      expected: TrueNegative
+    - code: "sql.placeholder('id');"
+      expected: TrueNegative
+
+- id: "js-pg-query-concat"
+  name: "PostgreSQL (pg) Query with String Concatenation"
+  description: "Concatenating user input into pg/node-postgres queries allows SQL injection. Use parameterized queries with $1 placeholders instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#match? @obj \"^(client|pool|db|pg|conn|connection)$\") property: (property_identifier) @prop (#eq? @prop \"query\")) arguments: (arguments (binary_expression left: (string) @sql operator: \"+\" right: (_) @input (#match? @sql \"(?i)(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://node-postgres.com/features/queries"
+  test_cases:
+    - code: "client.query(\"SELECT * FROM users WHERE id = \" + req.params.id);"
+      expected: TruePositive
+    - code: "pool.query(\"DELETE FROM sessions WHERE token = '\" + token + \"'\");"
+      expected: TruePositive
+    - code: "db.query(\"INSERT INTO logs (msg) VALUES ('\" + message + \"')\");"
+      expected: TruePositive
+    - code: "client.query('SELECT * FROM users WHERE id = $1', [userId]);"
+      expected: TrueNegative
+    - code: "pool.query({ text: 'SELECT * FROM users WHERE id = $1', values: [userId] });"
+      expected: TrueNegative
+    - code: "client.query('SELECT NOW()');"
+      expected: TrueNegative
+
+- id: "js-pg-query-template"
+  name: "PostgreSQL (pg) Query with Template Literal"
+  description: "Using template literal interpolation in pg/node-postgres queries allows SQL injection. Use parameterized queries with $1 placeholders instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#match? @obj \"^(client|pool|db|pg|conn|connection)$\") property: (property_identifier) @prop (#eq? @prop \"query\")) arguments: (arguments (template_string (template_substitution) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://node-postgres.com/features/queries"
+  test_cases:
+    - code: "client.query(`SELECT * FROM users WHERE id = ${userId}`);"
+      expected: TruePositive
+    - code: "pool.query(`DELETE FROM ${table} WHERE id = ${id}`);"
+      expected: TruePositive
+    - code: "db.query(`UPDATE users SET name = '${name}' WHERE id = ${id}`);"
+      expected: TruePositive
+    - code: "client.query('SELECT * FROM users WHERE id = $1', [userId]);"
+      expected: TrueNegative
+    - code: "pool.query('SELECT * FROM users');"
+      expected: TrueNegative
+    - code: "client.query(`SELECT 1`);"
+      expected: TrueNegative
+
+- id: "js-mysql-query-concat"
+  name: "MySQL Query with String Concatenation"
+  description: "Concatenating user input into mysql/mysql2 queries allows SQL injection. Use parameterized queries with ? placeholders instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#match? @obj \"^(connection|conn|mysql|pool|db)$\") property: (property_identifier) @prop (#match? @prop \"^(query|execute)$\")) arguments: (arguments (binary_expression left: (string) @sql operator: \"+\" right: (_) @input (#match? @sql \"(?i)(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://github.com/mysqljs/mysql#escaping-query-values"
+  test_cases:
+    - code: "connection.query(\"SELECT * FROM users WHERE id = \" + userId);"
+      expected: TruePositive
+    - code: "conn.execute(\"DELETE FROM users WHERE name = '\" + name + \"'\");"
+      expected: TruePositive
+    - code: "pool.query(\"INSERT INTO logs (msg) VALUES ('\" + msg + \"')\");"
+      expected: TruePositive
+    - code: "connection.query('SELECT * FROM users WHERE id = ?', [userId]);"
+      expected: TrueNegative
+    - code: "conn.execute('SELECT * FROM users WHERE id = ?', [userId]);"
+      expected: TrueNegative
+    - code: "connection.query('SELECT NOW()');"
+      expected: TrueNegative
+
+
+- id: "js-mongodb-where-interpolation"
+  name: "MongoDB $where with String Interpolation"
+  description: "Using string interpolation in MongoDB $where operator allows NoSQL injection. Use standard query operators instead of $where."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(pair key: (property_identifier) @key (#eq? @key \"$where\") value: (template_string (template_substitution) @interp)) @pair"
+    captures:
+      - "pair"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection"
+  test_cases:
+    - code: "db.users.find({ $where: `this.name == '${userInput}'` });"
+      expected: TruePositive
+    - code: "collection.find({ $where: `this.role == '${role}'` });"
+      expected: TruePositive
+    - code: "db.collection('users').find({ $where: `this.age > ${age}` });"
+      expected: TruePositive
+    - code: "db.users.find({ name: userName });"
+      expected: TrueNegative
+    - code: "collection.find({ age: { $gt: 18 } });"
+      expected: TrueNegative
+    - code: "db.users.find({ $where: 'this.active == true' });"
+      expected: TrueNegative
+
+- id: "js-mongodb-where-concat"
+  name: "MongoDB $where with String Concatenation"
+  description: "Concatenating user input into MongoDB $where operator allows NoSQL injection. Use standard query operators instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(pair key: (property_identifier) @key (#eq? @key \"$where\") value: (binary_expression left: (string) @left operator: \"+\" right: (_) @right)) @pair"
+    captures:
+      - "pair"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection"
+  test_cases:
+    - code: "db.users.find({ $where: \"this.name == '\" + userInput + \"'\" });"
+      expected: TruePositive
+    - code: "collection.find({ $where: \"this.role == \" + role });"
+      expected: TruePositive
+    - code: "db.find({ $where: \"this.age > \" + age });"
+      expected: TruePositive
+    - code: "db.users.find({ name: { $eq: userName } });"
+      expected: TrueNegative
+    - code: "collection.find({ status: 'active' });"
+      expected: TrueNegative
+    - code: "db.users.find({ $where: 'this.active === true' });"
+      expected: TrueNegative
+
+- id: "js-better-sqlite3-concat"
+  name: "Better-sqlite3 Query with String Concatenation"
+  description: "Concatenating user input into better-sqlite3 prepare or exec calls allows SQL injection. Use parameterized queries with ? placeholders instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#match? @obj \"^(db|database|sqlite)$\") property: (property_identifier) @prop (#match? @prop \"^(prepare|exec)$\")) arguments: (arguments (binary_expression left: (string) @sql operator: \"+\" right: (_) @input (#match? @sql \"(?i)(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE|CREATE|DROP)\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://github.com/WiseLibs/better-sqlite3/blob/master/docs/api.md"
+  test_cases:
+    - code: "db.prepare(\"SELECT * FROM users WHERE id = \" + userId).get();"
+      expected: TruePositive
+    - code: "database.exec(\"DROP TABLE \" + tableName);"
+      expected: TruePositive
+    - code: "db.prepare(\"INSERT INTO logs VALUES ('\" + msg + \"')\").run();"
+      expected: TruePositive
+    - code: "db.prepare('SELECT * FROM users WHERE id = ?').get(userId);"
+      expected: TrueNegative
+    - code: "db.prepare('SELECT * FROM users').all();"
+      expected: TrueNegative
+    - code: "database.exec('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY)');"
+      expected: TrueNegative
+
+- id: "js-tedious-request-concat"
+  name: "Tedious (MSSQL) Request with Concatenated SQL"
+  description: "Concatenating user input into Tedious Request SQL strings allows SQL injection. Use parameterized queries with addParameter instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(new_expression constructor: (identifier) @ctor (#eq? @ctor \"Request\") arguments: (arguments (binary_expression left: (string) @sql operator: \"+\" right: (_) @input (#match? @sql \"(?i)(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE|EXEC)\")))) @new_req"
+    captures:
+      - "new_req"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://tediousjs.github.io/tedious/api-request.html"
+  test_cases:
+    - code: "const request = new Request(\"SELECT * FROM users WHERE id = \" + userId, callback);"
+      expected: TruePositive
+    - code: "new Request(\"EXEC sp_GetUser '\" + username + \"'\", callback);"
+      expected: TruePositive
+    - code: "const req = new Request(\"DELETE FROM sessions WHERE token = \" + token, cb);"
+      expected: TruePositive
+    - code: "const request = new Request('SELECT * FROM users WHERE id = @id', callback);"
+      expected: TrueNegative
+    - code: "new Request('SELECT * FROM users', callback);"
+      expected: TrueNegative
+    - code: "new Error(\"Something went wrong: \" + message);"
+      expected: TrueNegative
+
+- id: "js-generic-db-query-concat"
+  name: "Generic Database Query with User Input Concatenation"
+  description: "Concatenating user input into database query calls is a common SQL injection pattern. Use parameterized queries instead."
+  severity: Medium
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression property: (property_identifier) @prop (#match? @prop \"^(query|execute|exec|run)$\")) arguments: (arguments (binary_expression left: (string) @sql operator: \"+\" right: (identifier) @input (#match? @sql \"(?i)(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Query_Parameterization_Cheat_Sheet.html"
+  test_cases:
+    - code: "db.run(\"INSERT INTO users (name) VALUES ('\" + username + \"')\");"
+      expected: TruePositive
+    - code: "conn.exec(\"SELECT * FROM products WHERE category = \" + category);"
+      expected: TruePositive
+    - code: "database.execute(\"UPDATE settings SET value = \" + newValue);"
+      expected: TruePositive
+    - code: "db.run('INSERT INTO users (name) VALUES (?)', [username]);"
+      expected: TrueNegative
+    - code: "conn.exec('SELECT * FROM products');"
+      expected: TrueNegative
+    - code: "logger.run(\"Processing \" + filename);"
+      expected: TrueNegative
+
+
+- id: "js-express-inline-sql"
+  name: "Express Route Handler with Inline SQL Construction"
+  description: "Building SQL queries directly in Express route handlers using request parameters allows SQL injection. Extract database logic and use parameterized queries."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression property: (property_identifier) @prop (#match? @prop \"^(query|execute)$\")) arguments: (arguments (binary_expression left: (string) @sql operator: \"+\" right: (member_expression object: (member_expression object: (identifier) @req (#eq? @req \"req\"))) (#match? @sql \"(?i)(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Query_Parameterization_Cheat_Sheet.html"
+  test_cases:
+    - code: "db.query(\"SELECT * FROM users WHERE id = \" + req.params.id);"
+      expected: TruePositive
+    - code: "pool.execute(\"DELETE FROM users WHERE name = '\" + req.body.name + \"'\");"
+      expected: TruePositive
+    - code: "conn.query(\"UPDATE users SET email = '\" + req.query.email + \"'\");"
+      expected: TruePositive
+    - code: "db.query('SELECT * FROM users WHERE id = $1', [req.params.id]);"
+      expected: TrueNegative
+    - code: "db.query('SELECT * FROM users WHERE id = ?', [req.params.id]);"
+      expected: TrueNegative
+    - code: "res.json({ message: \"User \" + req.params.id });"
+      expected: TrueNegative
+
+- id: "js-graphql-resolver-sql"
+  name: "GraphQL Resolver with SQL String Building"
+  description: "Building SQL queries with string interpolation in GraphQL resolvers allows SQL injection. Use parameterized queries in resolver implementations."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression property: (property_identifier) @prop (#match? @prop \"^(query|execute|raw)$\")) arguments: (arguments (template_string (template_substitution (member_expression object: (identifier) @obj (#match? @obj \"^(args|input|context|parent|root)$\"))) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html"
+  test_cases:
+    - code: "db.query(`SELECT * FROM users WHERE id = ${args.id}`);"
+      expected: TruePositive
+    - code: "pool.execute(`DELETE FROM posts WHERE author = '${args.author}'`);"
+      expected: TruePositive
+    - code: "conn.raw(`SELECT * FROM ${args.table} LIMIT ${args.limit}`);"
+      expected: TruePositive
+    - code: "db.query('SELECT * FROM users WHERE id = $1', [args.id]);"
+      expected: TrueNegative
+    - code: "prisma.user.findUnique({ where: { id: args.id } });"
+      expected: TrueNegative
+    - code: "console.log(`Resolving query for ${args.id}`);"
+      expected: TrueNegative
+
+- id: "js-mysql-query-template"
+  name: "MySQL Query with Template Literal Interpolation"
+  description: "Using template literal interpolation in mysql/mysql2 queries allows SQL injection. Use parameterized queries with ? placeholders instead."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#match? @obj \"^(connection|conn|mysql|pool|db)$\") property: (property_identifier) @prop (#match? @prop \"^(query|execute)$\")) arguments: (arguments (template_string (template_substitution) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://github.com/mysqljs/mysql#escaping-query-values"
+  test_cases:
+    - code: "connection.query(`SELECT * FROM users WHERE id = ${userId}`);"
+      expected: TruePositive
+    - code: "pool.execute(`DELETE FROM ${table} WHERE id = ${id}`);"
+      expected: TruePositive
+    - code: "conn.query(`INSERT INTO logs (msg) VALUES ('${message}')`);"
+      expected: TruePositive
+    - code: "connection.query('SELECT * FROM users WHERE id = ?', [userId]);"
+      expected: TrueNegative
+    - code: "pool.execute('SELECT * FROM users');"
+      expected: TrueNegative
+    - code: "connection.query(`SELECT 1`);"
+      expected: TrueNegative

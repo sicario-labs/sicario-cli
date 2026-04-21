@@ -1,0 +1,31 @@
+# Rust build artifacts
+/target/
+**/target/
+**/*.rs.bk
+*.pdb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# Sicario runtime data
+.sicario/backups/
+*.log
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Coverage
+lcov.info
+tarpaulin-report.html

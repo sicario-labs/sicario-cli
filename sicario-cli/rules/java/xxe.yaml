@@ -1,0 +1,337 @@
+# XML External Entity (XXE) Rules for Java
+# Covers: DocumentBuilderFactory, SAXParserFactory, XMLInputFactory,
+# TransformerFactory, SchemaFactory, XMLReader, SAXReader, Validator
+# without disabling external entities
+#
+# CWE-611: Improper Restriction of XML External Entity Reference
+# OWASP A05:2021 - Security Misconfiguration
+
+# ============================================================================
+# DocumentBuilderFactory XXE (2 rules)
+# ============================================================================
+
+- id: "java-xxe-documentbuilderfactory-newinstance"
+  name: "DocumentBuilderFactory.newInstance without XXE Protection"
+  description: "DocumentBuilderFactory.newInstance() is vulnerable to XXE by default. Disable external entities and DTDs via setFeature() before parsing untrusted XML."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#eq? @obj \"DocumentBuilderFactory\") name: (identifier) @method (#eq? @method \"newInstance\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html#jaxp-documentbuilderfactory-saxparserfactory-and-dom4j"
+  test_cases:
+    - code: "DocumentBuilderFactory.newInstance();"
+      expected: TruePositive
+    - code: "DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();"
+      expected: TruePositive
+    - code: "DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();"
+      expected: TruePositive
+    - code: "dbf.setFeature(\"http://apache.org/xml/features/disallow-doctype-decl\", true);"
+      expected: TrueNegative
+    - code: "dbf.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);"
+      expected: TrueNegative
+    - code: "dbf.newDocumentBuilder();"
+      expected: TrueNegative
+
+- id: "java-xxe-documentbuilder-parse-variable"
+  name: "DocumentBuilder.parse with Variable Input"
+  description: "Parsing untrusted XML input with DocumentBuilder without disabling external entities enables XXE attacks. Disable DTDs and external entities on the factory."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"parse\") arguments: (argument_list (identifier) @input)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "builder.parse(userInput);"
+      expected: TruePositive
+    - code: "documentBuilder.parse(xmlStream);"
+      expected: TruePositive
+    - code: "db.parse(inputSource);"
+      expected: TruePositive
+    - code: "builder.parse(\"config.xml\");"
+      expected: TrueNegative
+    - code: "builder.parse(new File(\"settings.xml\"));"
+      expected: TrueNegative
+    - code: "builder.reset();"
+      expected: TrueNegative
+
+# ============================================================================
+# SAXParserFactory XXE (2 rules)
+# ============================================================================
+
+- id: "java-xxe-saxparserfactory-newinstance"
+  name: "SAXParserFactory.newInstance without XXE Protection"
+  description: "SAXParserFactory.newInstance() is vulnerable to XXE by default. Disable external entities and DTDs via setFeature() before parsing untrusted XML."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#eq? @obj \"SAXParserFactory\") name: (identifier) @method (#eq? @method \"newInstance\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html#jaxp-documentbuilderfactory-saxparserfactory-and-dom4j"
+  test_cases:
+    - code: "SAXParserFactory.newInstance();"
+      expected: TruePositive
+    - code: "SAXParserFactory spf = SAXParserFactory.newInstance();"
+      expected: TruePositive
+    - code: "SAXParserFactory factory = SAXParserFactory.newInstance();"
+      expected: TruePositive
+    - code: "spf.setFeature(\"http://apache.org/xml/features/disallow-doctype-decl\", true);"
+      expected: TrueNegative
+    - code: "spf.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);"
+      expected: TrueNegative
+    - code: "spf.newSAXParser();"
+      expected: TrueNegative
+
+- id: "java-xxe-saxparser-parse-variable"
+  name: "SAXParser.parse with Variable Input"
+  description: "Parsing untrusted XML with SAXParser without disabling external entities enables XXE. Disable DTDs and external entities on the factory."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#match? @obj \"(?i)(saxParser|parser|sp)\") name: (identifier) @method (#eq? @method \"parse\") arguments: (argument_list (identifier) @input)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "saxParser.parse(userInput, handler);"
+      expected: TruePositive
+    - code: "parser.parse(xmlStream, handler);"
+      expected: TruePositive
+    - code: "sp.parse(inputSource, handler);"
+      expected: TruePositive
+    - code: "saxParser.parse(\"config.xml\", handler);"
+      expected: TrueNegative
+    - code: "saxParser.parse(new File(\"settings.xml\"), handler);"
+      expected: TrueNegative
+    - code: "saxParser.getXMLReader();"
+      expected: TrueNegative
+
+# ============================================================================
+# XMLInputFactory XXE (1 rule)
+# ============================================================================
+
+- id: "java-xxe-xmlinputfactory-newinstance"
+  name: "XMLInputFactory.newInstance without XXE Protection"
+  description: "XMLInputFactory.newInstance() supports external entities by default. Set IS_SUPPORTING_EXTERNAL_ENTITIES and SUPPORT_DTD to false."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#eq? @obj \"XMLInputFactory\") name: (identifier) @method (#match? @method \"^(newInstance|newFactory)$\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html#stax"
+  test_cases:
+    - code: "XMLInputFactory.newInstance();"
+      expected: TruePositive
+    - code: "XMLInputFactory xif = XMLInputFactory.newInstance();"
+      expected: TruePositive
+    - code: "XMLInputFactory factory = XMLInputFactory.newFactory();"
+      expected: TruePositive
+    - code: "xif.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);"
+      expected: TrueNegative
+    - code: "xif.setProperty(XMLInputFactory.SUPPORT_DTD, false);"
+      expected: TrueNegative
+    - code: "xif.createXMLStreamReader(reader);"
+      expected: TrueNegative
+
+# ============================================================================
+# TransformerFactory XXE (1 rule)
+# ============================================================================
+
+- id: "java-xxe-transformerfactory-newinstance"
+  name: "TransformerFactory.newInstance without XXE Protection"
+  description: "TransformerFactory.newInstance() is vulnerable to XXE by default. Set ACCESS_EXTERNAL_DTD and ACCESS_EXTERNAL_STYLESHEET to empty strings."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#eq? @obj \"TransformerFactory\") name: (identifier) @method (#eq? @method \"newInstance\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html#transformerfactory"
+  test_cases:
+    - code: "TransformerFactory.newInstance();"
+      expected: TruePositive
+    - code: "TransformerFactory tf = TransformerFactory.newInstance();"
+      expected: TruePositive
+    - code: "TransformerFactory factory = TransformerFactory.newInstance();"
+      expected: TruePositive
+    - code: "tf.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, \"\");"
+      expected: TrueNegative
+    - code: "tf.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, \"\");"
+      expected: TrueNegative
+    - code: "tf.newTransformer();"
+      expected: TrueNegative
+
+# ============================================================================
+# SchemaFactory XXE (1 rule)
+# ============================================================================
+
+- id: "java-xxe-schemafactory-newinstance"
+  name: "SchemaFactory.newInstance without XXE Protection"
+  description: "SchemaFactory.newInstance() may process external entities. Set ACCESS_EXTERNAL_DTD and ACCESS_EXTERNAL_SCHEMA to empty strings."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#eq? @obj \"SchemaFactory\") name: (identifier) @method (#eq? @method \"newInstance\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html#schemafactory"
+  test_cases:
+    - code: "SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);"
+      expected: TruePositive
+    - code: "SchemaFactory sf = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);"
+      expected: TruePositive
+    - code: "SchemaFactory factory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);"
+      expected: TruePositive
+    - code: "sf.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, \"\");"
+      expected: TrueNegative
+    - code: "sf.setProperty(XMLConstants.ACCESS_EXTERNAL_SCHEMA, \"\");"
+      expected: TrueNegative
+    - code: "sf.newSchema(schemaFile);"
+      expected: TrueNegative
+
+
+# ============================================================================
+# XMLReader / SAXReader XXE (2 rules)
+# ============================================================================
+
+- id: "java-xxe-xmlreader-create"
+  name: "XMLReaderFactory.createXMLReader without XXE Protection"
+  description: "XMLReader created via XMLReaderFactory is vulnerable to XXE by default. Disable external entities via setFeature() before parsing."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#eq? @obj \"XMLReaderFactory\") name: (identifier) @method (#eq? @method \"createXMLReader\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html#xmlreader"
+  test_cases:
+    - code: "XMLReaderFactory.createXMLReader();"
+      expected: TruePositive
+    - code: "XMLReader reader = XMLReaderFactory.createXMLReader();"
+      expected: TruePositive
+    - code: "XMLReader xr = XMLReaderFactory.createXMLReader();"
+      expected: TruePositive
+    - code: "reader.setFeature(\"http://apache.org/xml/features/disallow-doctype-decl\", true);"
+      expected: TrueNegative
+    - code: "reader.setContentHandler(handler);"
+      expected: TrueNegative
+    - code: "reader.parse(inputSource);"
+      expected: TrueNegative
+
+- id: "java-xxe-saxreader-new"
+  name: "new SAXReader() without XXE Protection"
+  description: "dom4j SAXReader is vulnerable to XXE by default. Disable external entities via setFeature() before parsing untrusted XML."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(object_creation_expression type: (type_identifier) @type (#eq? @type \"SAXReader\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html#dom4j"
+  test_cases:
+    - code: "new SAXReader();"
+      expected: TruePositive
+    - code: "SAXReader reader = new SAXReader();"
+      expected: TruePositive
+    - code: "SAXReader saxReader = new SAXReader();"
+      expected: TruePositive
+    - code: "reader.setFeature(\"http://apache.org/xml/features/disallow-doctype-decl\", true);"
+      expected: TrueNegative
+    - code: "reader.read(file);"
+      expected: TrueNegative
+    - code: "document.getRootElement();"
+      expected: TrueNegative
+
+# ============================================================================
+# Validator XXE (1 rule)
+# ============================================================================
+
+- id: "java-xxe-validator-validate-variable"
+  name: "Validator.validate with Variable Source"
+  description: "Validating untrusted XML with a Validator that has not disabled external entities enables XXE. Set ACCESS_EXTERNAL_DTD and ACCESS_EXTERNAL_SCHEMA to empty strings on the SchemaFactory."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"validate\") arguments: (argument_list (identifier) @source)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "validator.validate(userSource);"
+      expected: TruePositive
+    - code: "validator.validate(xmlSource);"
+      expected: TruePositive
+    - code: "v.validate(inputSource);"
+      expected: TruePositive
+    - code: "validator.validate(new StreamSource(\"config.xml\"));"
+      expected: TrueNegative
+    - code: "validator.reset();"
+      expected: TrueNegative
+    - code: "validator.getErrorHandler();"
+      expected: TrueNegative
+
+# ============================================================================
+# Unmarshaller XXE (1 rule)
+# ============================================================================
+
+- id: "java-xxe-unmarshaller-variable"
+  name: "JAXB Unmarshaller with Variable Source"
+  description: "Unmarshalling untrusted XML with JAXB without disabling external entities enables XXE. Use a secure XMLInputFactory to create the source."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"unmarshal\") arguments: (argument_list (identifier) @source)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html#jaxb-unmarshaller"
+  test_cases:
+    - code: "unmarshaller.unmarshal(userSource);"
+      expected: TruePositive
+    - code: "unmarshaller.unmarshal(xmlInput);"
+      expected: TruePositive
+    - code: "jaxbUnmarshaller.unmarshal(inputStream);"
+      expected: TruePositive
+    - code: "unmarshaller.unmarshal(new File(\"config.xml\"));"
+      expected: TrueNegative
+    - code: "unmarshaller.unmarshal(secureSource);"
+      expected: TrueNegative
+    - code: "marshaller.marshal(object, writer);"
+      expected: TrueNegative

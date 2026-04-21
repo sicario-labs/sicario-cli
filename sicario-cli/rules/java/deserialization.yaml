@@ -1,0 +1,265 @@
+# Insecure Deserialization Rules for Java
+# Covers: ObjectInputStream.readObject, XMLDecoder, XStream without allowlists,
+# SnakeYAML without safe constructors, Java serialization gadget chains
+#
+# CWE-502: Deserialization of Untrusted Data
+# OWASP A08:2021 - Software and Data Integrity Failures
+
+# ============================================================================
+# ObjectInputStream Deserialization (3 rules)
+# ============================================================================
+
+- id: "java-deser-objectinputstream-readobject"
+  name: "ObjectInputStream.readObject on Untrusted Data"
+  description: "Calling readObject() on ObjectInputStream with untrusted data enables remote code execution via deserialization gadget chains. Use a safe alternative like JSON serialization, or implement an ObjectInputFilter allowlist."
+  severity: Critical
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"readObject\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareDataIntegrityFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"
+  test_cases:
+    - code: "Object obj = ois.readObject();"
+      expected: TruePositive
+    - code: "User user = (User) objectInputStream.readObject();"
+      expected: TruePositive
+    - code: "Message msg = (Message) in.readObject();"
+      expected: TruePositive
+    - code: "String json = objectMapper.readValue(input, String.class);"
+      expected: TrueNegative
+    - code: "ois.close();"
+      expected: TrueNegative
+    - code: "int value = dataInputStream.readInt();"
+      expected: TrueNegative
+
+- id: "java-deser-objectinputstream-new"
+  name: "ObjectInputStream Created from Network/File Stream"
+  description: "Creating ObjectInputStream from network or file streams to deserialize untrusted data enables RCE. Use JSON/Protobuf serialization or configure ObjectInputFilter to restrict allowed classes."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(object_creation_expression type: (type_identifier) @type (#eq? @type \"ObjectInputStream\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareDataIntegrityFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"
+  test_cases:
+    - code: "ObjectInputStream ois = new ObjectInputStream(socket.getInputStream());"
+      expected: TruePositive
+    - code: "ObjectInputStream ois = new ObjectInputStream(new FileInputStream(file));"
+      expected: TruePositive
+    - code: "ObjectInputStream in = new ObjectInputStream(request.getInputStream());"
+      expected: TruePositive
+    - code: "DataInputStream dis = new DataInputStream(socket.getInputStream());"
+      expected: TrueNegative
+    - code: "BufferedReader reader = new BufferedReader(new InputStreamReader(is));"
+      expected: TrueNegative
+    - code: "ObjectMapper mapper = new ObjectMapper();"
+      expected: TrueNegative
+
+- id: "java-deser-readunshared"
+  name: "ObjectInputStream.readUnshared on Untrusted Data"
+  description: "readUnshared() is equally vulnerable to deserialization attacks as readObject(). Use safe serialization formats or ObjectInputFilter allowlists."
+  severity: Critical
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"readUnshared\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareDataIntegrityFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"
+  test_cases:
+    - code: "Object obj = ois.readUnshared();"
+      expected: TruePositive
+    - code: "Data data = (Data) inputStream.readUnshared();"
+      expected: TruePositive
+    - code: "var result = in.readUnshared();"
+      expected: TruePositive
+    - code: "ois.readInt();"
+      expected: TrueNegative
+    - code: "ois.readUTF();"
+      expected: TrueNegative
+    - code: "ois.close();"
+      expected: TrueNegative
+
+# ============================================================================
+# XMLDecoder Deserialization (2 rules)
+# ============================================================================
+
+- id: "java-deser-xmldecoder-readobject"
+  name: "XMLDecoder.readObject on Untrusted XML"
+  description: "XMLDecoder can execute arbitrary code when processing untrusted XML. Use a safe XML parser (JAXB, Jackson XML) or avoid XMLDecoder entirely."
+  severity: Critical
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"readObject\") (#match? @obj \"(?i)(xmlDecoder|decoder|xmlDec)\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareDataIntegrityFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"
+  test_cases:
+    - code: "Object obj = xmlDecoder.readObject();"
+      expected: TruePositive
+    - code: "Bean bean = (Bean) decoder.readObject();"
+      expected: TruePositive
+    - code: "var result = xmlDec.readObject();"
+      expected: TruePositive
+    - code: "JAXBContext ctx = JAXBContext.newInstance(MyClass.class);"
+      expected: TrueNegative
+    - code: "xmlDecoder.close();"
+      expected: TrueNegative
+    - code: "ObjectMapper mapper = new XmlMapper();"
+      expected: TrueNegative
+
+- id: "java-deser-xmldecoder-new"
+  name: "XMLDecoder Created from Untrusted Source"
+  description: "Creating XMLDecoder from untrusted input sources enables arbitrary code execution. Use JAXB or Jackson XML for safe XML deserialization."
+  severity: Critical
+  languages:
+    - Java
+  pattern:
+    query: "(object_creation_expression type: (type_identifier) @type (#eq? @type \"XMLDecoder\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareDataIntegrityFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"
+  test_cases:
+    - code: "XMLDecoder decoder = new XMLDecoder(new FileInputStream(file));"
+      expected: TruePositive
+    - code: "XMLDecoder xmlDec = new XMLDecoder(request.getInputStream());"
+      expected: TruePositive
+    - code: "XMLDecoder dec = new XMLDecoder(new BufferedInputStream(is));"
+      expected: TruePositive
+    - code: "XMLEncoder encoder = new XMLEncoder(new FileOutputStream(file));"
+      expected: TrueNegative
+    - code: "DocumentBuilder builder = DocumentBuilderFactory.newInstance().newDocumentBuilder();"
+      expected: TrueNegative
+    - code: "Unmarshaller unmarshaller = jaxbContext.createUnmarshaller();"
+      expected: TrueNegative
+
+# ============================================================================
+# XStream Deserialization (2 rules)
+# ============================================================================
+
+- id: "java-deser-xstream-fromxml"
+  name: "XStream.fromXML without Security Configuration"
+  description: "XStream.fromXML() without an allowlist of permitted classes enables remote code execution. Configure XStream.allowTypes() or XStream.addPermission() to restrict deserialization."
+  severity: Critical
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"fromXML\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareDataIntegrityFailures
+  help_uri: "https://x-stream.github.io/security.html"
+  test_cases:
+    - code: "Object obj = xstream.fromXML(xmlString);"
+      expected: TruePositive
+    - code: "User user = (User) xStream.fromXML(request.getInputStream());"
+      expected: TruePositive
+    - code: "Config config = (Config) xs.fromXML(new FileReader(file));"
+      expected: TruePositive
+    - code: "xstream.allowTypes(new Class[]{User.class, Config.class});"
+      expected: TrueNegative
+    - code: "String xml = xstream.toXML(object);"
+      expected: TrueNegative
+    - code: "ObjectMapper mapper = new ObjectMapper();"
+      expected: TrueNegative
+
+- id: "java-deser-xstream-new-no-security"
+  name: "XStream Instance without Security Framework"
+  description: "Creating an XStream instance without configuring the security framework allows deserialization of arbitrary classes. Call XStream.addPermission() or XStream.allowTypes() immediately after construction."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(object_creation_expression type: (type_identifier) @type (#eq? @type \"XStream\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareDataIntegrityFailures
+  help_uri: "https://x-stream.github.io/security.html"
+  test_cases:
+    - code: "XStream xstream = new XStream();"
+      expected: TruePositive
+    - code: "XStream xs = new XStream(new DomDriver());"
+      expected: TruePositive
+    - code: "XStream xStream = new XStream(new StaxDriver());"
+      expected: TruePositive
+    - code: "ObjectMapper mapper = new ObjectMapper();"
+      expected: TrueNegative
+    - code: "Gson gson = new Gson();"
+      expected: TrueNegative
+    - code: "JAXBContext ctx = JAXBContext.newInstance(User.class);"
+      expected: TrueNegative
+
+# ============================================================================
+# SnakeYAML Deserialization (2 rules)
+# ============================================================================
+
+- id: "java-deser-snakeyaml-unsafe-load"
+  name: "SnakeYAML load() without SafeConstructor"
+  description: "SnakeYAML's Yaml.load() with the default constructor can instantiate arbitrary Java classes from YAML input, enabling RCE. Use new Yaml(new SafeConstructor()) or Yaml.loadAs() with a specific type."
+  severity: Critical
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"load\") (#match? @obj \"(?i)(yaml|yamlParser|yamlLoader)\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareDataIntegrityFailures
+  help_uri: "https://bitbucket.org/snakeyaml/snakeyaml/wiki/CVE-2022-1471"
+  test_cases:
+    - code: "Object data = yaml.load(userInput);"
+      expected: TruePositive
+    - code: "Map config = (Map) yamlParser.load(new FileReader(file));"
+      expected: TruePositive
+    - code: "Object result = yamlLoader.load(request.getInputStream());"
+      expected: TruePositive
+    - code: "Yaml yaml = new Yaml(new SafeConstructor());"
+      expected: TrueNegative
+    - code: "Config config = yaml.loadAs(input, Config.class);"
+      expected: TrueNegative
+    - code: "String dumped = yaml.dump(data);"
+      expected: TrueNegative
+
+- id: "java-deser-snakeyaml-default-constructor"
+  name: "SnakeYAML Yaml() without SafeConstructor"
+  description: "Creating a Yaml instance without SafeConstructor allows arbitrary class instantiation from YAML. Always use new Yaml(new SafeConstructor()) for untrusted input."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(object_creation_expression type: (type_identifier) @type (#eq? @type \"Yaml\") arguments: (argument_list) @args (#eq? @args \"()\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_SoftwareDataIntegrityFailures
+  help_uri: "https://bitbucket.org/snakeyaml/snakeyaml/wiki/CVE-2022-1471"
+  test_cases:
+    - code: "Yaml yaml = new Yaml();"
+      expected: TruePositive
+    - code: "var parser = new Yaml();"
+      expected: TruePositive
+    - code: "Yaml yamlLoader = new Yaml();"
+      expected: TruePositive
+    - code: "Yaml yaml = new Yaml(new SafeConstructor());"
+      expected: TrueNegative
+    - code: "Yaml yaml = new Yaml(new Constructor(Config.class));"
+      expected: TrueNegative
+    - code: "ObjectMapper mapper = new ObjectMapper();"
+      expected: TrueNegative

@@ -1,0 +1,393 @@
+# Cryptography Rules for Go (beyond basic md5/sha1/math-rand in go.yaml)
+# Covers: DES/3DES, ECB mode, hardcoded encryption keys, weak key derivation,
+# insecure PBKDF2 iterations, RC4, hardcoded IV/nonce, weak RSA key size,
+# bcrypt cost too low, insecure cipher suites, deprecated crypto, constant-time bypass
+#
+# CWE-327: Use of Broken Crypto Algorithm
+# CWE-321: Use of Hard-coded Cryptographic Key
+# CWE-326: Inadequate Encryption Strength
+# CWE-329: Not Using an Unpredictable IV with CBC Mode
+# CWE-916: Use of Password Hash With Insufficient Computational Effort
+# OWASP A02:2021 - Cryptographic Failures
+
+# ============================================================================
+# CRYPTO RULES (14 rules)
+# ============================================================================
+
+- id: "go-des-cipher-usage"
+  name: "DES Cipher Usage"
+  description: "DES is a broken cipher with a 56-bit key. Use AES-256 instead."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"des\") field: (field_identifier) @fn (#match? @fn \"^(NewCipher|NewTripleDESCipher)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cwe.mitre.org/data/definitions/327.html"
+  test_cases:
+    - code: "block, err := des.NewCipher(key)"
+      expected: TruePositive
+    - code: "block, err := des.NewTripleDESCipher(key)"
+      expected: TruePositive
+    - code: "cipher, _ := des.NewCipher(secretKey)"
+      expected: TruePositive
+    - code: "block, err := aes.NewCipher(key)"
+      expected: TrueNegative
+    - code: "block, err := cipher.NewGCM(aesBlock)"
+      expected: TrueNegative
+    - code: "h := sha256.New()"
+      expected: TrueNegative
+
+- id: "go-ecb-cipher-newecbencrypter"
+  name: "ECB Mode Encryption"
+  description: "ECB mode does not provide semantic security — identical plaintext blocks produce identical ciphertext. Use GCM or CBC with a random IV instead."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"cipher\") field: (field_identifier) @fn (#match? @fn \"^NewECB\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cwe.mitre.org/data/definitions/327.html"
+  test_cases:
+    - code: "enc := cipher.NewECBEncrypter(block)"
+      expected: TruePositive
+    - code: "dec := cipher.NewECBDecrypter(block)"
+      expected: TruePositive
+    - code: "mode := cipher.NewECBEncrypter(aesBlock)"
+      expected: TruePositive
+    - code: "gcm, err := cipher.NewGCM(block)"
+      expected: TrueNegative
+    - code: "stream := cipher.NewCFBEncrypter(block, iv)"
+      expected: TrueNegative
+    - code: "mode := cipher.NewCBCEncrypter(block, iv)"
+      expected: TrueNegative
+
+- id: "go-rc4-cipher-usage"
+  name: "RC4 Cipher Usage"
+  description: "RC4 is a broken stream cipher with known biases. Use AES-GCM or ChaCha20-Poly1305 instead."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"rc4\") field: (field_identifier) @fn (#eq? @fn \"NewCipher\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cwe.mitre.org/data/definitions/327.html"
+  test_cases:
+    - code: "c, err := rc4.NewCipher(key)"
+      expected: TruePositive
+    - code: "stream, _ := rc4.NewCipher(secretKey)"
+      expected: TruePositive
+    - code: "rc4Cipher, err := rc4.NewCipher(derivedKey)"
+      expected: TruePositive
+    - code: "block, err := aes.NewCipher(key)"
+      expected: TrueNegative
+    - code: "gcm, err := cipher.NewGCM(block)"
+      expected: TrueNegative
+    - code: "stream := cipher.NewCTR(block, iv)"
+      expected: TrueNegative
+
+- id: "go-hardcoded-aes-key"
+  name: "Hardcoded AES Encryption Key"
+  description: "Hardcoding encryption keys in source code exposes them to anyone with access to the binary. Load keys from environment variables or a secrets manager."
+  severity: Critical
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"aes\") field: (field_identifier) @fn (#eq? @fn \"NewCipher\")) arguments: (argument_list (composite_literal type: (slice_type element: (type_identifier) @typ (#eq? @typ \"byte\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-321"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cwe.mitre.org/data/definitions/321.html"
+  test_cases:
+    - code: "block, _ := aes.NewCipher([]byte(\"my-secret-key-16\"))"
+      expected: TruePositive
+    - code: "block, err := aes.NewCipher([]byte{0x00, 0x01, 0x02})"
+      expected: TruePositive
+    - code: "c, _ := aes.NewCipher([]byte(\"hardcoded-aes!!\"))"
+      expected: TruePositive
+    - code: "block, err := aes.NewCipher(keyFromEnv)"
+      expected: TrueNegative
+    - code: "block, err := aes.NewCipher(derivedKey)"
+      expected: TrueNegative
+    - code: "block, err := aes.NewCipher(key)"
+      expected: TrueNegative
+
+- id: "go-weak-pbkdf2-iterations"
+  name: "PBKDF2 with Insufficient Iterations"
+  description: "PBKDF2 with fewer than 600,000 iterations (OWASP 2023 recommendation) is vulnerable to brute-force attacks. Increase the iteration count or use argon2id."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"pbkdf2\") field: (field_identifier) @fn (#eq? @fn \"Key\")) arguments: (argument_list (_) (_) (int_literal) @iters (#match? @iters \"^[0-9]{1,5}$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-916"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html"
+  test_cases:
+    - code: "dk := pbkdf2.Key(password, salt, 1000, 32, sha256.New)"
+      expected: TruePositive
+    - code: "dk := pbkdf2.Key(pass, salt, 4096, 32, sha256.New)"
+      expected: TruePositive
+    - code: "key := pbkdf2.Key(pwd, s, 10000, 32, sha1.New)"
+      expected: TruePositive
+    - code: "dk := pbkdf2.Key(password, salt, 600000, 32, sha256.New)"
+      expected: TrueNegative
+    - code: "dk := pbkdf2.Key(password, salt, iterations, 32, sha256.New)"
+      expected: TrueNegative
+    - code: "key := argon2.IDKey(password, salt, 1, 64*1024, 4, 32)"
+      expected: TrueNegative
+
+- id: "go-hardcoded-iv-nonce"
+  name: "Hardcoded IV or Nonce"
+  description: "Using a hardcoded initialization vector (IV) or nonce breaks the semantic security of encryption. Generate a random IV/nonce using crypto/rand for each encryption operation."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"cipher\") field: (field_identifier) @fn (#match? @fn \"^(NewCBCEncrypter|NewCFBEncrypter|NewOFB|NewCTR)$\")) arguments: (argument_list (_) (composite_literal type: (slice_type element: (type_identifier) @typ (#eq? @typ \"byte\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-329"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cwe.mitre.org/data/definitions/329.html"
+  test_cases:
+    - code: "mode := cipher.NewCBCEncrypter(block, []byte(\"1234567890123456\"))"
+      expected: TruePositive
+    - code: "stream := cipher.NewCFBEncrypter(block, []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})"
+      expected: TruePositive
+    - code: "stream := cipher.NewCTR(block, []byte(\"static-iv-value!\"))"
+      expected: TruePositive
+    - code: "mode := cipher.NewCBCEncrypter(block, iv)"
+      expected: TrueNegative
+    - code: "stream := cipher.NewCFBEncrypter(block, randomIV)"
+      expected: TrueNegative
+    - code: "gcm, err := cipher.NewGCM(block)"
+      expected: TrueNegative
+
+- id: "go-weak-rsa-key-size"
+  name: "Weak RSA Key Size"
+  description: "RSA keys shorter than 2048 bits are considered insecure. Use at least 2048-bit keys, preferably 4096-bit."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"rsa\") field: (field_identifier) @fn (#eq? @fn \"GenerateKey\")) arguments: (argument_list (_) (int_literal) @bits (#match? @bits \"^(512|768|1024)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-326"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cwe.mitre.org/data/definitions/326.html"
+  test_cases:
+    - code: "key, err := rsa.GenerateKey(rand.Reader, 1024)"
+      expected: TruePositive
+    - code: "key, err := rsa.GenerateKey(rand.Reader, 512)"
+      expected: TruePositive
+    - code: "privKey, _ := rsa.GenerateKey(rand.Reader, 768)"
+      expected: TruePositive
+    - code: "key, err := rsa.GenerateKey(rand.Reader, 2048)"
+      expected: TrueNegative
+    - code: "key, err := rsa.GenerateKey(rand.Reader, 4096)"
+      expected: TrueNegative
+    - code: "key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)"
+      expected: TrueNegative
+
+- id: "go-bcrypt-low-cost"
+  name: "bcrypt Cost Factor Too Low"
+  description: "A bcrypt cost factor below 10 is too fast for password hashing and vulnerable to brute-force attacks. Use a cost of at least 12."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"bcrypt\") field: (field_identifier) @fn (#eq? @fn \"GenerateFromPassword\")) arguments: (argument_list (_) (int_literal) @cost (#match? @cost \"^[1-9]$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-916"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://pkg.go.dev/golang.org/x/crypto/bcrypt"
+  test_cases:
+    - code: "hash, err := bcrypt.GenerateFromPassword(password, 4)"
+      expected: TruePositive
+    - code: "hash, _ := bcrypt.GenerateFromPassword(pwd, 8)"
+      expected: TruePositive
+    - code: "h, err := bcrypt.GenerateFromPassword(pass, 6)"
+      expected: TruePositive
+    - code: "hash, err := bcrypt.GenerateFromPassword(password, 12)"
+      expected: TrueNegative
+    - code: "hash, err := bcrypt.GenerateFromPassword(password, 14)"
+      expected: TrueNegative
+    - code: "hash, err := bcrypt.GenerateFromPassword(password, bcrypt.DefaultCost)"
+      expected: TrueNegative
+
+- id: "go-constant-time-bypass"
+  name: "Non-Constant-Time Comparison for Secrets"
+  description: "Using == or bytes.Equal to compare secrets (tokens, hashes, MACs) leaks timing information. Use crypto/subtle.ConstantTimeCompare instead."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"bytes\") field: (field_identifier) @fn (#eq? @fn \"Equal\")) arguments: (argument_list (_) @left (_) @right (#match? @left \"(?i)(hash|mac|hmac|token|signature|digest)\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-208"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://pkg.go.dev/crypto/subtle#ConstantTimeCompare"
+  test_cases:
+    - code: "if bytes.Equal(hashA, hashB) { return true }"
+      expected: TruePositive
+    - code: "valid := bytes.Equal(macResult, expectedMac)"
+      expected: TruePositive
+    - code: "ok := bytes.Equal(tokenHash, storedHash)"
+      expected: TruePositive
+    - code: "if subtle.ConstantTimeCompare(hashA, hashB) == 1 { return true }"
+      expected: TrueNegative
+    - code: "if bytes.Equal(data, otherData) { process() }"
+      expected: TrueNegative
+    - code: "hmac.Equal(mac1, mac2)"
+      expected: TrueNegative
+
+- id: "go-hardcoded-hmac-key"
+  name: "Hardcoded HMAC Key"
+  description: "Hardcoding HMAC keys in source code exposes them to anyone with access to the binary. Load keys from environment variables or a secrets manager."
+  severity: Critical
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"hmac\") field: (field_identifier) @fn (#eq? @fn \"New\")) arguments: (argument_list (_) (composite_literal type: (slice_type element: (type_identifier) @typ (#eq? @typ \"byte\"))) @key)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-321"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cwe.mitre.org/data/definitions/321.html"
+  test_cases:
+    - code: "mac := hmac.New(sha256.New, []byte(\"my-secret-key\"))"
+      expected: TruePositive
+    - code: "h := hmac.New(sha512.New, []byte(\"hardcoded-hmac-key\"))"
+      expected: TruePositive
+    - code: "m := hmac.New(sha256.New, []byte{0x01, 0x02, 0x03})"
+      expected: TruePositive
+    - code: "mac := hmac.New(sha256.New, keyFromEnv)"
+      expected: TrueNegative
+    - code: "h := hmac.New(sha256.New, secretKey)"
+      expected: TrueNegative
+    - code: "m := hmac.New(sha256.New, derivedKey)"
+      expected: TrueNegative
+
+- id: "go-rand-seed-constant"
+  name: "math/rand Seeded with Constant Value"
+  description: "Seeding math/rand with a constant produces a predictable sequence. Use crypto/rand for security-sensitive operations or seed with a truly random value."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"rand\") field: (field_identifier) @fn (#eq? @fn \"Seed\")) arguments: (argument_list (int_literal) @seed)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-330"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cwe.mitre.org/data/definitions/330.html"
+  test_cases:
+    - code: "rand.Seed(42)"
+      expected: TruePositive
+    - code: "rand.Seed(0)"
+      expected: TruePositive
+    - code: "rand.Seed(12345)"
+      expected: TruePositive
+    - code: "rand.Seed(time.Now().UnixNano())"
+      expected: TrueNegative
+    - code: "rand.New(rand.NewSource(time.Now().UnixNano()))"
+      expected: TrueNegative
+    - code: "crypto_rand.Read(buf)"
+      expected: TrueNegative
+
+- id: "go-hardcoded-tls-key-pair"
+  name: "Hardcoded TLS Certificate Key Pair"
+  description: "Hardcoding TLS certificate or key content in source code is insecure. Load certificates from files or a secrets manager."
+  severity: Critical
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"tls\") field: (field_identifier) @fn (#eq? @fn \"X509KeyPair\")) arguments: (argument_list (composite_literal type: (slice_type element: (type_identifier) @typ (#eq? @typ \"byte\"))) @cert)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-321"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cwe.mitre.org/data/definitions/321.html"
+  test_cases:
+    - code: "cert, err := tls.X509KeyPair([]byte(certPEM), []byte(keyPEM))"
+      expected: TruePositive
+    - code: "pair, _ := tls.X509KeyPair([]byte(\"-----BEGIN CERTIFICATE-----\"), []byte(\"-----BEGIN RSA PRIVATE KEY-----\"))"
+      expected: TruePositive
+    - code: "c, err := tls.X509KeyPair([]byte{0x30, 0x82}, []byte{0x30, 0x82})"
+      expected: TruePositive
+    - code: "cert, err := tls.LoadX509KeyPair(\"cert.pem\", \"key.pem\")"
+      expected: TrueNegative
+    - code: "cert, err := tls.X509KeyPair(certData, keyData)"
+      expected: TrueNegative
+    - code: "config := &tls.Config{Certificates: certs}"
+      expected: TrueNegative
+
+- id: "go-blowfish-cipher-usage"
+  name: "Blowfish Cipher Usage"
+  description: "Blowfish has a 64-bit block size making it vulnerable to birthday attacks. Use AES-256 instead."
+  severity: Medium
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"blowfish\") field: (field_identifier) @fn (#match? @fn \"^(NewCipher|NewSaltedCipher)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-327"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cwe.mitre.org/data/definitions/327.html"
+  test_cases:
+    - code: "c, err := blowfish.NewCipher(key)"
+      expected: TruePositive
+    - code: "block, _ := blowfish.NewSaltedCipher(key, salt)"
+      expected: TruePositive
+    - code: "cipher, err := blowfish.NewCipher(secretKey)"
+      expected: TruePositive
+    - code: "block, err := aes.NewCipher(key)"
+      expected: TrueNegative
+    - code: "gcm, err := cipher.NewGCM(block)"
+      expected: TrueNegative
+    - code: "hash := sha256.Sum256(data)"
+      expected: TrueNegative
+
+- id: "go-gcm-seal-hardcoded-nonce"
+  name: "GCM Seal with Hardcoded Nonce"
+  description: "Using a hardcoded nonce with AES-GCM breaks its security guarantees. Generate a random nonce using crypto/rand for each encryption."
+  severity: High
+  languages:
+    - Go
+  pattern:
+    query: "(call_expression function: (selector_expression field: (field_identifier) @fn (#eq? @fn \"Seal\")) arguments: (argument_list (_) (composite_literal type: (slice_type element: (type_identifier) @typ (#eq? @typ \"byte\"))) @nonce)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-329"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cwe.mitre.org/data/definitions/329.html"
+  test_cases:
+    - code: "ciphertext := gcm.Seal(nil, []byte(\"static-nonce!\"), plaintext, nil)"
+      expected: TruePositive
+    - code: "ct := aesgcm.Seal(nil, []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, data, nil)"
+      expected: TruePositive
+    - code: "encrypted := gcm.Seal(nil, []byte(\"000000000000\"), msg, aad)"
+      expected: TruePositive
+    - code: "ciphertext := gcm.Seal(nil, nonce, plaintext, nil)"
+      expected: TrueNegative
+    - code: "ct := aesgcm.Seal(nil, randomNonce, data, nil)"
+      expected: TrueNegative
+    - code: "gcm, err := cipher.NewGCM(block)"
+      expected: TrueNegative

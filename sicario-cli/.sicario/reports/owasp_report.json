@@ -1,0 +1,107 @@
+{
+  "total_vulnerabilities": 1203,
+  "categories_affected": 6,
+  "categories": [
+    {
+      "category": "A01_BrokenAccessControl",
+      "label": "A01:2021 – Broken Access Control",
+      "total": 0,
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "info": 0
+    },
+    {
+      "category": "A02_CryptographicFailures",
+      "label": "A02:2021 – Cryptographic Failures",
+      "total": 75,
+      "critical": 0,
+      "high": 72,
+      "medium": 3,
+      "low": 0,
+      "info": 0
+    },
+    {
+      "category": "A03_Injection",
+      "label": "A03:2021 – Injection",
+      "total": 106,
+      "critical": 46,
+      "high": 60,
+      "medium": 0,
+      "low": 0,
+      "info": 0
+    },
+    {
+      "category": "A04_InsecureDesign",
+      "label": "A04:2021 – Insecure Design",
+      "total": 11,
+      "critical": 0,
+      "high": 0,
+      "medium": 11,
+      "low": 0,
+      "info": 0
+    },
+    {
+      "category": "A05_SecurityMisconfiguration",
+      "label": "A05:2021 – Security Misconfiguration",
+      "total": 974,
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 974,
+      "info": 0
+    },
+    {
+      "category": "A06_VulnerableComponents",
+      "label": "A06:2021 – Vulnerable and Outdated Components",
+      "total": 0,
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "info": 0
+    },
+    {
+      "category": "A07_IdentificationAuthFailures",
+      "label": "A07:2021 – Identification and Authentication Failures",
+      "total": 0,
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "info": 0
+    },
+    {
+      "category": "A08_SoftwareDataIntegrityFailures",
+      "label": "A08:2021 – Software and Data Integrity Failures",
+      "total": 33,
+      "critical": 33,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "info": 0
+    },
+    {
+      "category": "A09_SecurityLoggingFailures",
+      "label": "A09:2021 – Security Logging and Monitoring Failures",
+      "total": 4,
+      "critical": 0,
+      "high": 0,
+      "medium": 4,
+      "low": 0,
+      "info": 0
+    },
+    {
+      "category": "A10_ServerSideRequestForgery",
+      "label": "A10:2021 – Server-Side Request Forgery (SSRF)",
+      "total": 0,
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "info": 0
+    }
+  ],
+  "uncategorized": 0
+}

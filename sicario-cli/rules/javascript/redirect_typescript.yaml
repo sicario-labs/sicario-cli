@@ -1,0 +1,342 @@
+# Open Redirect and TypeScript Type Safety Security Rules for JavaScript/TypeScript
+# Covers: res.redirect with user-controlled URL, window.location assignment,
+# window.location.replace, router.push with user input, Location header injection,
+# `as any` in security contexts, explicit `any` on user input params,
+# type assertion bypassing validation, non-null assertion on user input,
+# @ts-ignore before security code, type casting request body without validation
+#
+# CWE-601: URL Redirection to Untrusted Site (Open Redirect)
+# CWE-704: Incorrect Type Conversion or Cast
+# CWE-20: Improper Input Validation
+# OWASP A01:2021 - Broken Access Control
+# OWASP A04:2021 - Insecure Design
+
+- id: "js-open-redirect-res-redirect-query"
+  name: "Open Redirect via res.redirect with req.query"
+  description: "Using req.query values directly in res.redirect allows open redirect attacks. Validate redirect URLs against an allowlist of trusted domains or use relative paths only."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"res\") property: (property_identifier) @method (#eq? @method \"redirect\")) arguments: (arguments (member_expression object: (member_expression object: (identifier) @req (#eq? @req \"req\") property: (property_identifier) @prop (#eq? @prop \"query\"))))) @redirect"
+    captures:
+      - "redirect"
+  cwe_id: "CWE-601"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html"
+  test_cases:
+    - code: "res.redirect(req.query.returnUrl);"
+      expected: TruePositive
+    - code: "res.redirect(req.query.next);"
+      expected: TruePositive
+    - code: "res.redirect(req.query.redirect);"
+      expected: TruePositive
+    - code: "res.redirect('/dashboard');"
+      expected: TrueNegative
+    - code: "res.redirect(validateUrl(req.query.returnUrl));"
+      expected: TrueNegative
+    - code: "res.redirect(302, '/login');"
+      expected: TrueNegative
+
+- id: "js-open-redirect-res-redirect-body"
+  name: "Open Redirect via res.redirect with req.body"
+  description: "Using req.body values directly in res.redirect allows open redirect attacks. Validate redirect URLs against an allowlist of trusted domains."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"res\") property: (property_identifier) @method (#eq? @method \"redirect\")) arguments: (arguments (member_expression object: (member_expression object: (identifier) @req (#eq? @req \"req\") property: (property_identifier) @prop (#eq? @prop \"body\"))))) @redirect"
+    captures:
+      - "redirect"
+  cwe_id: "CWE-601"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html"
+  test_cases:
+    - code: "res.redirect(req.body.redirectUrl);"
+      expected: TruePositive
+    - code: "res.redirect(req.body.returnTo);"
+      expected: TruePositive
+    - code: "res.redirect(req.body.next);"
+      expected: TruePositive
+    - code: "res.redirect('/home');"
+      expected: TrueNegative
+    - code: "res.redirect(safeUrl(req.body.redirectUrl));"
+      expected: TrueNegative
+    - code: "res.json({ redirect: req.body.url });"
+      expected: TrueNegative
+
+- id: "js-open-redirect-window-location-href"
+  name: "Open Redirect via window.location.href Assignment"
+  description: "Assigning user-controlled values to window.location.href causes client-side open redirect. Validate URLs against an allowlist before navigation."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(assignment_expression left: (member_expression object: (member_expression object: (identifier) @obj (#eq? @obj \"window\") property: (property_identifier) @loc (#eq? @loc \"location\")) property: (property_identifier) @prop (#eq? @prop \"href\")) right: (identifier) @val) @redirect"
+    captures:
+      - "redirect"
+  cwe_id: "CWE-601"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html"
+  test_cases:
+    - code: "window.location.href = userUrl;"
+      expected: TruePositive
+    - code: "window.location.href = redirectTarget;"
+      expected: TruePositive
+    - code: "window.location.href = nextPage;"
+      expected: TruePositive
+    - code: "window.location.href = '/dashboard';"
+      expected: TrueNegative
+    - code: "window.location.href = `${window.origin}/callback`;"
+      expected: TrueNegative
+    - code: "const url = window.location.href;"
+      expected: TrueNegative
+
+- id: "js-open-redirect-window-location-replace"
+  name: "Open Redirect via window.location.replace"
+  description: "Calling window.location.replace with user-controlled values causes client-side open redirect without history entry. Validate URLs before navigation."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (member_expression object: (identifier) @obj (#eq? @obj \"window\") property: (property_identifier) @loc (#eq? @loc \"location\")) property: (property_identifier) @method (#eq? @method \"replace\")) arguments: (arguments (identifier) @url)) @redirect"
+    captures:
+      - "redirect"
+  cwe_id: "CWE-601"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://developer.mozilla.org/en-US/docs/Web/API/Location/replace"
+  test_cases:
+    - code: "window.location.replace(userUrl);"
+      expected: TruePositive
+    - code: "window.location.replace(redirectTarget);"
+      expected: TruePositive
+    - code: "window.location.replace(nextUrl);"
+      expected: TruePositive
+    - code: "window.location.replace('/login');"
+      expected: TrueNegative
+    - code: "window.location.replace(validateRedirect(url));"
+      expected: TrueNegative
+    - code: "history.replaceState(null, '', '/page');"
+      expected: TrueNegative
+
+- id: "js-open-redirect-router-push"
+  name: "Open Redirect via router.push with User Input"
+  description: "Using user-controlled values in router.push (Next.js/React Router) allows open redirect. Validate paths against an allowlist or ensure they are relative paths."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"router\") property: (property_identifier) @method (#eq? @method \"push\")) arguments: (arguments (identifier) @path)) @redirect"
+    captures:
+      - "redirect"
+  cwe_id: "CWE-601"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://nextjs.org/docs/pages/api-reference/functions/use-router#routerpush"
+  test_cases:
+    - code: "router.push(userPath);"
+      expected: TruePositive
+    - code: "router.push(redirectUrl);"
+      expected: TruePositive
+    - code: "router.push(nextRoute);"
+      expected: TruePositive
+    - code: "router.push('/dashboard');"
+      expected: TrueNegative
+    - code: "router.push({ pathname: '/profile', query: { id: userId } });"
+      expected: TrueNegative
+    - code: "router.push(validatePath(userPath));"
+      expected: TrueNegative
+
+- id: "js-open-redirect-location-header"
+  name: "Location Header Set with User Input"
+  description: "Setting the Location response header with user-controlled values allows open redirect. Validate URLs against an allowlist before setting redirect headers."
+  severity: High
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj \"res\") property: (property_identifier) @method (#eq? @method \"setHeader\")) arguments: (arguments (string) @header (#eq? @header \"'Location'\") (identifier) @url)) @redirect"
+    captures:
+      - "redirect"
+  cwe_id: "CWE-601"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Location"
+  test_cases:
+    - code: "res.setHeader('Location', userUrl);"
+      expected: TruePositive
+    - code: "res.setHeader('Location', redirectTarget);"
+      expected: TruePositive
+    - code: "res.setHeader('Location', nextUrl);"
+      expected: TruePositive
+    - code: "res.setHeader('Location', '/login');"
+      expected: TrueNegative
+    - code: "res.setHeader('Content-Type', 'application/json');"
+      expected: TrueNegative
+    - code: "res.setHeader('Location', validateUrl(target));"
+      expected: TrueNegative
+
+- id: "js-ts-as-any-security-context"
+  name: "Type Assertion 'as any' in Security Context"
+  description: "Using 'as any' type assertion in authentication, authorization, or security-sensitive code bypasses TypeScript's type safety, potentially hiding vulnerabilities. Use proper type guards instead."
+  severity: Medium
+  languages:
+    - TypeScript
+  pattern:
+    query: "(as_expression expression: (identifier) @expr (#match? @expr \"(token|auth|session|user|credentials|permission|role)\") (type_identifier) @type (#eq? @type \"any\")) @unsafe_cast"
+    captures:
+      - "unsafe_cast"
+  cwe_id: "CWE-704"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#type-assertions"
+  test_cases:
+    - code: "const data = token as any;"
+      expected: TruePositive
+    - code: "const info = auth as any;"
+      expected: TruePositive
+    - code: "const sess = session as any;"
+      expected: TruePositive
+    - code: "const data = token as JwtPayload;"
+      expected: TrueNegative
+    - code: "const info = auth as AuthResult;"
+      expected: TrueNegative
+    - code: "const count = items as any;"
+      expected: TrueNegative
+
+- id: "js-ts-any-param-user-input"
+  name: "Explicit 'any' Type on User Input Parameters"
+  description: "Using 'any' type on function parameters that handle user input disables type checking and validation. Use specific types with runtime validation (e.g., zod, io-ts)."
+  severity: Medium
+  languages:
+    - TypeScript
+  pattern:
+    query: "(required_parameter pattern: (identifier) @param (#match? @param \"(input|body|payload|data|request|params|query)\") type: (type_annotation (predefined_type) @type (#eq? @type \"any\"))) @unsafe_param"
+    captures:
+      - "unsafe_param"
+  cwe_id: "CWE-20"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://www.typescriptlang.org/docs/handbook/2/narrowing.html"
+  test_cases:
+    - code: "function process(input: any) { db.query(input); }"
+      expected: TruePositive
+    - code: "function handle(body: any) { return body.admin; }"
+      expected: TruePositive
+    - code: "function validate(payload: any) { save(payload); }"
+      expected: TruePositive
+    - code: "function process(input: UserInput) { db.query(input.name); }"
+      expected: TrueNegative
+    - code: "function handle(body: RequestBody) { return body.data; }"
+      expected: TrueNegative
+    - code: "function calculate(count: any) { return count * 2; }"
+      expected: TrueNegative
+
+- id: "js-ts-type-assertion-bypass-validation"
+  name: "Type Assertion Bypassing Validation"
+  description: "Using type assertions to cast unvalidated data to trusted types bypasses runtime validation. Use type guards or validation libraries to ensure data conforms to expected types."
+  severity: Medium
+  languages:
+    - TypeScript
+  pattern:
+    query: "(as_expression expression: (member_expression object: (identifier) @obj (#eq? @obj \"req\") property: (property_identifier) @prop (#match? @prop \"^(body|query|params)$\")) (_) @type) @unsafe_cast"
+    captures:
+      - "unsafe_cast"
+  cwe_id: "CWE-704"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://www.typescriptlang.org/docs/handbook/2/narrowing.html#using-type-predicates"
+  test_cases:
+    - code: "const user = req.body as AdminUser;"
+      expected: TruePositive
+    - code: "const config = req.query as SystemConfig;"
+      expected: TruePositive
+    - code: "const data = req.params as PrivilegedData;"
+      expected: TruePositive
+    - code: "const user = validateBody(req.body) as AdminUser;"
+      expected: TrueNegative
+    - code: "const data = schema.parse(req.body);"
+      expected: TrueNegative
+    - code: "const id = req.params.id as string;"
+      expected: TrueNegative
+
+- id: "js-ts-non-null-assertion-user-input"
+  name: "Non-null Assertion on User Input"
+  description: "Using non-null assertion (!) on user input assumes it exists without validation, potentially causing runtime errors or security bypasses. Add explicit null checks."
+  severity: Medium
+  languages:
+    - TypeScript
+  pattern:
+    query: "(non_null_expression (member_expression object: (member_expression object: (identifier) @obj (#eq? @obj \"req\") property: (property_identifier) @prop (#match? @prop \"^(body|query|params|headers)$\")))) @unsafe_assert"
+    captures:
+      - "unsafe_assert"
+  cwe_id: "CWE-20"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#non-null-assertion-operator-postfix-"
+  test_cases:
+    - code: "const email = req.body.email!;"
+      expected: TruePositive
+    - code: "const token = req.headers.authorization!;"
+      expected: TruePositive
+    - code: "const id = req.params.userId!;"
+      expected: TruePositive
+    - code: "const email = req.body?.email ?? '';"
+      expected: TrueNegative
+    - code: "if (req.body.email) { const email = req.body.email; }"
+      expected: TrueNegative
+    - code: "const email = req.body.email || 'default';"
+      expected: TrueNegative
+
+- id: "js-ts-ignore-security-code"
+  name: "@ts-ignore Before Security-Sensitive Code"
+  description: "Using @ts-ignore to suppress TypeScript errors in security-sensitive code hides potential type safety issues. Fix the underlying type error instead of suppressing it."
+  severity: Medium
+  languages:
+    - TypeScript
+  pattern:
+    query: "(comment) @comment (#match? @comment \"@ts-ignore\")"
+    captures:
+      - "comment"
+  cwe_id: "CWE-704"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-2-6.html#suppress-errors-in-ts-files-using--ts-ignore-comments"
+  test_cases:
+    - code: "// @ts-ignore\nconst admin = verifyToken(token);"
+      expected: TruePositive
+    - code: "// @ts-ignore\nconst user = authenticate(req);"
+      expected: TruePositive
+    - code: "// @ts-ignore - bypass type check\nconst session = getSession(cookie);"
+      expected: TruePositive
+    - code: "// @ts-expect-error - testing invalid input\nexpect(() => validate(null)).toThrow();"
+      expected: TrueNegative
+    - code: "const admin = verifyToken(token) as AdminUser;"
+      expected: TrueNegative
+    - code: "// This is a regular comment about ts-ignore usage"
+      expected: TrueNegative
+
+- id: "js-ts-cast-request-body-no-validation"
+  name: "Type Casting Request Body Without Validation"
+  description: "Casting req.body directly to a type without runtime validation trusts client-supplied data. Use a validation library (zod, joi, class-validator) to validate before casting."
+  severity: Medium
+  languages:
+    - TypeScript
+  pattern:
+    query: "(variable_declarator name: (_) @name value: (as_expression expression: (member_expression object: (identifier) @obj (#eq? @obj \"req\") property: (property_identifier) @prop (#eq? @prop \"body\")) (_) @type)) @unsafe_cast"
+    captures:
+      - "unsafe_cast"
+  cwe_id: "CWE-20"
+  owasp_category: A04_InsecureDesign
+  help_uri: "https://zod.dev/"
+  test_cases:
+    - code: "const userData = req.body as CreateUserDto;"
+      expected: TruePositive
+    - code: "const config = req.body as AppConfig;"
+      expected: TruePositive
+    - code: "const order = req.body as OrderPayload;"
+      expected: TruePositive
+    - code: "const userData = createUserSchema.parse(req.body);"
+      expected: TrueNegative
+    - code: "const config = await validateBody(req.body, AppConfigSchema);"
+      expected: TrueNegative
+    - code: "const { name, email } = req.body; const user = { name, email };"
+      expected: TrueNegative

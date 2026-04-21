@@ -1,0 +1,289 @@
+# SQL Injection Rules for Java
+# Covers: Statement.execute with string concatenation, PreparedStatement misuse,
+# JPQL/HQL injection in Hibernate, Spring Data @Query concatenation,
+# JdbcTemplate with string formatting, MyBatis ${} interpolation
+#
+# CWE-89: Improper Neutralization of Special Elements used in an SQL Command
+# OWASP A03:2021 - Injection
+
+# ============================================================================
+# JDBC Statement SQL Injection (4 rules)
+# ============================================================================
+
+- id: "java-sqli-statement-execute-concat"
+  name: "Statement.execute with String Concatenation"
+  description: "Concatenating user input into SQL strings passed to Statement.execute allows SQL injection. Use PreparedStatement with parameterized queries instead."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#match? @method \"^(execute|executeQuery|executeUpdate)$\") arguments: (argument_list (binary_expression left: (string_literal) @sql (#match? @sql \"(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "stmt.executeQuery(\"SELECT * FROM users WHERE id = \" + userId);"
+      expected: TruePositive
+    - code: "stmt.execute(\"DELETE FROM sessions WHERE token = '\" + token + \"'\");"
+      expected: TruePositive
+    - code: "stmt.executeUpdate(\"UPDATE users SET role = '\" + role + \"' WHERE id = \" + id);"
+      expected: TruePositive
+    - code: "pstmt.executeQuery();"
+      expected: TrueNegative
+    - code: "stmt.executeQuery(\"SELECT * FROM users\");"
+      expected: TrueNegative
+    - code: "stmt.execute(\"CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY)\");"
+      expected: TrueNegative
+
+- id: "java-sqli-statement-string-format"
+  name: "Statement.execute with String.format SQL"
+  description: "Using String.format to build SQL strings passed to Statement methods allows SQL injection. Use PreparedStatement with bind parameters instead."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#match? @method \"^(execute|executeQuery|executeUpdate)$\") arguments: (argument_list (method_invocation object: (identifier) @fmt (#eq? @fmt \"String\") name: (identifier) @fn (#eq? @fn \"format\") arguments: (argument_list (string_literal) @sql (#match? @sql \"(?i)(SELECT|INSERT|UPDATE|DELETE)\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "stmt.executeQuery(String.format(\"SELECT * FROM users WHERE name = '%s'\", name));"
+      expected: TruePositive
+    - code: "stmt.execute(String.format(\"INSERT INTO logs (msg) VALUES ('%s')\", message));"
+      expected: TruePositive
+    - code: "stmt.executeUpdate(String.format(\"DELETE FROM sessions WHERE user_id = %d\", userId));"
+      expected: TruePositive
+    - code: "PreparedStatement pstmt = conn.prepareStatement(\"SELECT * FROM users WHERE id = ?\");"
+      expected: TrueNegative
+    - code: "String msg = String.format(\"Hello %s\", name);"
+      expected: TrueNegative
+    - code: "stmt.executeQuery(\"SELECT count(*) FROM users\");"
+      expected: TrueNegative
+
+- id: "java-sqli-createstatement-usage"
+  name: "createStatement() Used for Dynamic Queries"
+  description: "Using createStatement() instead of prepareStatement() for queries with user input enables SQL injection. Always use PreparedStatement with parameterized queries."
+  severity: Medium
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"createStatement\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "Statement stmt = conn.createStatement();"
+      expected: TruePositive
+    - code: "Statement s = connection.createStatement();"
+      expected: TruePositive
+    - code: "var stmt = db.createStatement();"
+      expected: TruePositive
+    - code: "PreparedStatement pstmt = conn.prepareStatement(sql);"
+      expected: TrueNegative
+    - code: "conn.prepareCall(\"{call myProc(?)}\");"
+      expected: TrueNegative
+    - code: "conn.close();"
+      expected: TrueNegative
+
+- id: "java-sqli-string-concat-variable"
+  name: "SQL String Concatenation in Variable"
+  description: "Building SQL query strings via concatenation with variables is a strong indicator of SQL injection. Use parameterized queries instead."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(variable_declarator value: (binary_expression left: (string_literal) @sql (#match? @sql \"(?i)(SELECT .* FROM|INSERT INTO|UPDATE .* SET|DELETE FROM)\") right: (_) @right)) @decl"
+    captures:
+      - "decl"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "String query = \"SELECT * FROM users WHERE id = \" + userId;"
+      expected: TruePositive
+    - code: "String sql = \"DELETE FROM sessions WHERE token = '\" + token + \"'\";"
+      expected: TruePositive
+    - code: "String q = \"INSERT INTO audit (action) VALUES ('\" + action + \"')\";"
+      expected: TruePositive
+    - code: "String query = \"SELECT * FROM users WHERE id = ?\";"
+      expected: TrueNegative
+    - code: "String greeting = \"Hello \" + name;"
+      expected: TrueNegative
+    - code: "String path = \"/api/\" + endpoint;"
+      expected: TrueNegative
+
+# ============================================================================
+# Hibernate / JPA / JPQL Injection (3 rules)
+# ============================================================================
+
+- id: "java-sqli-hibernate-createquery-concat"
+  name: "Hibernate createQuery with String Concatenation"
+  description: "Concatenating user input into HQL/JPQL strings passed to createQuery allows injection. Use named parameters (:param) with setParameter() instead."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation name: (identifier) @method (#eq? @method \"createQuery\") arguments: (argument_list (binary_expression left: (string_literal) @sql (#match? @sql \"(?i)(FROM|WHERE|SELECT|DELETE|UPDATE)\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "session.createQuery(\"FROM User WHERE username = '\" + username + \"'\");"
+      expected: TruePositive
+    - code: "em.createQuery(\"SELECT u FROM User u WHERE u.email = '\" + email + \"'\");"
+      expected: TruePositive
+    - code: "session.createQuery(\"DELETE FROM Session WHERE token = '\" + token + \"'\");"
+      expected: TruePositive
+    - code: "session.createQuery(\"FROM User WHERE username = :username\").setParameter(\"username\", username);"
+      expected: TrueNegative
+    - code: "em.createQuery(\"SELECT u FROM User u\", User.class);"
+      expected: TrueNegative
+    - code: "session.createQuery(\"FROM User WHERE active = true\");"
+      expected: TrueNegative
+
+- id: "java-sqli-hibernate-createnativequery-concat"
+  name: "Hibernate createNativeQuery with String Concatenation"
+  description: "Concatenating user input into native SQL passed to createNativeQuery allows SQL injection. Use positional (?) or named (:param) parameters instead."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation name: (identifier) @method (#eq? @method \"createNativeQuery\") arguments: (argument_list (binary_expression left: (string_literal) @sql (#match? @sql \"(?i)(SELECT|INSERT|UPDATE|DELETE)\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "em.createNativeQuery(\"SELECT * FROM users WHERE id = \" + userId);"
+      expected: TruePositive
+    - code: "em.createNativeQuery(\"DELETE FROM tokens WHERE value = '\" + token + \"'\");"
+      expected: TruePositive
+    - code: "em.createNativeQuery(\"UPDATE users SET role = '\" + role + \"' WHERE id = \" + id);"
+      expected: TruePositive
+    - code: "em.createNativeQuery(\"SELECT * FROM users WHERE id = ?1\").setParameter(1, userId);"
+      expected: TrueNegative
+    - code: "em.createNativeQuery(\"SELECT * FROM users\", User.class);"
+      expected: TrueNegative
+    - code: "em.createNativeQuery(\"SELECT count(*) FROM users\");"
+      expected: TrueNegative
+
+- id: "java-sqli-criteria-literal"
+  name: "JPA CriteriaBuilder with Literal User Input"
+  description: "Using CriteriaBuilder.literal() with user input in JPA criteria queries can lead to injection. Use CriteriaBuilder.parameter() with typed parameters instead."
+  severity: Medium
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"literal\") arguments: (argument_list (identifier) @arg)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: "cb.literal(userInput);"
+      expected: TruePositive
+    - code: "cb.literal(searchTerm);"
+      expected: TruePositive
+    - code: "builder.literal(filterValue);"
+      expected: TruePositive
+    - code: "cb.parameter(String.class, \"name\");"
+      expected: TrueNegative
+    - code: "cb.literal(42);"
+      expected: TrueNegative
+    - code: "cb.equal(root.get(\"name\"), name);"
+      expected: TrueNegative
+
+# ============================================================================
+# Spring Data / JdbcTemplate Injection (3 rules)
+# ============================================================================
+
+- id: "java-sqli-jdbctemplate-concat"
+  name: "JdbcTemplate Query with String Concatenation"
+  description: "Concatenating user input into SQL strings passed to JdbcTemplate query methods allows SQL injection. Use parameterized queries with ? placeholders and Object[] args."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(method_invocation object: (identifier) @obj (#match? @obj \"(?i)(jdbcTemplate|jdbc|template|namedParameterJdbcTemplate)\") name: (identifier) @method (#match? @method \"^(query|queryForObject|queryForList|queryForMap|update|execute)$\") arguments: (argument_list (binary_expression left: (string_literal) @sql (#match? @sql \"(?i)(SELECT|INSERT|UPDATE|DELETE)\")))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/jdbc/core/JdbcTemplate.html"
+  test_cases:
+    - code: "jdbcTemplate.queryForObject(\"SELECT * FROM users WHERE id = \" + userId, User.class);"
+      expected: TruePositive
+    - code: "jdbcTemplate.update(\"DELETE FROM sessions WHERE token = '\" + token + \"'\");"
+      expected: TruePositive
+    - code: "template.query(\"SELECT * FROM orders WHERE customer = '\" + name + \"'\", rowMapper);"
+      expected: TruePositive
+    - code: "jdbcTemplate.queryForObject(\"SELECT * FROM users WHERE id = ?\", new Object[]{userId}, User.class);"
+      expected: TrueNegative
+    - code: "jdbcTemplate.update(\"DELETE FROM sessions WHERE token = ?\", token);"
+      expected: TrueNegative
+    - code: "jdbcTemplate.query(\"SELECT * FROM users\", rowMapper);"
+      expected: TrueNegative
+
+- id: "java-sqli-spring-query-annotation-concat"
+  name: "Spring @Query with String Concatenation via nativeQuery"
+  description: "Using SpEL expressions or concatenation in Spring Data @Query annotations with nativeQuery=true can lead to SQL injection. Use named parameters (:param) or indexed parameters (?1) instead."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(annotation name: (identifier) @ann (#eq? @ann \"Query\") arguments: (annotation_argument_list (element_value_pair key: (identifier) @key (#eq? @key \"value\") value: (binary_expression left: (string_literal) @sql (#match? @sql \"(?i)(SELECT|INSERT|UPDATE|DELETE)\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.spring.io/spring-data/jpa/docs/current/reference/html/#jpa.query-methods.at-query"
+  test_cases:
+    - code: "@Query(value = \"SELECT * FROM users WHERE name = '\" + name + \"'\", nativeQuery = true)"
+      expected: TruePositive
+    - code: "@Query(value = \"DELETE FROM tokens WHERE user_id = \" + userId, nativeQuery = true)"
+      expected: TruePositive
+    - code: "@Query(value = \"UPDATE users SET active = \" + status + \" WHERE id = \" + id, nativeQuery = true)"
+      expected: TruePositive
+    - code: "@Query(\"SELECT u FROM User u WHERE u.name = :name\")"
+      expected: TrueNegative
+    - code: "@Query(value = \"SELECT * FROM users WHERE id = ?1\", nativeQuery = true)"
+      expected: TrueNegative
+    - code: "@Query(\"SELECT u FROM User u WHERE u.active = true\")"
+      expected: TrueNegative
+
+- id: "java-sqli-mybatis-dollar-interpolation"
+  name: "MyBatis ${} String Interpolation in SQL"
+  description: "Using ${} in MyBatis SQL maps performs direct string interpolation, enabling SQL injection. Use #{} for parameterized binding instead."
+  severity: High
+  languages:
+    - Java
+  pattern:
+    query: "(string_literal) @sql (#match? @sql \"\\$\\{\")"
+    captures:
+      - "sql"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://mybatis.org/mybatis-3/sqlmap-xml.html"
+  test_cases:
+    - code: "\"SELECT * FROM users WHERE name = '${username}'\""
+      expected: TruePositive
+    - code: "\"DELETE FROM ${tableName} WHERE id = ${id}\""
+      expected: TruePositive
+    - code: "\"INSERT INTO logs (msg) VALUES ('${message}')\""
+      expected: TruePositive
+    - code: "\"SELECT * FROM users WHERE name = #{username}\""
+      expected: TrueNegative
+    - code: "\"SELECT * FROM users WHERE id = ?\""
+      expected: TrueNegative
+    - code: "\"SELECT count(*) FROM users\""
+      expected: TrueNegative

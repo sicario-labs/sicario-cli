@@ -1,0 +1,167 @@
+# Command Injection Rules for Python
+# Covers: os.system, os.popen, subprocess.call with shell=True, string-formatted subprocess args
+#
+# CWE-78: Improper Neutralization of Special Elements used in an OS Command
+# OWASP A03:2021 - Injection
+
+- id: "py-os-system"
+  name: "os.system() Usage"
+  description: "os.system() executes commands through the shell and is vulnerable to command injection. Use subprocess.run() with a list of arguments instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"os\") attribute: (identifier) @fn (#eq? @fn \"system\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.python.org/3/library/os.html#os.system"
+  test_cases:
+    - code: "os.system(\"rm -rf \" + user_input)"
+      expected: TruePositive
+    - code: "os.system(f\"ping {host}\")"
+      expected: TruePositive
+    - code: "os.system(command)"
+      expected: TruePositive
+    - code: "subprocess.run(['rm', '-rf', path])"
+      expected: TrueNegative
+    - code: "os.path.exists('/tmp')"
+      expected: TrueNegative
+    - code: "os.listdir('/tmp')"
+      expected: TrueNegative
+
+- id: "py-os-popen"
+  name: "os.popen() Usage"
+  description: "os.popen() executes commands through the shell and is vulnerable to command injection. Use subprocess.run() with a list of arguments instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"os\") attribute: (identifier) @fn (#eq? @fn \"popen\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.python.org/3/library/os.html#os.popen"
+  test_cases:
+    - code: "os.popen(\"ls \" + directory)"
+      expected: TruePositive
+    - code: "os.popen(f\"cat {filename}\")"
+      expected: TruePositive
+    - code: "os.popen(command)"
+      expected: TruePositive
+    - code: "subprocess.run(['ls', directory])"
+      expected: TrueNegative
+    - code: "os.path.join('/tmp', 'file')"
+      expected: TrueNegative
+    - code: "os.listdir('/tmp')"
+      expected: TrueNegative
+
+- id: "py-subprocess-shell-true"
+  name: "subprocess with shell=True"
+  description: "Using shell=True in subprocess calls enables shell injection. Pass arguments as a list without shell=True."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"subprocess\") attribute: (identifier) @fn (#match? @fn \"^(call|run|Popen|check_output|check_call)$\")) arguments: (argument_list (keyword_argument name: (identifier) @kw (#eq? @kw \"shell\") value: (true) @val))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.python.org/3/library/subprocess.html#security-considerations"
+  test_cases:
+    - code: "subprocess.call(\"ls \" + user_input, shell=True)"
+      expected: TruePositive
+    - code: "subprocess.run(f\"ping {host}\", shell=True)"
+      expected: TruePositive
+    - code: "subprocess.Popen(command, shell=True)"
+      expected: TruePositive
+    - code: "subprocess.run(['ls', directory])"
+      expected: TrueNegative
+    - code: "subprocess.call(['ping', host])"
+      expected: TrueNegative
+    - code: "subprocess.run(['echo', 'hello'], shell=False)"
+      expected: TrueNegative
+
+- id: "py-subprocess-fstring"
+  name: "subprocess with f-string Command"
+  description: "Using f-strings to build subprocess commands allows command injection. Pass arguments as a list instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"subprocess\") attribute: (identifier) @fn (#match? @fn \"^(call|run|Popen|check_output|check_call)$\")) arguments: (argument_list (string (interpolation) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.python.org/3/library/subprocess.html#security-considerations"
+  test_cases:
+    - code: "subprocess.run(f\"ping {host}\")"
+      expected: TruePositive
+    - code: "subprocess.call(f\"rm -rf {path}\")"
+      expected: TruePositive
+    - code: "subprocess.Popen(f\"cat {filename}\")"
+      expected: TruePositive
+    - code: "subprocess.run(['ping', host])"
+      expected: TrueNegative
+    - code: "subprocess.call(['rm', '-rf', path])"
+      expected: TrueNegative
+    - code: "msg = f\"running {command}\""
+      expected: TrueNegative
+
+- id: "py-subprocess-format"
+  name: "subprocess with .format() Command"
+  description: "Using .format() to build subprocess commands allows command injection. Pass arguments as a list instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"subprocess\") attribute: (identifier) @fn (#match? @fn \"^(call|run|Popen|check_output|check_call)$\")) arguments: (argument_list (call function: (attribute attribute: (identifier) @fmt (#eq? @fmt \"format\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.python.org/3/library/subprocess.html#security-considerations"
+  test_cases:
+    - code: "subprocess.run(\"ping {}\".format(host))"
+      expected: TruePositive
+    - code: "subprocess.call(\"rm -rf {}\".format(path))"
+      expected: TruePositive
+    - code: "subprocess.Popen(\"cat {}\".format(filename))"
+      expected: TruePositive
+    - code: "subprocess.run(['ping', host])"
+      expected: TrueNegative
+    - code: "subprocess.call(['rm', '-rf', path])"
+      expected: TrueNegative
+    - code: "msg = \"running {}\".format(command)"
+      expected: TrueNegative
+
+- id: "py-os-exec-functions"
+  name: "os.exec*() Family Usage"
+  description: "os.exec*() functions replace the current process with a new one and can be exploited for command injection. Use subprocess.run() with a list of arguments instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute object: (identifier) @mod (#eq? @mod \"os\") attribute: (identifier) @fn (#match? @fn \"^(execl|execle|execlp|execlpe|execv|execve|execvp|execvpe)$\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://docs.python.org/3/library/os.html#os.execl"
+  test_cases:
+    - code: "os.execvp('bash', ['bash', '-c', user_input])"
+      expected: TruePositive
+    - code: "os.execl('/bin/sh', 'sh', '-c', command)"
+      expected: TruePositive
+    - code: "os.execve('/usr/bin/env', ['env', cmd], os.environ)"
+      expected: TruePositive
+    - code: "subprocess.run(['bash', '-c', command])"
+      expected: TrueNegative
+    - code: "os.path.exists('/bin/bash')"
+      expected: TrueNegative
+    - code: "os.listdir('/tmp')"
+      expected: TrueNegative

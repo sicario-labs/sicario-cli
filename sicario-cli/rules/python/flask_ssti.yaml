@@ -1,0 +1,167 @@
+# Flask/Jinja2 Server-Side Template Injection (SSTI) Rules for Python
+# Covers: render_template_string with user input, Environment with unsafe settings
+#
+# CWE-1336: Improper Neutralization of Special Elements Used in a Template Engine
+# OWASP A03:2021 - Injection
+
+- id: "py-flask-render-template-string"
+  name: "Flask render_template_string() with Dynamic Input"
+  description: "Passing user-controlled input to render_template_string() allows server-side template injection. Use render_template() with a file-based template instead."
+  severity: Critical
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"render_template_string\") arguments: (argument_list (string (interpolation) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-1336"
+  owasp_category: A03_Injection
+  help_uri: "https://flask.palletsprojects.com/en/2.3.x/api/#flask.render_template_string"
+  test_cases:
+    - code: "render_template_string(f\"<h1>{user_input}</h1>\")"
+      expected: TruePositive
+    - code: "render_template_string(f\"Hello {name}, welcome!\")"
+      expected: TruePositive
+    - code: "render_template_string(f\"<div>{request.args.get('q')}</div>\")"
+      expected: TruePositive
+    - code: "render_template('index.html', name=user_input)"
+      expected: TrueNegative
+    - code: "render_template_string(\"<h1>Hello World</h1>\")"
+      expected: TrueNegative
+    - code: "render_template_string(\"{{ name }}\", name=user_input)"
+      expected: TrueNegative
+
+- id: "py-flask-render-template-string-format"
+  name: "Flask render_template_string() with .format()"
+  description: "Passing .format()-constructed strings to render_template_string() allows SSTI. Use render_template() with a file-based template instead."
+  severity: Critical
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"render_template_string\") arguments: (argument_list (call function: (attribute attribute: (identifier) @fmt (#eq? @fmt \"format\"))))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-1336"
+  owasp_category: A03_Injection
+  help_uri: "https://flask.palletsprojects.com/en/2.3.x/api/#flask.render_template_string"
+  test_cases:
+    - code: "render_template_string(\"<h1>{}</h1>\".format(user_input))"
+      expected: TruePositive
+    - code: "render_template_string(\"Hello {name}\".format(name=name))"
+      expected: TruePositive
+    - code: "render_template_string(\"<div>{}</div>\".format(request.args.get('q')))"
+      expected: TruePositive
+    - code: "render_template('index.html', name=user_input)"
+      expected: TrueNegative
+    - code: "render_template_string(\"<h1>Static</h1>\")"
+      expected: TrueNegative
+    - code: "msg = \"Hello {}\".format(name)"
+      expected: TrueNegative
+
+- id: "py-flask-render-template-string-percent"
+  name: "Flask render_template_string() with % Formatting"
+  description: "Passing %-formatted strings to render_template_string() allows SSTI. Use render_template() with a file-based template instead."
+  severity: Critical
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"render_template_string\") arguments: (argument_list (binary_expression left: (string) @tpl right: (_) @val operator: \"%\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-1336"
+  owasp_category: A03_Injection
+  help_uri: "https://flask.palletsprojects.com/en/2.3.x/api/#flask.render_template_string"
+  test_cases:
+    - code: "render_template_string(\"<h1>%s</h1>\" % user_input)"
+      expected: TruePositive
+    - code: "render_template_string(\"Hello %s\" % name)"
+      expected: TruePositive
+    - code: "render_template_string(\"<div>%s</div>\" % request.args.get('q'))"
+      expected: TruePositive
+    - code: "render_template('index.html', name=user_input)"
+      expected: TrueNegative
+    - code: "render_template_string(\"<h1>Static</h1>\")"
+      expected: TrueNegative
+    - code: "msg = \"template %s\" % name"
+      expected: TrueNegative
+
+- id: "py-flask-render-template-string-concat"
+  name: "Flask render_template_string() with String Concatenation"
+  description: "Concatenating user input into render_template_string() allows SSTI. Use render_template() with a file-based template instead."
+  severity: Critical
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"render_template_string\") arguments: (argument_list (binary_expression left: (string) @tpl right: (_) @val operator: \"+\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-1336"
+  owasp_category: A03_Injection
+  help_uri: "https://flask.palletsprojects.com/en/2.3.x/api/#flask.render_template_string"
+  test_cases:
+    - code: "render_template_string(\"<h1>\" + user_input + \"</h1>\")"
+      expected: TruePositive
+    - code: "render_template_string(\"Hello \" + name)"
+      expected: TruePositive
+    - code: "render_template_string(\"<div>\" + request.args.get('q') + \"</div>\")"
+      expected: TruePositive
+    - code: "render_template('index.html', name=user_input)"
+      expected: TrueNegative
+    - code: "render_template_string(\"<h1>Static</h1>\")"
+      expected: TrueNegative
+    - code: "msg = \"hello \" + name"
+      expected: TrueNegative
+
+- id: "py-jinja2-environment-unsafe"
+  name: "Jinja2 Environment with Unsafe Settings"
+  description: "Creating a Jinja2 Environment without autoescape or with autoescape=False can lead to XSS and SSTI. Enable autoescape."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"Environment\") arguments: (argument_list (keyword_argument name: (identifier) @kw (#eq? @kw \"autoescape\") value: (false) @val))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-1336"
+  owasp_category: A03_Injection
+  help_uri: "https://jinja.palletsprojects.com/en/3.1.x/api/#autoescaping"
+  test_cases:
+    - code: "env = Environment(autoescape=False)"
+      expected: TruePositive
+    - code: "Environment(loader=FileSystemLoader('.'), autoescape=False)"
+      expected: TruePositive
+    - code: "jinja_env = Environment(autoescape=False, loader=loader)"
+      expected: TruePositive
+    - code: "env = Environment(autoescape=True)"
+      expected: TrueNegative
+    - code: "env = Environment(autoescape=select_autoescape())"
+      expected: TrueNegative
+    - code: "env = Environment(loader=FileSystemLoader('.'))"
+      expected: TrueNegative
+
+- id: "py-jinja2-from-string"
+  name: "Jinja2 Template.from_string() with User Input"
+  description: "Using from_string() with user-controlled input allows SSTI. Use file-based templates instead."
+  severity: High
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (attribute attribute: (identifier) @method (#eq? @method \"from_string\")) arguments: (argument_list (string (interpolation) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-1336"
+  owasp_category: A03_Injection
+  help_uri: "https://jinja.palletsprojects.com/en/3.1.x/api/#jinja2.Environment.from_string"
+  test_cases:
+    - code: "env.from_string(f\"<h1>{user_input}</h1>\")"
+      expected: TruePositive
+    - code: "env.from_string(f\"Hello {name}\")"
+      expected: TruePositive
+    - code: "jinja_env.from_string(f\"{template_content}\")"
+      expected: TruePositive
+    - code: "env.from_string(\"<h1>{{ name }}</h1>\")"
+      expected: TrueNegative
+    - code: "env.get_template('index.html')"
+      expected: TrueNegative
+    - code: "env.from_string(\"Hello World\")"
+      expected: TrueNegative

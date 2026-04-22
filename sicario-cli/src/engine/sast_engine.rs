@@ -35,6 +35,11 @@ impl SastEngine {
         })
     }
 
+    /// Get a clone of the exclusion manager for use in parallel scanning.
+    pub fn exclusion_manager(&self) -> ExclusionManager {
+        self.tree_sitter.exclusion_manager.clone()
+    }
+
     /// Load security rules from YAML file
     pub fn load_rules(&mut self, yaml_path: &Path) -> Result<()> {
         // Read YAML file
@@ -340,7 +345,7 @@ impl SastEngine {
     }
 
     /// Recursively collect files to scan from a directory
-    fn collect_files_recursive(&self, dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
+    pub fn collect_files_recursive(&self, dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
         if !dir.is_dir() {
             return Ok(());
         }
@@ -374,7 +379,7 @@ impl SastEngine {
     }
 
     /// Scan a single file in parallel mode (static method for thread safety)
-    fn scan_file_parallel(
+    pub fn scan_file_parallel(
         path: &Path,
         rules: &[SecurityRule],
         exclusion_manager: &ExclusionManager,

@@ -86,17 +86,40 @@ fn run_scan(job: ScanJob, tx: &Sender<TuiMessage>) -> Result<()> {
     let mut engine = SastEngine::new(&job.directory)?;
 
     for rule_file in &job.rule_files {
-        engine.load_rules(rule_file)?;
+        if let Err(e) = engine.load_rules(rule_file) {
+            tracing::warn!("Could not load rule file {:?}: {}", rule_file, e);
+        }
     }
 
-    // scan_directory uses Rayon internally for parallel file processing
-    let vulnerabilities = engine.scan_directory(&job.directory)?;
+    // Phase 1: Collect all files to scan (fast — just walks the tree)
+    let mut files_to_scan = Vec::new();
+    engine.collect_files_recursive(&job.directory, &mut files_to_scan)?;
+    let total = files_to_scan.len();
 
-    let total = vulnerabilities.len();
+    // Send the real total so the TUI can show a meaningful progress bar
+    let _ = tx.send(TuiMessage::ScanProgress {
+        files_scanned: 0,
+        total,
+    });
 
-    // Stream each vulnerability to the TUI
-    for (idx, vuln) in vulnerabilities.into_iter().enumerate() {
-        let _ = tx.send(TuiMessage::VulnerabilityFound(vuln));
+    // Phase 2: Scan each file individually and stream progress
+    let rules = engine.get_rules().to_vec();
+    let exclusion_mgr = engine.exclusion_manager();
+
+    for (idx, file_path) in files_to_scan.iter().enumerate() {
+        // Scan this file
+        match SastEngine::scan_file_parallel(file_path, &rules, &exclusion_mgr) {
+            Ok(vulns) => {
+                for vuln in vulns {
+                    let _ = tx.send(TuiMessage::VulnerabilityFound(vuln));
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Error scanning {:?}: {}", file_path, e);
+            }
+        }
+
+        // Send progress after every file (or batch for very large scans)
         let _ = tx.send(TuiMessage::ScanProgress {
             files_scanned: idx + 1,
             total,

@@ -170,9 +170,7 @@ fn cmd_scan(args: cli::scan::ScanArgs) -> Result<ExitCode> {
     let mut eng = SastEngine::new(&dir)?;
     let mut rules_loaded = 0usize;
     for f in &rule_files {
-        if let Err(e) = eng.load_rules(f) {
-            eprintln!("warning: could not load {:?}: {e}", f);
-        } else {
+        if eng.load_rules(f).is_ok() {
             rules_loaded += 1;
         }
     }

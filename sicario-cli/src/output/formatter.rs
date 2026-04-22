@@ -150,8 +150,14 @@ pub fn render_findings_table(
     ]);
 
     for v in vulns {
-        let sev_str = colored_severity(&v.severity, config.color_enabled);
-        let confidence_str = "—".to_string(); // confidence scoring not yet wired
+        let sev_label = match v.severity {
+            Severity::Critical => "CRITICAL",
+            Severity::High => "HIGH",
+            Severity::Medium => "MEDIUM",
+            Severity::Low => "LOW",
+            Severity::Info => "INFO",
+        };
+        let confidence_str = "—".to_string();
         let snippet = truncate_snippet(
             &v.snippet,
             config.max_lines_per_finding,
@@ -160,7 +166,7 @@ pub fn render_findings_table(
         let file_str = v.file_path.display().to_string();
 
         table.add_row(vec![
-            Cell::new(&sev_str),
+            Cell::new(sev_label),
             Cell::new(&confidence_str),
             Cell::new(&v.rule_id),
             Cell::new(&file_str),
@@ -236,7 +242,13 @@ pub fn render_extended_findings_table(
     ]);
 
     for f in findings {
-        let sev_str = colored_severity(&f.severity, config.color_enabled);
+        let sev_label = match f.severity {
+            Severity::Critical => "CRITICAL",
+            Severity::High => "HIGH",
+            Severity::Medium => "MEDIUM",
+            Severity::Low => "LOW",
+            Severity::Info => "INFO",
+        };
         let confidence_str = ConfidenceScorer::format_score(f.confidence_score);
         let snippet = truncate_snippet(
             &f.snippet,
@@ -246,7 +258,7 @@ pub fn render_extended_findings_table(
         let file_str = f.file_path.display().to_string();
 
         table.add_row(vec![
-            Cell::new(&sev_str),
+            Cell::new(sev_label),
             Cell::new(&confidence_str),
             Cell::new(&f.rule_id),
             Cell::new(&file_str),

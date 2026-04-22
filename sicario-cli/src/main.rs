@@ -175,6 +175,12 @@ fn cmd_scan(args: cli::scan::ScanArgs) -> Result<ExitCode> {
         }
     }
 
+    // Count files to scan for the summary
+    let mut files_to_scan = Vec::new();
+    eng.collect_files_recursive(&dir, &mut files_to_scan)?;
+    let files_scanned = files_to_scan.len();
+    let total_rules = eng.get_rules().len();
+
     let vulns = eng.scan_directory(&dir)?;
     let scan_duration = scan_start.elapsed();
 
@@ -190,7 +196,7 @@ fn cmd_scan(args: cli::scan::ScanArgs) -> Result<ExitCode> {
             } else {
                 render_findings_table(&vulns, &formatter_config, &mut stdout)?;
             }
-            let summary = ScanSummary::from_vulns(&vulns, scan_duration, 0, rules_loaded);
+            let summary = ScanSummary::from_vulns(&vulns, scan_duration, files_scanned, total_rules);
             print_scan_summary(
                 &summary,
                 formatter_config.unicode_enabled,
@@ -229,7 +235,7 @@ fn cmd_scan(args: cli::scan::ScanArgs) -> Result<ExitCode> {
         for v in &vulns {
             render_finding_text(v, &formatter_config, &mut buf)?;
         }
-        let summary = ScanSummary::from_vulns(&vulns, scan_duration, 0, rules_loaded);
+        let summary = ScanSummary::from_vulns(&vulns, scan_duration, files_scanned, total_rules);
         print_scan_summary(
             &summary, false, // no unicode in file output
             false, // no color in file output

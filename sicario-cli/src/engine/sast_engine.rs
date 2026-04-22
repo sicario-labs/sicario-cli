@@ -50,9 +50,11 @@ impl SastEngine {
         let rules: Vec<SecurityRule> = serde_yaml::from_str(&yaml_content)
             .with_context(|| format!("Failed to parse YAML rules from: {:?}", yaml_path))?;
 
-        // Validate and compile each rule
+        // Validate and compile each rule — skip individual failures
         for rule in rules {
-            self.validate_and_compile_rule(rule)?;
+            if let Err(_e) = self.validate_and_compile_rule(rule) {
+                // Skip bad rules silently — don't fail the whole file
+            }
         }
 
         Ok(())

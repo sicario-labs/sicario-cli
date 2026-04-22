@@ -77,18 +77,17 @@ pub fn spawn_db_sync_worker(
 fn run_scan(job: ScanJob, tx: &Sender<TuiMessage>) -> Result<()> {
     use crate::engine::sast_engine::SastEngine;
 
-    // Signal that scanning has started
+    // Signal that scanning has started — show "loading rules" phase
+    // Use a sentinel total of 1 so the progress bar isn't empty
     let _ = tx.send(TuiMessage::ScanProgress {
         files_scanned: 0,
-        total: 0,
+        total: 1,
     });
 
     let mut engine = SastEngine::new(&job.directory)?;
 
     for rule_file in &job.rule_files {
-        if let Err(e) = engine.load_rules(rule_file) {
-            tracing::warn!("Could not load rule file {:?}: {}", rule_file, e);
-        }
+        let _ = engine.load_rules(rule_file);
     }
 
     // Phase 1: Collect all files to scan (fast — just walks the tree)
@@ -107,19 +106,15 @@ fn run_scan(job: ScanJob, tx: &Sender<TuiMessage>) -> Result<()> {
     let exclusion_mgr = engine.exclusion_manager();
 
     for (idx, file_path) in files_to_scan.iter().enumerate() {
-        // Scan this file
         match SastEngine::scan_file_parallel(file_path, &rules, &exclusion_mgr) {
             Ok(vulns) => {
                 for vuln in vulns {
                     let _ = tx.send(TuiMessage::VulnerabilityFound(vuln));
                 }
             }
-            Err(e) => {
-                tracing::warn!("Error scanning {:?}: {}", file_path, e);
-            }
+            Err(_) => {}
         }
 
-        // Send progress after every file (or batch for very large scans)
         let _ = tx.send(TuiMessage::ScanProgress {
             files_scanned: idx + 1,
             total,

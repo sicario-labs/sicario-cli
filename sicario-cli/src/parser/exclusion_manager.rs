@@ -42,20 +42,23 @@ impl ExclusionManager {
     fn build_default_excludes() -> Result<GlobSet> {
         let mut builder = GlobSetBuilder::new();
 
-        // Default exclusions
+        // Default exclusions — use **/ prefix so they match at any depth
+        // and with absolute paths on any OS
         let defaults = vec![
-            "node_modules/**",
-            "dist/**",
-            "build/**",
-            "target/**",
-            ".git/**",
-            "*.min.js",
-            "*.bundle.js",
-            "*.map",
-            "__pycache__/**",
-            "*.pyc",
-            ".venv/**",
-            "venv/**",
+            "**/node_modules/**",
+            "**/dist/**",
+            "**/build/**",
+            "**/target/**",
+            "**/.git/**",
+            "**/*.min.js",
+            "**/*.bundle.js",
+            "**/*.map",
+            "**/__pycache__/**",
+            "**/*.pyc",
+            "**/.venv/**",
+            "**/venv/**",
+            "**/.sicario/backups/**",
+            "**/.sicario/cache/**",
         ];
 
         for pattern in defaults {

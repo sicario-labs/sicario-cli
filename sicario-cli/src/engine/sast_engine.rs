@@ -358,6 +358,14 @@ impl SastEngine {
             let path = entry.path();
 
             if path.is_dir() {
+                // Fast skip: check directory name before expensive glob matching
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    match name {
+                        "node_modules" | ".git" | "target" | "dist" | "build"
+                        | "__pycache__" | ".venv" | "venv" | ".sicario" => continue,
+                        _ => {}
+                    }
+                }
                 // Check if directory should be excluded before recursing
                 if !self.tree_sitter.should_scan_file(&path) {
                     continue;

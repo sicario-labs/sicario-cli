@@ -394,6 +394,8 @@ impl SastEngine {
         rules: &[SecurityRule],
         exclusion_manager: &ExclusionManager,
     ) -> Result<Vec<Vulnerability>> {
+        use std::collections::HashSet;
+
         // Check if file should be scanned
         if exclusion_manager.is_excluded(path) {
             return Ok(Vec::new());
@@ -423,6 +425,8 @@ impl SastEngine {
             .ok_or_else(|| anyhow::anyhow!("Failed to parse file: {:?}", path))?;
 
         let mut vulnerabilities = Vec::new();
+        // Dedup key: (rule_id, line) — one finding per rule per line
+        let mut seen: HashSet<(String, usize)> = HashSet::new();
 
         // Apply all rules that target this language
         for rule in rules {
@@ -438,34 +442,54 @@ impl SastEngine {
             let mut cursor = QueryCursor::new();
             let matches = cursor.matches(&query, tree.root_node(), source_code.as_bytes());
 
-            // Process each match
+            // Process each match — take only the first (widest) capture per match
             for query_match in matches {
-                for capture in query_match.captures {
-                    let node = capture.node;
-                    let start_position = node.start_position();
+                // Find the widest capture in this match (the one spanning the most text)
+                let best_capture = query_match
+                    .captures
+                    .iter()
+                    .max_by_key(|c| {
+                        let n = c.node;
+                        n.end_byte().saturating_sub(n.start_byte())
+                    });
 
-                    // Extract code snippet
-                    let snippet = node
-                        .utf8_text(source_code.as_bytes())
-                        .unwrap_or("<unable to extract snippet>")
-                        .to_string();
+                let capture = match best_capture {
+                    Some(c) => c,
+                    None => continue,
+                };
 
-                    // Create vulnerability with metadata
-                    let mut vulnerability = Vulnerability::new(
-                        rule.id.clone(),
-                        path.to_path_buf(),
-                        start_position.row + 1,    // Convert to 1-indexed
-                        start_position.column + 1, // Convert to 1-indexed
-                        snippet,
-                        rule.severity,
-                    );
+                let node = capture.node;
+                let start_position = node.start_position();
+                let line = start_position.row + 1;
 
-                    // Add CWE ID and OWASP category from rule
-                    vulnerability.cwe_id = rule.cwe_id.clone();
-                    vulnerability.owasp_category = rule.owasp_category;
-
-                    vulnerabilities.push(vulnerability);
+                // Deduplicate: one finding per rule per line
+                let dedup_key = (rule.id.clone(), line);
+                if seen.contains(&dedup_key) {
+                    continue;
                 }
+                seen.insert(dedup_key);
+
+                // Extract code snippet
+                let snippet = node
+                    .utf8_text(source_code.as_bytes())
+                    .unwrap_or("<unable to extract snippet>")
+                    .to_string();
+
+                // Create vulnerability with metadata
+                let mut vulnerability = Vulnerability::new(
+                    rule.id.clone(),
+                    path.to_path_buf(),
+                    line,
+                    start_position.column + 1,
+                    snippet,
+                    rule.severity,
+                );
+
+                // Add CWE ID and OWASP category from rule
+                vulnerability.cwe_id = rule.cwe_id.clone();
+                vulnerability.owasp_category = rule.owasp_category;
+
+                vulnerabilities.push(vulnerability);
             }
         }
 

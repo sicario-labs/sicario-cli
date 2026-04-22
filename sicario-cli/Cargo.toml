@@ -96,6 +96,9 @@ comfy-table.workspace = true
 # System info (benchmarking)
 sysinfo.workspace = true
 
+# Diagnostic output
+miette.workspace = true
+
 # Temp files (rule test harness)
 tempfile.workspace = true
 

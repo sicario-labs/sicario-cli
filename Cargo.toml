@@ -114,3 +114,6 @@ lsp-types = "0.95"
 
 # System info (benchmarking)
 sysinfo = "0.30"
+
+# Diagnostic output
+miette = { version = "7", features = ["fancy"] }

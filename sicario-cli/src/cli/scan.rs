@@ -145,3 +145,37 @@ pub struct ScanArgs {
     #[arg(long)]
     pub publish: bool,
 }
+
+impl Default for ScanArgs {
+    fn default() -> Self {
+        Self {
+            dir: ".".to_string(),
+            rules: Vec::new(),
+            format: OutputFormat::Text,
+            severity_threshold: SeverityLevel::Low,
+            diff: None,
+            confidence_threshold: 0.0,
+            quiet: false,
+            verbose: false,
+            exclude: Vec::new(),
+            include: Vec::new(),
+            jobs: None,
+            timeout: None,
+            max_lines_per_finding: 5,
+            max_chars_per_line: 160,
+            staged: false,
+            dataflow_traces: false,
+            no_color: false,
+            force_color: false,
+            exclude_rule: Vec::new(),
+            json_output: None,
+            sarif_output: None,
+            text_output: None,
+            time: false,
+            no_cache: false,
+            no_cache_write: false,
+            auto_suppress: false,
+            publish: false,
+        }
+    }
+}

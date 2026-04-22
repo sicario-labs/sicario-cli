@@ -60,10 +60,9 @@ fn main() {
 fn run(cli: SicarioCli) -> Result<ExitCode> {
     match cli.command {
         None => {
-            // Default: launch TUI for backward compatibility
-            let scan_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-            run_interactive_tui(scan_dir)?;
-            Ok(ExitCode::Clean)
+            // Default: scan current directory (headless CLI-first approach)
+            let args = cli::scan::ScanArgs::default();
+            cmd_scan(args)
         }
         Some(cmd) => dispatch(cmd),
     }
@@ -194,7 +193,7 @@ fn cmd_scan(args: cli::scan::ScanArgs) -> Result<ExitCode> {
             if args.quiet {
                 // Quiet mode: just the summary line
             } else {
-                render_findings_table(&vulns, &formatter_config, &mut stdout)?;
+                output::diagnostics::render_diagnostics(&vulns, formatter_config.color_enabled, &mut stdout)?;
             }
             let summary = ScanSummary::from_vulns(&vulns, scan_duration, files_scanned, total_rules);
             print_scan_summary(

@@ -28,7 +28,7 @@
 
 ---
 
-Sicario replaces legacy Python and Node.js security scanners with a single, statically linked Rust binary. Deep static analysis with 500+ rules across 5 languages, secret detection, SCA vulnerability matching, AI-powered remediation, and a cloud dashboard — all from your terminal.
+Sicario replaces legacy Python and Node.js security scanners with a single, statically linked Rust binary. Deep static analysis with 500+ rules across 5 languages, secret detection, SCA vulnerability matching via OSV.dev, cloud exposure analysis, AI-powered remediation, and a cloud dashboard — all from your terminal.
 
 ```
    _____ _                _
@@ -95,11 +95,13 @@ Sicario replaces legacy Python and Node.js security scanners with a single, stat
 | Secret scanning | ✅ | ❌ | ❌ | ❌ |
 | SCA / dependency audit | ✅ | ✅ | ❌ | ❌ |
 | Data-flow reachability | ✅ | ✅ | ❌ | ❌ |
+| Cloud exposure analysis | ✅ | ❌ | ❌ | ❌ |
 | AI auto-remediation | ✅ | ❌ | ❌ | ❌ |
 | Interactive TUI | ✅ | ❌ | ❌ | ❌ |
 | MCP server (AI assistants) | ✅ | ❌ | ❌ | ❌ |
 | Single static binary | ✅ | ❌ | ❌ | ❌ |
 | SARIF + OWASP reports | ✅ | ✅ | ❌ | ❌ |
+| Cloud dashboard + orgs | ✅ | ✅ | ❌ | ❌ |
 | Compiler-style diagnostics | ✅ | ❌ | ❌ | ❌ |
 | Zero runtime dependencies | ✅ | ❌ | ❌ | ❌ |
 
@@ -116,8 +118,9 @@ Sicario replaces legacy Python and Node.js security scanners with a single, stat
 - Compiler-style diagnostic output (like rustc/cargo) with source context and span underlines
 - Accurate finding deduplication — one finding per rule per line, no inflated counts
 - Secret scanning with entropy + provider verifiers
-- SCA via OSV and GHSA advisory databases
+- SCA via OSV.dev real-time vulnerability database with local SQLite cache
 - Data-flow reachability analysis
+- Cloud exposure analysis — auto-detects K8s manifests and adjusts finding severity
 - Per-finding confidence scoring
 - Incremental cached scanning
 
@@ -143,7 +146,7 @@ Sicario replaces legacy Python and Node.js security scanners with a single, stat
 - SARIF output for GitHub Code Scanning
 - OWASP Top 10 compliance (JSON + Markdown)
 - Compiler-style diagnostics with severity, CWE headers, and help hints
-- JSON export for pipelines
+- JSON export with accurate `files_scanned` and `language_breakdown` metadata
 - Multi-format simultaneous output
 
 </td>
@@ -156,10 +159,10 @@ Sicario replaces legacy Python and Node.js security scanners with a single, stat
 - Git pre-commit hook integration
 - Performance benchmarking suite
 - Rule quality test harness
-- OAuth 2.0 + PKCE authentication
+- OAuth 2.0 + PKCE device flow authentication
 - Shell completions (bash/zsh/fish/pwsh)
 - Homebrew + curl installer
-- Sicario Cloud dashboard with team collaboration
+- Sicario Cloud dashboard with multi-org support and team collaboration
 
 </td>
 </tr>
@@ -216,11 +219,11 @@ sicario scan . --staged
 # Filter by severity and confidence
 sicario scan . --severity-threshold high --confidence-threshold 0.8
 
+# Disable cloud exposure analysis (K8s auto-detection)
+sicario scan . --no-cloud
+
 # Generate OWASP compliance report
 sicario report .
-
-# Interactive TUI
-sicario tui
 
 # AI-powered fix
 sicario fix path/to/file.js --rule SQL-001
@@ -247,12 +250,45 @@ sicario config show
 
 # Cloud integration
 sicario login
-sicario publish
 sicario whoami
+sicario publish
+sicario publish --org <ORG_ID>
+sicario scan . --publish
+sicario scan . --publish --org <ORG_ID>
 
 # Shell completions
 sicario completions bash >> ~/.bashrc
 ```
+
+---
+
+## Cloud platform
+
+Sicario Cloud provides a centralized dashboard for teams to manage findings, track trends, and collaborate on remediation. The backend runs on [Convex](https://convex.dev) with a React frontend deployed on Netlify.
+
+### Cloud features
+
+- **Device flow login** — `sicario login` opens a browser for OAuth approval, no copy-pasting tokens
+- **Scan publishing** — `sicario scan . --publish` or `sicario publish` uploads results to the cloud
+- **Multi-org support** — create and switch between organizations from the dashboard
+- **Auto-provisioning** — first login auto-creates a personal org with admin role
+- **Org-scoped projects** — projects and scans are scoped to organizations; the server auto-creates projects from CLI scans based on repository URL
+- **RBAC** — role-based access control (admin, manager, developer) per organization
+- **Team management** — invite members, manage roles, configure SSO
+- **Webhooks** — trigger notifications on scan events
+
+### CLI → Cloud flow
+
+```
+sicario login          → OAuth device flow → browser approval → token stored locally
+sicario scan . --publish → scan runs locally → results POST to /api/v1/scans
+                          → server resolves org from membership
+                          → auto-creates project if repo is new
+                          → findings stored with orgId + projectId
+sicario whoami         → GET /api/v1/whoami → shows user profile
+```
+
+Use `--org <ORG_ID>` with `publish` or `scan --publish` to target a specific organization when you belong to multiple.
 
 ---
 
@@ -280,6 +316,20 @@ sicario completions bash >> ~/.bashrc
 │  │  CLI (Clap) · TUI (Ratatui) · LSP · Git Hooks · Cache      │    │
 │  └──────────────────────────────────────────────────────────────┘    │
 └──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│                        SICARIO CLOUD                                 │
+│                                                                      │
+│  ┌──────────────────────┐  ┌─────────────────────────────────────┐  │
+│  │  Convex Backend       │  │  React Frontend (Netlify)           │  │
+│  │  HTTP actions:        │  │  Dashboard with:                    │  │
+│  │  · POST /api/v1/scans │  │  · Org switcher + multi-org        │  │
+│  │  · GET /api/v1/whoami │  │  · Projects (org-scoped)           │  │
+│  │  · OAuth device flow  │  │  · Scans + findings explorer       │  │
+│  │  · Mutations/queries  │  │  · OWASP compliance view           │  │
+│  │  · RBAC + memberships │  │  · Settings (members, SSO, hooks)  │  │
+│  └──────────────────────┘  └─────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 <details>
@@ -289,13 +339,14 @@ sicario completions bash >> ~/.bashrc
 |---|---|
 | `parser/` | Tree-sitter multi-language AST parsing with file exclusion |
 | `engine/` | SAST rule matching, data-flow reachability, SCA advisory lookup |
+| `engine/sca/` | SCA sub-engine (OSV.dev importer, manifest parsing, SQLite vuln cache) |
 | `scanner/` | Secret detection (patterns, entropy, provider verifiers) |
 | `output/` | Branded text tables, JSON, SARIF formatters |
 | `output/diagnostics.rs` | Compiler-style diagnostic renderer |
 | `remediation/` | AI-powered code fixes via Cerebras, backup manager |
 | `tui/` | Interactive terminal UI with async message passing |
 | `auth/` | OAuth 2.0 device flow with PKCE, secure token storage |
-| `cloud/` | Cloud priority scoring, internet exposure analysis |
+| `cloud/` | Cloud priority scoring, K8s/CSPM exposure analysis |
 | `mcp/` | Model Context Protocol server for AI assistants |
 | `cli/` | Clap-based command definitions, exit codes, shell completions |
 | `reporting/` | OWASP Top 10 compliance report generation |
@@ -304,16 +355,14 @@ sicario completions bash >> ~/.bashrc
 | `diff/` | Git-aware diff scanning |
 | `onboarding/` | Project detection and guided setup |
 | `convex/` | Telemetry and cloud ruleset sync |
+| `publish/` | Scan result publishing to Sicario Cloud |
 | `cache/` | Scan result caching for incremental runs |
 | `hook/` | Git hook integration |
 | `lsp/` | Language Server Protocol support |
 | `benchmark/` | Performance benchmarking |
 | `rule_harness/` | Rule testing framework |
 | `key_manager/` | API key management |
-| `publish/` | Rule publishing |
 | `suppression_learner/` | ML-based suppression suggestions |
-| `verification/` | Finding verification |
-| `engine/sca/` | SCA sub-engine (OSV, GHSA, manifest parsing, vuln DB) |
 
 </details>
 
@@ -393,14 +442,15 @@ pattern: |
 - [x] Multi-language SAST engine (Go, Java, JS/TS, Python, Rust)
 - [x] 500+ security rules across 5 languages
 - [x] Secret scanning with entropy detection
-- [x] SCA module with OSV/GHSA advisories
+- [x] SCA module with real OSV.dev vulnerability data
 - [x] Data-flow reachability analysis
+- [x] Cloud exposure analysis (K8s manifest auto-detection)
 - [x] Multi-provider AI remediation (any OpenAI-compatible LLM)
 - [x] Template-based fallback fixes (SQLi, XSS, CmdInj)
 - [x] Interactive TUI dashboard
 - [x] SARIF + OWASP reporting
 - [x] MCP server for AI assistants
-- [x] OAuth 2.0 + PKCE authentication
+- [x] OAuth 2.0 + PKCE device flow authentication
 - [x] Cross-platform CI/CD pipeline
 - [x] LSP server for IDE integration
 - [x] VS Code extension
@@ -413,8 +463,11 @@ pattern: |
 - [x] Baseline tracking with delta comparison
 - [x] Incremental cached scanning
 - [x] BYOK key management (OS keyring)
-- [x] Sicario Cloud platform (Convex backend + Next.js dashboard)
-- [x] Cloud publish command
+- [x] Sicario Cloud platform (Convex backend + React dashboard)
+- [x] Cloud publish with accurate scan metadata
+- [x] Multi-org support with org switcher
+- [x] Org-scoped projects with auto-creation from CLI scans
+- [x] Auto-provisioning on first login
 - [x] GitHub Action for CI integration
 - [ ] GitHub App for PR comments
 - [ ] Slack/Teams webhook notifications
@@ -427,6 +480,7 @@ pattern: |
 
 - Rust 1.75+ (stable)
 - On Linux: `libsecret-1-dev`, `pkg-config`
+- For the frontend: Node.js 18+
 
 ### Build & test
 
@@ -447,11 +501,9 @@ cargo test -p sicario-cli    # crate tests only
 │   ├── src/                  # 26 modules, ~50k lines
 │   ├── rules/                # 500+ YAML security rules
 │   └── test-samples/         # vulnerable code samples
-├── sicario-cloud/
-│   ├── Cargo.toml            # Axum REST API server
-│   ├── openapi.yaml          # API specification
-│   └── src/                  # auth, routes, models, webhooks
-├── convex/                   # Convex backend (database + functions)
+├── convex/                   # Convex backend (schema, mutations, queries, HTTP actions)
+│   └── convex/               # Convex functions (schema.ts, http.ts, scans.ts, etc.)
+├── sicario-frontend/         # React dashboard (separate repo, deployed on Netlify)
 ├── editors/vscode/           # VS Code extension
 ├── Formula/                  # Homebrew formula
 ├── .github/workflows/        # CI + release pipelines

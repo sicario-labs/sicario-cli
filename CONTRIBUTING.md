@@ -49,6 +49,19 @@ Security rules live in `sicario-cli/rules/<language>/` as YAML files. Drop a fil
 
 > **Tip:** Running `sicario` with no arguments scans the current directory, so you can also just run `sicario` from the repo root to test your rule against the included samples.
 
+## Working on the Convex backend
+
+The cloud backend lives in `convex/convex/` and is deployed to Convex. The frontend (`sicario-frontend/`) consumes these functions.
+
+1. Install Node.js 18+ and run `npm install` in the `convex/` directory
+2. Copy `.env.local.example` to `.env.local` and set your `CONVEX_DEPLOYMENT`
+3. Run `npx convex dev` to start the dev server with hot reload
+4. Schema changes go in `convex/convex/schema.ts`
+5. After modifying backend functions, sync to the frontend: copy updated files from `convex/convex/` to `sicario-frontend/convex/`
+6. Run `npm run build` in `sicario-frontend/` to verify the frontend compiles
+
+> **Important:** The `convex/convex/` directory is the source of truth. Always edit there first, then sync to `sicario-frontend/convex/`.
+
 ## Commit messages
 
 Use [Conventional Commits](https://www.conventionalcommits.org/):

@@ -133,3 +133,4 @@ pr-run-mode = "plan"
 # Use .tar.gz for all platforms (required for npm installer)
 windows-archive = ".tar.gz"
 unix-archive = ".tar.gz"
+npm-scope = "@sicario-labs"

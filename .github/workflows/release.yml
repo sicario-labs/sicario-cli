@@ -235,6 +235,37 @@ jobs:
           name: artifacts-dist-manifest
           path: dist-manifest.json
 
+  # Publish the scoped npm package to the registry
+  publish-npm:
+    needs:
+      - plan
+      - build-global-artifacts
+    if: ${{ always() && needs.plan.outputs.publishing == 'true' && needs.build-global-artifacts.result == 'success' }}
+    runs-on: "ubuntu-20.04"
+    steps:
+      - name: Fetch global artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: artifacts-build-global
+          path: npm-pkg/
+          merge-multiple: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Publish to npm
+        shell: bash
+        run: |
+          # Find the npm package tarball produced by cargo-dist
+          NPM_TGZ=$(find npm-pkg -name '*.tgz' -print -quit)
+          if [ -n "$NPM_TGZ" ]; then
+            npm publish "$NPM_TGZ" --access public
+          else
+            echo "No npm tarball found — skipping npm publish"
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
   # Create a GitHub Release while uploading all files to it
   announce:
     needs:

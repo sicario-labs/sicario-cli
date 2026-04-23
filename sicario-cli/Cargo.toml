@@ -1,6 +1,7 @@
 [package]
 name = "sicario-cli"
 description = "Agentic, Rust-native security CLI with AI auto-remediation"
+homepage = "https://usesicario.xyz"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

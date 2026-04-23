@@ -1,287 +1,271 @@
+# Copyright 2022-2024, axodotdev
+# SPDX-License-Identifier: MIT or Apache-2.0
+#
+# CI that:
+#
+# * checks for a Git Tag that looks like a release
+# * builds artifacts with cargo-dist (archives, installers, hashes)
+# * uploads those artifacts to temporary workflow zip
+# * on success, uploads the artifacts to a GitHub Release
+#
+# Note that the GitHub Release will be created with a generated
+# title/body based on your changelogs.
+
 name: Release
 
+permissions:
+  contents: write
+
+# This task will run whenever you push a git tag that looks like a version
+# like "1.0.0", "v0.1.0-prerelease.1", "my-app/0.1.0", "releases/v1.0.0", etc.
+# Various formats will be parsed into a VERSION and an optional PACKAGE_NAME, where
+# PACKAGE_NAME must be the name of a Cargo package in your workspace, and VERSION
+# must be a Cargo-style SemVer Version (must have at least major.minor.patch).
+#
+# If PACKAGE_NAME is specified, then the announcement will be for that
+# package (erroring out if it doesn't have the given version or isn't cargo-dist-able).
+#
+# If PACKAGE_NAME isn't specified, then the announcement will be for all
+# (cargo-dist-able) packages in the workspace with that version (this mode is
+# intended for workspaces with only one dist-able package, or with all dist-able
+# packages versioned/released in lockstep).
+#
+# If you push multiple tags at once, separate instances of this workflow will
+# spin up, creating an independent announcement for each one. However, GitHub
+# will hard limit this to 3 tags per commit, as it will assume more tags is a
+# mistake.
+#
+# If there's a prerelease-style suffix to the version, then the release(s)
+# will be marked as a prerelease.
 on:
   push:
     tags:
-      - "v*.*.*"
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Release tag (e.g. v0.1.0)"
-        required: false
-
-env:
-  CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
+      - '**[0-9]+.[0-9]+.[0-9]+*'
+  pull_request:
 
 jobs:
-  # ─────────────────────────────────────────────────────────────────────────────
-  # CI: run tests on every push / PR (non-tag runs)
-  # ─────────────────────────────────────────────────────────────────────────────
-  test:
-    name: Test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-
+  # Run 'cargo dist plan' (or host) to determine what tasks we need to do
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      val: ${{ steps.plan.outputs.manifest }}
+      tag: ${{ !github.event.pull_request && github.ref_name || '' }}
+      tag-flag: ${{ !github.event.pull_request && format('--tag={0}', github.ref_name) || '' }}
+      publishing: ${{ !github.event.pull_request }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo registry + build
-        uses: actions/cache@v4
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-test-
-
-      # libsecret is required by the `keyring` crate on Linux
-      - name: Install Linux system dependencies
-        if: runner.os == 'Linux'
+          submodules: recursive
+      - name: Install cargo-dist
+        # we specify bash to get pipefail; it guards against the `curl` command
+        # failing. otherwise `sh` won't catch that `curl` returned non-0
+        shell: bash
+        run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.14.1/cargo-dist-installer.sh | sh"
+      # sure would be cool if github gave us proper conditionals...
+      # so here's a doubly-nested ternary-via-truthiness to try to provide the best possible
+      # functionality based on whether this is a pull_request, and whether it's from a fork.
+      # (PRs run on the *source* but secrets are usually on the *target* -- that's *good*
+      # but also really annoying to build CI around when it needs secrets to work right.)
+      - id: plan
         run: |
-          sudo apt-get update -y
-          sudo apt-get install -y libsecret-1-dev pkg-config
-
-      - name: Run tests
-        run: cargo test --workspace --locked
-
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Build: cross-compile statically linked release binaries
-  # ─────────────────────────────────────────────────────────────────────────────
-  build:
-    name: Build ${{ matrix.target }}
-    runs-on: ${{ matrix.os }}
-    needs: test
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # ── Linux x86-64 (fully static via musl) ──────────────────────────
-          - target: x86_64-unknown-linux-musl
-            os: ubuntu-latest
-            artifact_name: sicario
-            asset_name: sicario-linux-x86_64
-            use_cross: true
-
-          # ── macOS x86-64 ──────────────────────────────────────────────────
-          - target: x86_64-apple-darwin
-            os: macos-latest
-            artifact_name: sicario
-            asset_name: sicario-macos-x86_64
-            use_cross: false
-
-          # ── macOS ARM64 (Apple Silicon) ────────────────────────────────────
-          - target: aarch64-apple-darwin
-            os: macos-latest
-            artifact_name: sicario
-            asset_name: sicario-macos-aarch64
-            use_cross: false
-
-          # ── Windows x86-64 (MSVC, static CRT) ────────────────────────────
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            artifact_name: sicario.exe
-            asset_name: sicario-windows-x86_64.exe
-            use_cross: false
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust stable + target
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      - name: Cache Cargo registry + build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-${{ matrix.target }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-${{ matrix.target }}-cargo-release-
-
-      # ── Linux: install cross for musl builds ──────────────────────────────
-      - name: Install cross
-        if: matrix.use_cross == true
-        run: cargo install cross --git https://github.com/cross-rs/cross
-
-      # ── macOS: no extra deps needed (Xcode CLT ships with the linker) ──────
-
-      # ── Windows: nothing extra needed (MSVC is pre-installed on the runner) ─
-
-      # ── Build ──────────────────────────────────────────────────────────────
-      - name: Build release binary (cross)
-        if: matrix.use_cross == true
-        run: |
-          cross build --release --locked --target ${{ matrix.target }} -p sicario-cli
-
-      - name: Build release binary (cargo)
-        if: matrix.use_cross == false
-        run: |
-          cargo build --release --locked --target ${{ matrix.target }} -p sicario-cli
-
-      # ── Verify binary size < 50 MB ─────────────────────────────────────────
-      - name: Check binary size (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          BINARY="target/${{ matrix.target }}/release/${{ matrix.artifact_name }}"
-          SIZE=$(stat -c%s "$BINARY" 2>/dev/null || stat -f%z "$BINARY")
-          echo "Binary size: $SIZE bytes"
-          MAX=$((50 * 1024 * 1024))
-          if [ "$SIZE" -gt "$MAX" ]; then
-            echo "ERROR: binary exceeds 50 MB limit ($SIZE > $MAX)"
-            exit 1
-          fi
-
-      - name: Check binary size (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $binary = "target\${{ matrix.target }}\release\${{ matrix.artifact_name }}"
-          $size = (Get-Item $binary).Length
-          Write-Host "Binary size: $size bytes"
-          $max = 50 * 1024 * 1024
-          if ($size -gt $max) {
-            Write-Error "Binary exceeds 50 MB limit ($size > $max)"
-            exit 1
-          }
-
-      # ── Stage artifact ─────────────────────────────────────────────────────
-      - name: Stage artifact (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          mkdir -p dist
-          cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} \
-             dist/${{ matrix.asset_name }}
-
-      - name: Stage artifact (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item "target\${{ matrix.target }}\release\${{ matrix.artifact_name }}" `
-                    "dist\${{ matrix.asset_name }}"
-
-      - name: Upload artifact
+          cargo dist ${{ (!github.event.pull_request && format('host --steps=create --tag={0}', github.ref_name)) || 'plan' }} --output-format=json > plan-dist-manifest.json
+          echo "cargo dist ran successfully"
+          cat plan-dist-manifest.json
+          echo "manifest=$(jq -c "." plan-dist-manifest.json)" >> "$GITHUB_OUTPUT"
+      - name: "Upload dist-manifest.json"
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.asset_name }}
-          path: dist/${{ matrix.asset_name }}
-          if-no-files-found: error
+          name: artifacts-plan-dist-manifest
+          path: plan-dist-manifest.json
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Release: create GitHub Release and attach binaries
-  # ─────────────────────────────────────────────────────────────────────────────
-  release:
-    name: Publish GitHub Release
-    runs-on: ubuntu-latest
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/')
-    permissions:
-      contents: write
-
+  # Build and packages all the platform-specific things
+  build-local-artifacts:
+    name: build-local-artifacts (${{ join(matrix.targets, ', ') }})
+    # Let the initial task tell us to not run (currently very blunt)
+    needs:
+      - plan
+    if: ${{ fromJson(needs.plan.outputs.val).ci.github.artifacts_matrix.include != null && (needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload') }}
+    strategy:
+      fail-fast: false
+      # Target platforms/runners are computed by cargo-dist in create-release.
+      # Each member of the matrix has the following arguments:
+      #
+      # - runner: the github runner
+      # - dist-args: cli flags to pass to cargo dist
+      # - install-dist: expression to run to install cargo-dist on the runner
+      #
+      # Typically there will be:
+      # - 1 "global" task that builds universal installers
+      # - N "local" tasks that build each platform's binaries and platform-specific installers
+      matrix: ${{ fromJson(needs.plan.outputs.val).ci.github.artifacts_matrix }}
+    runs-on: ${{ matrix.runner }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      BUILD_MANIFEST_NAME: target/distrib/${{ join(matrix.targets, '-') }}-dist-manifest.json
     steps:
+      - name: enable windows longpaths
+        run: |
+          git config --global core.longpaths true
       - uses: actions/checkout@v4
-
-      - name: Download all artifacts
+        with:
+          submodules: recursive
+      - uses: swatinem/rust-cache@v2
+        with:
+          key: ${{ join(matrix.targets, '-') }}
+      - name: Install cargo-dist
+        run: ${{ matrix.install_dist }}
+      # Get the dist-manifest
+      - name: Fetch local artifacts
         uses: actions/download-artifact@v4
         with:
-          path: dist
+          pattern: artifacts-*
+          path: target/distrib/
+          merge-multiple: true
+      - name: Install dependencies
+        run: |
+          ${{ matrix.packages_install }}
+      - name: Build artifacts
+        run: |
+          # Actually do builds and make zips and whatnot
+          cargo dist build ${{ needs.plan.outputs.tag-flag }} --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
+          echo "cargo dist ran successfully"
+      - id: cargo-dist
+        name: Post-build
+        # We force bash here just because github makes it really hard to get values up
+        # to "real" actions without writing to env-vars, and writing to env-vars has
+        # inconsistent syntax between shell and powershell.
+        shell: bash
+        run: |
+          # Parse out what we just built and upload it to scratch storage
+          echo "paths<<EOF" >> "$GITHUB_OUTPUT"
+          jq --raw-output ".upload_files[]" dist-manifest.json >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
-      - name: List artifacts
-        run: find dist -type f | sort
+          cp dist-manifest.json "$BUILD_MANIFEST_NAME"
+      - name: "Upload artifacts"
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-build-local-${{ join(matrix.targets, '_') }}
+          path: |
+            ${{ steps.cargo-dist.outputs.paths }}
+            ${{ env.BUILD_MANIFEST_NAME }}
 
+  # Build and package all the platform-agnostic(ish) things
+  build-global-artifacts:
+    needs:
+      - plan
+      - build-local-artifacts
+    runs-on: "ubuntu-20.04"
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      BUILD_MANIFEST_NAME: target/distrib/global-dist-manifest.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install cargo-dist
+        shell: bash
+        run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.14.1/cargo-dist-installer.sh | sh"
+      # Get all the local artifacts for the global tasks to use (for e.g. checksums)
+      - name: Fetch local artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: artifacts-*
+          path: target/distrib/
+          merge-multiple: true
+      - id: cargo-dist
+        shell: bash
+        run: |
+          cargo dist build ${{ needs.plan.outputs.tag-flag }} --output-format=json "--artifacts=global" > dist-manifest.json
+          echo "cargo dist ran successfully"
+
+          # Parse out what we just built and upload it to scratch storage
+          echo "paths<<EOF" >> "$GITHUB_OUTPUT"
+          jq --raw-output ".upload_files[]" dist-manifest.json >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+          cp dist-manifest.json "$BUILD_MANIFEST_NAME"
+      - name: "Upload artifacts"
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-build-global
+          path: |
+            ${{ steps.cargo-dist.outputs.paths }}
+            ${{ env.BUILD_MANIFEST_NAME }}
+  # Determines if we should publish/announce
+  host:
+    needs:
+      - plan
+      - build-local-artifacts
+      - build-global-artifacts
+    # Only run if we're "publishing", and only if local and global didn't fail (skipped is fine)
+    if: ${{ always() && needs.plan.outputs.publishing == 'true' && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.build-local-artifacts.result == 'skipped' || needs.build-local-artifacts.result == 'success') }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    runs-on: "ubuntu-20.04"
+    outputs:
+      val: ${{ steps.host.outputs.manifest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install cargo-dist
+        run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.14.1/cargo-dist-installer.sh | sh"
+      # Fetch artifacts from scratch-storage
+      - name: Fetch artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: artifacts-*
+          path: target/distrib/
+          merge-multiple: true
+      # This is a harmless no-op for GitHub Releases, hosting for that happens in "announce"
+      - id: host
+        shell: bash
+        run: |
+          cargo dist host ${{ needs.plan.outputs.tag-flag }} --steps=upload --steps=release --output-format=json > dist-manifest.json
+          echo "artifacts uploaded and released successfully"
+          cat dist-manifest.json
+          echo "manifest=$(jq -c "." dist-manifest.json)" >> "$GITHUB_OUTPUT"
+      - name: "Upload dist-manifest.json"
+        uses: actions/upload-artifact@v4
+        with:
+          # Overwrite the previous copy
+          name: artifacts-dist-manifest
+          path: dist-manifest.json
+
+  # Create a GitHub Release while uploading all files to it
+  announce:
+    needs:
+      - plan
+      - host
+    # use "always() && ..." to allow us to wait for all publish jobs while
+    # still allowing individual publish jobs to skip themselves (for prereleases).
+    # "host" however must run to completion, no skipping allowed!
+    if: ${{ always() && needs.host.result == 'success' }}
+    runs-on: "ubuntu-20.04"
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: "Download GitHub Artifacts"
+        uses: actions/download-artifact@v4
+        with:
+          pattern: artifacts-*
+          path: artifacts
+          merge-multiple: true
+      - name: Cleanup
+        run: |
+          # Remove the granular manifests
+          rm -f artifacts/*-dist-manifest.json
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: ncipollo/release-action@v1
         with:
-          files: dist/**/*
-          generate_release_notes: true
-          draft: false
-          prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') || contains(github.ref, '-alpha') }}
-
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Homebrew: update Formula/sicario.rb with new version + SHA256 digests
-  # ─────────────────────────────────────────────────────────────────────────────
-  homebrew:
-    name: Update Homebrew Formula
-    runs-on: ubuntu-latest
-    needs: release
-    if: startsWith(github.ref, 'refs/tags/')
-    permissions:
-      contents: write
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # Need a token with write access to push the formula update.
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Download release artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-
-      - name: Compute SHA256 digests
-        id: sha
-        run: |
-          SHA_LINUX=$(sha256sum dist/sicario-linux-x86_64/sicario-linux-x86_64 | awk '{print $1}')
-          SHA_MACOS_X86=$(sha256sum dist/sicario-macos-x86_64/sicario-macos-x86_64 | awk '{print $1}')
-          SHA_MACOS_ARM=$(sha256sum dist/sicario-macos-aarch64/sicario-macos-aarch64 | awk '{print $1}')
-          echo "sha_linux=$SHA_LINUX"       >> "$GITHUB_OUTPUT"
-          echo "sha_macos_x86=$SHA_MACOS_X86" >> "$GITHUB_OUTPUT"
-          echo "sha_macos_arm=$SHA_MACOS_ARM" >> "$GITHUB_OUTPUT"
-
-      - name: Update Formula/sicario.rb
-        env:
-          VERSION: ${{ github.ref_name }}
-          SHA_LINUX: ${{ steps.sha.outputs.sha_linux }}
-          SHA_MACOS_X86: ${{ steps.sha.outputs.sha_macos_x86 }}
-          SHA_MACOS_ARM: ${{ steps.sha.outputs.sha_macos_arm }}
-        run: |
-          # Strip leading 'v' from tag for the version field.
-          VER="${VERSION#v}"
-
-          sed -i "s/^  version \".*\"/  version \"${VER}\"/" Formula/sicario.rb
-
-          # Replace the three placeholder sha256 lines in order:
-          # 1st occurrence  → macOS ARM
-          # 2nd occurrence  → macOS x86
-          # 3rd occurrence  → Linux x86
-          python3 - <<'PYEOF'
-          import re, os
-
-          formula = open("Formula/sicario.rb").read()
-          shas = [
-              os.environ["SHA_MACOS_ARM"],
-              os.environ["SHA_MACOS_X86"],
-              os.environ["SHA_LINUX"],
-          ]
-          idx = 0
-          def replacer(m):
-              global idx
-              result = f'      sha256 "{shas[idx]}"'
-              idx += 1
-              return result
-
-          formula = re.sub(r'      sha256 "[0-9a-f]{64}"', replacer, formula)
-          open("Formula/sicario.rb", "w").write(formula)
-          PYEOF
-
-      - name: Commit and push updated formula
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/sicario.rb
-          git commit -m "chore: update Homebrew formula to ${GITHUB_REF_NAME}"
-          git push origin HEAD:main
+          tag: ${{ needs.plan.outputs.tag }}
+          name: ${{ fromJson(needs.host.outputs.val).announcement_title }}
+          body: ${{ fromJson(needs.host.outputs.val).announcement_github_body }}
+          prerelease: ${{ fromJson(needs.host.outputs.val).announcement_is_prerelease }}
+          artifacts: "artifacts/*"

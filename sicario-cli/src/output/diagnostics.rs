@@ -203,7 +203,7 @@ fn compute_span_len(vuln: &Vulnerability, line_text: &str) -> usize {
 
     // Fallback: underline from column to end of meaningful content
     let remaining = line_text.len().saturating_sub(col);
-    remaining.min(40).max(1)
+    remaining.clamp(1, 40)
 }
 
 /// Extract a short message describing the finding.
@@ -213,28 +213,28 @@ fn extract_message(vuln: &Vulnerability) -> String {
 
     // Generate a contextual message based on common rule patterns
     if rule.contains("eval") || snippet.contains("eval(") {
-        return format!("Untrusted input passed to eval()");
+        return "Untrusted input passed to eval()".to_string();
     }
     if rule.contains("sql") || rule.contains("injection") {
-        return format!("Potential injection vulnerability");
+        return "Potential injection vulnerability".to_string();
     }
     if rule.contains("xss") {
-        return format!("Potential cross-site scripting");
+        return "Potential cross-site scripting".to_string();
     }
     if rule.contains("hardcoded") || rule.contains("secret") || rule.contains("password") {
-        return format!("Hardcoded secret or credential");
+        return "Hardcoded secret or credential".to_string();
     }
     if rule.contains("exec") || rule.contains("command") {
-        return format!("Potential command injection");
+        return "Potential command injection".to_string();
     }
     if rule.contains("path") || rule.contains("traversal") {
-        return format!("Potential path traversal");
+        return "Potential path traversal".to_string();
     }
     if rule.contains("deserial") {
-        return format!("Unsafe deserialization");
+        return "Unsafe deserialization".to_string();
     }
     if rule.contains("crypto") || rule.contains("weak") {
-        return format!("Weak cryptographic usage");
+        return "Weak cryptographic usage".to_string();
     }
 
     format!("Security finding: {rule}")

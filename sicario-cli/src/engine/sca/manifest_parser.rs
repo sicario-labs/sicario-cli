@@ -63,7 +63,7 @@ impl ManifestParser {
                     "package.json" => {
                         // Only parse package.json if no lockfile was found in same dir
                         let lockfile = path.parent().map(|p| p.join("package-lock.json"));
-                        if lockfile.map_or(true, |lf| !lf.exists()) {
+                        if lockfile.is_none_or(|lf| !lf.exists()) {
                             if let Ok(mut d) = parse_package_json(&path) {
                                 deps.append(&mut d);
                             }
@@ -77,7 +77,7 @@ impl ManifestParser {
                     "Cargo.toml" => {
                         // Only parse Cargo.toml if no lockfile was found in same dir
                         let lockfile = path.parent().map(|p| p.join("Cargo.lock"));
-                        if lockfile.map_or(true, |lf| !lf.exists()) {
+                        if lockfile.is_none_or(|lf| !lf.exists()) {
                             if let Ok(mut d) = parse_cargo_toml(&path) {
                                 deps.append(&mut d);
                             }

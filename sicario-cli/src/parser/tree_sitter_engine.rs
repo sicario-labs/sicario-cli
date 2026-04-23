@@ -305,7 +305,7 @@ mod tests {
     #[test]
     fn test_excluded_file() {
         let temp_dir = std::env::temp_dir().join("sicario_test_excluded");
-        fs::create_dir_all(&temp_dir.join("node_modules")).unwrap();
+        fs::create_dir_all(temp_dir.join("node_modules")).unwrap();
 
         let test_file = temp_dir.join("node_modules/test.js");
         fs::write(&test_file, "const x = 42;").unwrap();
@@ -380,10 +380,7 @@ mod property_tests {
             let mut engine_seq = TreeSitterEngine::new(&temp_dir).unwrap();
             let mut sequential_results = Vec::new();
             for file in &test_files {
-                match engine_seq.parse_file(file) {
-                    Ok(tree) => sequential_results.push((file.clone(), tree.root_node().to_sexp())),
-                    Err(_) => {}
-                }
+                if let Ok(tree) = engine_seq.parse_file(file) { sequential_results.push((file.clone(), tree.root_node().to_sexp())) }
             }
 
             // Parse in parallel using Rayon

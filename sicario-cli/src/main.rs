@@ -195,10 +195,8 @@ fn cmd_scan(args: cli::scan::ScanArgs) -> Result<ExitCode> {
         let k8s_dirs = ["k8s", "kubernetes", "deploy", "manifests", ".k8s"];
         for k8s_dir in &k8s_dirs {
             let candidate = dir.join(k8s_dir);
-            if candidate.is_dir() {
-                if analyzer.load_kubernetes_configs(&candidate).is_ok() {
-                    k8s_found = true;
-                }
+            if candidate.is_dir() && analyzer.load_kubernetes_configs(&candidate).is_ok() {
+                k8s_found = true;
             }
         }
 
@@ -541,7 +539,7 @@ fn cmd_suppressions(args: cli::suppressions::SuppressionsCommand) -> Result<Exit
             if patterns.is_empty() {
                 println!("No learned suppression patterns.");
             } else {
-                println!("{:<30} {:<8} {}", "Rule ID", "Count", "Example Snippet");
+                println!("{:<30} {:<8} Example Snippet", "Rule ID", "Count");
                 println!("{}", "-".repeat(70));
                 for p in patterns {
                     let snippet_preview: String = p.example_snippet.chars().take(40).collect();
@@ -956,13 +954,13 @@ fn cmd_fix(args: cli::fix::FixArgs) -> Result<ExitCode> {
     for f in discover_bundled_rules() {
         let _ = eng.load_rules(&f);
     }
-    let vulns = eng.scan_directory(&file_path.parent().unwrap_or(&cwd))?;
+    let vulns = eng.scan_directory(file_path.parent().unwrap_or(&cwd))?;
 
     // Filter to the target file and optionally the specified rule
     let file_vulns: Vec<_> = vulns
         .iter()
         .filter(|v| v.file_path == file_path)
-        .filter(|v| args.rule.as_ref().map_or(true, |r| v.rule_id == *r))
+        .filter(|v| args.rule.as_ref().is_none_or(|r| v.rule_id == *r))
         .collect();
 
     if file_vulns.is_empty() {

@@ -23,7 +23,8 @@ mod tests {
 
     #[test]
     fn test_module_structure() {
-        // Basic module structure test
-        assert!(true);
+        // Verify the Severity enum has the expected variants
+        let s = Severity::High;
+        assert_eq!(format!("{:?}", s), "High");
     }
 }

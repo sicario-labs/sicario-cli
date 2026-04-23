@@ -495,7 +495,7 @@ mod tests {
         let mut f2 = make_finding("rule-b", "b.rs", "snippet_b");
         f2.severity = Severity::Critical;
 
-        mgr.save(&[f1.clone()], Some("first")).unwrap();
+        mgr.save(std::slice::from_ref(&f1), Some("first")).unwrap();
         // Small delay to ensure different timestamps
         std::thread::sleep(std::time::Duration::from_millis(10));
         mgr.save(&[f1.clone(), f2.clone()], Some("second")).unwrap();

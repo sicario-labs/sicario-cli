@@ -384,8 +384,8 @@ mod property_tests {
     // Helper function to generate random exclusion patterns
     fn generate_exclusion_patterns(count: usize) -> Vec<String> {
         let mut patterns = Vec::new();
-        let extensions = vec!["log", "tmp", "bak", "cache"];
-        let dirs = vec!["temp", "cache", "logs", "backup"];
+        let extensions = ["log", "tmp", "bak", "cache"];
+        let dirs = ["temp", "cache", "logs", "backup"];
 
         for i in 0..count {
             if i % 2 == 0 {
@@ -403,8 +403,8 @@ mod property_tests {
     // Helper function to generate test file paths
     fn generate_test_file_paths(count: usize) -> Vec<String> {
         let mut paths = Vec::new();
-        let extensions = vec!["js", "rs", "py", "log", "tmp", "bak"];
-        let dirs = vec!["src", "lib", "temp", "cache", "logs"];
+        let extensions = ["js", "rs", "py", "log", "tmp", "bak"];
+        let dirs = ["src", "lib", "temp", "cache", "logs"];
 
         for i in 0..count {
             let dir = &dirs[i % dirs.len()];

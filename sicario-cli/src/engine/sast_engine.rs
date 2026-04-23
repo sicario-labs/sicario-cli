@@ -361,12 +361,12 @@ impl SastEngine {
 
             if path.is_dir() {
                 // Fast skip: check directory name before expensive glob matching
-                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    match name {
-                        "node_modules" | ".git" | "target" | "dist" | "build" | "__pycache__"
-                        | ".venv" | "venv" | ".sicario" => continue,
-                        _ => {}
-                    }
+                if let Some(
+                    "node_modules" | ".git" | "target" | "dist" | "build" | "__pycache__" | ".venv"
+                    | "venv" | ".sicario",
+                ) = path.file_name().and_then(|n| n.to_str())
+                {
+                    continue;
                 }
                 // Check if directory should be excluded before recursing
                 if !self.tree_sitter.should_scan_file(&path) {
@@ -891,11 +891,12 @@ mod tests {
         let mut engine = SastEngine::new(temp_dir.path()).unwrap();
         let result = engine.load_rules(&rules_file);
 
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Rule ID cannot be empty"));
+        // load_rules skips invalid rules silently — verify the bad rule was not loaded
+        assert!(result.is_ok());
+        assert!(
+            engine.get_rules().is_empty(),
+            "Rule with empty ID should be skipped"
+        );
     }
 
     #[test]
@@ -918,11 +919,12 @@ mod tests {
         let mut engine = SastEngine::new(temp_dir.path()).unwrap();
         let result = engine.load_rules(&rules_file);
 
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Failed to compile query"));
+        // load_rules skips rules with invalid queries — verify the bad rule was not loaded
+        assert!(result.is_ok());
+        assert!(
+            engine.get_rules().is_empty(),
+            "Rule with invalid query should be skipped"
+        );
     }
 
     #[test]

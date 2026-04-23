@@ -106,13 +106,10 @@ fn run_scan(job: ScanJob, tx: &Sender<TuiMessage>) -> Result<()> {
     let exclusion_mgr = engine.exclusion_manager();
 
     for (idx, file_path) in files_to_scan.iter().enumerate() {
-        match SastEngine::scan_file_parallel(file_path, &rules, &exclusion_mgr) {
-            Ok(vulns) => {
-                for vuln in vulns {
-                    let _ = tx.send(TuiMessage::VulnerabilityFound(vuln));
-                }
+        if let Ok(vulns) = SastEngine::scan_file_parallel(file_path, &rules, &exclusion_mgr) {
+            for vuln in vulns {
+                let _ = tx.send(TuiMessage::VulnerabilityFound(vuln));
             }
-            Err(_) => {}
         }
 
         let _ = tx.send(TuiMessage::ScanProgress {

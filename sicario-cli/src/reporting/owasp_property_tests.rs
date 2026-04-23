@@ -8,7 +8,7 @@
 //! Validates: Requirements 17.1, 17.2, 17.3, 17.4, 17.5
 
 #[cfg(test)]
-mod owasp_property_tests {
+mod tests {
     use proptest::prelude::*;
     use std::path::PathBuf;
     use uuid::Uuid;

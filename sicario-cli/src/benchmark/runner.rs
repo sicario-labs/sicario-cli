@@ -132,7 +132,7 @@ impl BenchmarkRunner {
         let mut entries: Vec<PathBuf> = fs::read_dir(&benchmarks_dir)?
             .filter_map(|e| e.ok())
             .map(|e| e.path())
-            .filter(|p| p.extension().map_or(false, |ext| ext == "json"))
+            .filter(|p| p.extension().is_some_and(|ext| ext == "json"))
             .collect();
         entries.sort();
         match entries.last() {

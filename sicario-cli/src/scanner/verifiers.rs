@@ -256,10 +256,10 @@ mod tests {
             let result = verifier.verify(&garbage);
             // Either returns an error (network unavailable in CI) or Ok(false)
             // It must NEVER return Ok(true) for a clearly invalid token
-            match result {
-                Ok(valid) => prop_assert!(!valid, "Garbage token should not be valid: {:?}", garbage),
-                Err(_) => {} // Network errors are acceptable in unit tests
+            if let Ok(valid) = result {
+                prop_assert!(!valid, "Garbage token should not be valid: {:?}", garbage);
             }
+            // Network errors are acceptable in unit tests
         }
 
         #[test]
@@ -268,10 +268,10 @@ mod tests {
         ) {
             let verifier = StripeVerifier::new().unwrap();
             let result = verifier.verify(&garbage);
-            match result {
-                Ok(valid) => prop_assert!(!valid, "Garbage key should not be valid: {:?}", garbage),
-                Err(_) => {} // Network errors are acceptable in unit tests
+            if let Ok(valid) = result {
+                prop_assert!(!valid, "Garbage key should not be valid: {:?}", garbage);
             }
+            // Network errors are acceptable in unit tests
         }
 
         #[test]

@@ -444,7 +444,7 @@ mod tests {
         let map = parser.sast_suppressed_lines(source);
         assert_eq!(map.get(&3), Some(&SuppressionKind::All));
         assert_eq!(map.get(&5), Some(&SuppressionKind::Rule("xss".to_string())));
-        assert!(map.get(&1).is_none());
+        assert!(!map.contains_key(&1));
     }
 
     #[test]

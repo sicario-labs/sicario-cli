@@ -588,9 +588,7 @@ mod property_tests {
 
                 let file_name = format!("branch_secret_{}.js", i);
                 let file_path = temp_dir.path().join(&file_name);
-                std::fs::write(&file_path, format!(
-                    "const key = \"AKIAIOSFODNN7EXAMPLE\";",
-                )).unwrap();
+                std::fs::write(&file_path, "const key = \"AKIAIOSFODNN7EXAMPLE\";").unwrap();
 
                 let mut index = repo.index().unwrap();
                 index.add_path(Path::new(&file_name)).unwrap();

@@ -149,7 +149,7 @@ proptest! {
 
         let start = Instant::now();
         let mut received = 0usize;
-        while let Ok(_) = rx.try_recv() {
+        while rx.try_recv().is_ok() {
             received += 1;
         }
         let elapsed = start.elapsed();
@@ -259,7 +259,7 @@ proptest! {
 
         let start = Instant::now();
         let mut received = 0usize;
-        while let Ok(_) = rx.try_recv() {
+        while rx.try_recv().is_ok() {
             received += 1;
         }
         let elapsed = start.elapsed();

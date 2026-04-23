@@ -135,7 +135,7 @@ proptest! {
         drop(tx2);
 
         let mut received = 0usize;
-        while let Ok(_) = rx.recv() {
+        while rx.recv().is_ok() {
             received += 1;
         }
 

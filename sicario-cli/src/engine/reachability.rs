@@ -775,7 +775,9 @@ function process(input) {
         );
 
         let mut analyzer = ReachabilityAnalyzer::new();
-        analyzer.build_call_graph(&[path.clone()]).unwrap();
+        analyzer
+            .build_call_graph(std::slice::from_ref(&path))
+            .unwrap();
 
         // Debug: print all nodes
         for node in analyzer.call_graph.nodes.values() {

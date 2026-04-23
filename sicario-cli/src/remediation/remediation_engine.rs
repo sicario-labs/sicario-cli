@@ -961,7 +961,7 @@ mod tests {
     #[test]
     fn test_extract_context_snippet_start_of_file() {
         let source = "line1\nline2\nline3\nline4\nline5\n";
-        let snippet = extract_context_snippet(&source, 1, 3);
+        let snippet = extract_context_snippet(source, 1, 3);
         assert!(snippet.contains("line1"));
     }
 

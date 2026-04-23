@@ -321,7 +321,7 @@ mod tests {
         let input = ScoringInput::default_for_pattern_match();
         let score = scorer.score(&finding, &input);
         assert!(
-            score >= 0.0 && score <= 1.0,
+            (0.0..=1.0).contains(&score),
             "Score out of range: {}",
             score
         );

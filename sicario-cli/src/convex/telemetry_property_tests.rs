@@ -9,7 +9,7 @@
 //! Validates: Requirements 8.2
 
 #[cfg(test)]
-mod telemetry_property_tests {
+mod tests {
     use proptest::prelude::*;
     use std::path::PathBuf;
     use uuid::Uuid;

@@ -350,89 +350,49 @@ fn apply_sql_injection_template(original: &str, vuln: &Vulnerability) -> String 
     let vuln_line = lines[target_line];
 
     let replacement = match lang.as_str() {
-        "python" => {
-            // Replace string concat/f-string in query with parameterized form
+        "python"
             if vuln_line.contains('+')
                 || vuln_line.contains("f\"")
                 || vuln_line.contains("f'")
-                || vuln_line.contains('%')
-            {
-                let indent = get_indent(vuln_line);
-                format!(
-                    "{indent}# SICARIO FIX: Use parameterized query to prevent SQL injection\n\
-                     {indent}cursor.execute(\"SELECT * FROM table WHERE col = %s\", (user_input,))",
-                )
-            } else {
-                return apply_comment_warning(
-                    original,
-                    vuln,
-                    "SQL injection detected — use parameterized queries",
-                );
-            }
+                || vuln_line.contains('%') =>
+        {
+            let indent = get_indent(vuln_line);
+            format!(
+                "{indent}# SICARIO FIX: Use parameterized query to prevent SQL injection\n\
+                 {indent}cursor.execute(\"SELECT * FROM table WHERE col = %s\", (user_input,))",
+            )
         }
-        "javascript" | "typescript" => {
-            if vuln_line.contains('+') || vuln_line.contains('`') {
-                let indent = get_indent(vuln_line);
-                format!(
-                    "{indent}// SICARIO FIX: Use parameterized query to prevent SQL injection\n\
-                     {indent}const result = await db.query(\"SELECT * FROM table WHERE col = $1\", [userInput]);",
-                )
-            } else {
-                return apply_comment_warning(
-                    original,
-                    vuln,
-                    "SQL injection detected — use parameterized queries",
-                );
-            }
+        "javascript" | "typescript" if vuln_line.contains('+') || vuln_line.contains('`') => {
+            let indent = get_indent(vuln_line);
+            format!(
+                "{indent}// SICARIO FIX: Use parameterized query to prevent SQL injection\n\
+                 {indent}const result = await db.query(\"SELECT * FROM table WHERE col = $1\", [userInput]);",
+            )
         }
-        "java" => {
-            if vuln_line.contains('+') || vuln_line.contains("concat") {
-                let indent = get_indent(vuln_line);
-                format!(
-                    "{indent}// SICARIO FIX: Use PreparedStatement to prevent SQL injection\n\
-                     {indent}PreparedStatement stmt = conn.prepareStatement(\"SELECT * FROM table WHERE col = ?\");\n\
-                     {indent}stmt.setString(1, userInput);",
-                )
-            } else {
-                return apply_comment_warning(
-                    original,
-                    vuln,
-                    "SQL injection detected — use parameterized queries",
-                );
-            }
+        "java" if vuln_line.contains('+') || vuln_line.contains("concat") => {
+            let indent = get_indent(vuln_line);
+            format!(
+                "{indent}// SICARIO FIX: Use PreparedStatement to prevent SQL injection\n\
+                 {indent}PreparedStatement stmt = conn.prepareStatement(\"SELECT * FROM table WHERE col = ?\");\n\
+                 {indent}stmt.setString(1, userInput);",
+            )
         }
-        "go" => {
-            if vuln_line.contains('+')
-                || vuln_line.contains("Sprintf")
-                || vuln_line.contains("fmt.")
-            {
-                let indent = get_indent(vuln_line);
-                format!(
-                    "{indent}// SICARIO FIX: Use parameterized query to prevent SQL injection\n\
-                     {indent}rows, err := db.Query(\"SELECT * FROM table WHERE col = $1\", userInput)",
-                )
-            } else {
-                return apply_comment_warning(
-                    original,
-                    vuln,
-                    "SQL injection detected — use parameterized queries",
-                );
-            }
+        "go" if vuln_line.contains('+')
+            || vuln_line.contains("Sprintf")
+            || vuln_line.contains("fmt.") =>
+        {
+            let indent = get_indent(vuln_line);
+            format!(
+                "{indent}// SICARIO FIX: Use parameterized query to prevent SQL injection\n\
+                 {indent}rows, err := db.Query(\"SELECT * FROM table WHERE col = $1\", userInput)",
+            )
         }
-        "rust" => {
-            if vuln_line.contains("format!") || vuln_line.contains('+') {
-                let indent = get_indent(vuln_line);
-                format!(
-                    "{indent}// SICARIO FIX: Use parameterized query to prevent SQL injection\n\
-                     {indent}sqlx::query(\"SELECT * FROM table WHERE col = $1\").bind(&user_input)",
-                )
-            } else {
-                return apply_comment_warning(
-                    original,
-                    vuln,
-                    "SQL injection detected — use parameterized queries",
-                );
-            }
+        "rust" if vuln_line.contains("format!") || vuln_line.contains('+') => {
+            let indent = get_indent(vuln_line);
+            format!(
+                "{indent}// SICARIO FIX: Use parameterized query to prevent SQL injection\n\
+                 {indent}sqlx::query(\"SELECT * FROM table WHERE col = $1\").bind(&user_input)",
+            )
         }
         _ => {
             return apply_comment_warning(

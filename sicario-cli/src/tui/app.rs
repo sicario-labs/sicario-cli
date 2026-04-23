@@ -384,10 +384,8 @@ impl SicarioTui {
                         AppState::Results {
                             vulnerabilities,
                             selected,
-                        } => {
-                            if !vulnerabilities.is_empty() {
-                                *selected = (*selected + 1).min(vulnerabilities.len() - 1);
-                            }
+                        } if !vulnerabilities.is_empty() => {
+                            *selected = (*selected + 1).min(vulnerabilities.len() - 1);
                         }
                         AppState::OwaspResults {
                             selected_category, ..

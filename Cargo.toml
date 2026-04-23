@@ -134,3 +134,5 @@ pr-run-mode = "plan"
 windows-archive = ".tar.gz"
 unix-archive = ".tar.gz"
 npm-scope = "@sicario-labs"
+# Allow our custom publish-npm job in the CI workflow
+allow-dirty = ["ci"]

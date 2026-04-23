@@ -7,7 +7,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Sicario Team"]
 license = "MIT"
-repository = "https://github.com/EmmyCodes234/sicario-cli"
+repository = "https://github.com/sicario-labs/sicario-cli"
 
 [workspace.dependencies]
 # Tree-sitter parsing
@@ -117,3 +117,16 @@ sysinfo = "0.30"
 
 # Diagnostic output
 miette = { version = "7", features = ["fancy"] }
+
+# Config for 'cargo dist'
+[workspace.metadata.dist]
+# The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.14.1"
+# CI backends to support
+ci = ["github"]
+# The installers to generate for each app
+installers = ["shell", "powershell", "npm", "homebrew"]
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+# Publish jobs to run in CI
+pr-run-mode = "plan"

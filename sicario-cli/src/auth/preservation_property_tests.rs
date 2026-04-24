@@ -17,8 +17,7 @@ use crate::auth::pkce::{compute_code_challenge, generate_code_verifier};
 use crate::auth::token_store::TokenStore;
 
 /// Allowed characters for a PKCE code_verifier per RFC 7636 §4.1
-const VERIFIER_CHARS: &str =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+const VERIFIER_CHARS: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
 
 /// Strategy that generates valid code_verifier strings (43–128 chars).
 fn verifier_strategy() -> impl Strategy<Value = String> {

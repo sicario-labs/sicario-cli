@@ -75,8 +75,7 @@ impl TokenStore {
                 .insert("access_token".to_string(), token.to_string());
             return Ok(());
         }
-        let entry = Entry::new(&self.service_name, "access_token")
-            .context(KEYCHAIN_ERROR_HINT)?;
+        let entry = Entry::new(&self.service_name, "access_token").context(KEYCHAIN_ERROR_HINT)?;
         entry.set_password(token).context(KEYCHAIN_ERROR_HINT)?;
         Ok(())
     }
@@ -92,8 +91,7 @@ impl TokenStore {
                 .cloned()
                 .ok_or_else(|| anyhow::anyhow!("No access token in memory store"));
         }
-        let entry = Entry::new(&self.service_name, "access_token")
-            .context(KEYCHAIN_ERROR_HINT)?;
+        let entry = Entry::new(&self.service_name, "access_token").context(KEYCHAIN_ERROR_HINT)?;
         let token = entry.get_password().context(KEYCHAIN_ERROR_HINT)?;
         validate_token(&token, "Access token")?;
         Ok(token)
@@ -108,8 +106,7 @@ impl TokenStore {
                 .insert("refresh_token".to_string(), token.to_string());
             return Ok(());
         }
-        let entry = Entry::new(&self.service_name, "refresh_token")
-            .context(KEYCHAIN_ERROR_HINT)?;
+        let entry = Entry::new(&self.service_name, "refresh_token").context(KEYCHAIN_ERROR_HINT)?;
         entry.set_password(token).context(KEYCHAIN_ERROR_HINT)?;
         Ok(())
     }
@@ -125,8 +122,7 @@ impl TokenStore {
                 .cloned()
                 .ok_or_else(|| anyhow::anyhow!("No refresh token in memory store"));
         }
-        let entry = Entry::new(&self.service_name, "refresh_token")
-            .context(KEYCHAIN_ERROR_HINT)?;
+        let entry = Entry::new(&self.service_name, "refresh_token").context(KEYCHAIN_ERROR_HINT)?;
         let token = entry.get_password().context(KEYCHAIN_ERROR_HINT)?;
         validate_token(&token, "Refresh token")?;
         Ok(token)
@@ -139,10 +135,10 @@ impl TokenStore {
             mem.lock().unwrap().clear();
             return Ok(());
         }
-        let access_entry = Entry::new(&self.service_name, "access_token")
-            .context(KEYCHAIN_ERROR_HINT)?;
-        let refresh_entry = Entry::new(&self.service_name, "refresh_token")
-            .context(KEYCHAIN_ERROR_HINT)?;
+        let access_entry =
+            Entry::new(&self.service_name, "access_token").context(KEYCHAIN_ERROR_HINT)?;
+        let refresh_entry =
+            Entry::new(&self.service_name, "refresh_token").context(KEYCHAIN_ERROR_HINT)?;
 
         let _ = access_entry.delete_password();
         let _ = refresh_entry.delete_password();
@@ -161,8 +157,8 @@ impl TokenStore {
                 .insert("cloud_api_token".to_string(), token.to_string());
             return Ok(());
         }
-        let entry = Entry::new(&self.service_name, "cloud_api_token")
-            .context(KEYCHAIN_ERROR_HINT)?;
+        let entry =
+            Entry::new(&self.service_name, "cloud_api_token").context(KEYCHAIN_ERROR_HINT)?;
         entry.set_password(token).context(KEYCHAIN_ERROR_HINT)?;
         Ok(())
     }
@@ -178,8 +174,8 @@ impl TokenStore {
                 .cloned()
                 .ok_or_else(|| anyhow::anyhow!("No cloud API token in memory store"));
         }
-        let entry = Entry::new(&self.service_name, "cloud_api_token")
-            .context(KEYCHAIN_ERROR_HINT)?;
+        let entry =
+            Entry::new(&self.service_name, "cloud_api_token").context(KEYCHAIN_ERROR_HINT)?;
         let token = entry.get_password().context(KEYCHAIN_ERROR_HINT)?;
         validate_token(&token, "Cloud API token")?;
         Ok(token)
@@ -192,8 +188,8 @@ impl TokenStore {
             mem.lock().unwrap().remove("cloud_api_token");
             return Ok(());
         }
-        let entry = Entry::new(&self.service_name, "cloud_api_token")
-            .context(KEYCHAIN_ERROR_HINT)?;
+        let entry =
+            Entry::new(&self.service_name, "cloud_api_token").context(KEYCHAIN_ERROR_HINT)?;
         let _ = entry.delete_password();
         Ok(())
     }

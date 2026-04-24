@@ -247,9 +247,7 @@ impl AuthModule {
 
         if !resp.status().is_success() {
             if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
-                bail!(
-                    "Your session has expired. Run `sicario login` to re-authenticate."
-                );
+                bail!("Your session has expired. Run `sicario login` to re-authenticate.");
             }
             bail!("Token refresh failed with status {}", resp.status());
         }

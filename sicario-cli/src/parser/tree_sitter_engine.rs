@@ -70,6 +70,10 @@ impl TreeSitterEngine {
         java_parser.set_language(tree_sitter_java::language())?;
         self.parsers.insert(Language::Java, java_parser);
 
+        // Ruby and PHP: no tree-sitter grammar crate available at compatible version.
+        // These languages are detected by Language::from_path but validation
+        // falls through to the "unknown language" rejection path in validate_syntax.
+
         Ok(())
     }
 
@@ -136,6 +140,12 @@ impl TreeSitterEngine {
             Language::Rust => tree_sitter_rust::language(),
             Language::Go => tree_sitter_go::language(),
             Language::Java => tree_sitter_java::language(),
+            Language::Ruby => {
+                anyhow::bail!("No tree-sitter grammar available for Ruby")
+            }
+            Language::Php => {
+                anyhow::bail!("No tree-sitter grammar available for PHP")
+            }
         };
 
         parser.set_language(ts_language)?;
@@ -166,7 +176,7 @@ mod tests {
         let temp_dir = std::env::temp_dir();
         let engine = TreeSitterEngine::new(&temp_dir).unwrap();
 
-        // Verify all parsers are initialized
+        // Verify all parsers are initialized (Ruby and PHP excluded — no compatible crate)
         assert_eq!(engine.parsers.len(), 6);
         assert!(engine.parsers.contains_key(&Language::JavaScript));
         assert!(engine.parsers.contains_key(&Language::TypeScript));

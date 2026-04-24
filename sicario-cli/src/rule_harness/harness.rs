@@ -108,6 +108,8 @@ impl RuleTestHarness {
                 crate::parser::Language::Rust => "rs",
                 crate::parser::Language::Go => "go",
                 crate::parser::Language::Java => "java",
+                crate::parser::Language::Ruby => "rb",
+                crate::parser::Language::Php => "php",
             })
             .unwrap_or("txt");
 

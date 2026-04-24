@@ -214,7 +214,7 @@ fn extract_functions_from_file(
     language: Language,
     graph: &mut CallGraph,
 ) -> Result<()> {
-    let ts_language = language_to_ts(language);
+    let ts_language = language_to_ts(language)?;
     let mut parser = tree_sitter::Parser::new();
     parser.set_language(ts_language)?;
 
@@ -314,7 +314,10 @@ fn mark_taint_sources(
     _taint_sources: &[TaintSource],
     graph: &mut CallGraph,
 ) {
-    let ts_language = language_to_ts(language);
+    let ts_language = match language_to_ts(language) {
+        Ok(l) => l,
+        Err(_) => return,
+    };
     let mut parser = tree_sitter::Parser::new();
     if parser.set_language(ts_language).is_err() {
         return;
@@ -389,14 +392,20 @@ fn is_framework_taint_text(text: &str, language: Language) -> bool {
 // Language-specific tree-sitter query strings
 // ---------------------------------------------------------------------------
 
-fn language_to_ts(language: Language) -> tree_sitter::Language {
+fn language_to_ts(language: Language) -> Result<tree_sitter::Language> {
     match language {
-        Language::JavaScript => tree_sitter_javascript::language(),
-        Language::TypeScript => tree_sitter_typescript::language_typescript(),
-        Language::Python => tree_sitter_python::language(),
-        Language::Rust => tree_sitter_rust::language(),
-        Language::Go => tree_sitter_go::language(),
-        Language::Java => tree_sitter_java::language(),
+        Language::JavaScript => Ok(tree_sitter_javascript::language()),
+        Language::TypeScript => Ok(tree_sitter_typescript::language_typescript()),
+        Language::Python => Ok(tree_sitter_python::language()),
+        Language::Rust => Ok(tree_sitter_rust::language()),
+        Language::Go => Ok(tree_sitter_go::language()),
+        Language::Java => Ok(tree_sitter_java::language()),
+        Language::Ruby => {
+            anyhow::bail!("No tree-sitter grammar available for Ruby")
+        }
+        Language::Php => {
+            anyhow::bail!("No tree-sitter grammar available for PHP")
+        }
     }
 }
 
@@ -414,6 +423,8 @@ fn function_definition_query(language: Language) -> &'static str {
         Language::Rust => r#"(function_item name: (identifier) @name)"#,
         Language::Go => r#"(function_declaration name: (identifier) @name)"#,
         Language::Java => r#"(method_declaration name: (identifier) @name)"#,
+        Language::Ruby => r#"(method name: (identifier) @name)"#,
+        Language::Php => r#"(function_definition name: (name) @name)"#,
     }
 }
 
@@ -427,6 +438,8 @@ fn call_expression_query(language: Language) -> &'static str {
         Language::Rust => r#"(call_expression function: (identifier) @callee)"#,
         Language::Go => r#"(call_expression function: (identifier) @callee)"#,
         Language::Java => r#"(method_invocation name: (identifier) @callee)"#,
+        Language::Ruby => r#"(call method: (identifier) @callee)"#,
+        Language::Php => r#"(function_call_expression function: (name) @callee)"#,
     }
 }
 
@@ -483,7 +496,10 @@ impl ReachabilityAnalyzer {
             let Some(language) = Language::from_path(path) else {
                 continue;
             };
-            let ts_language = language_to_ts(language);
+            let ts_language = match language_to_ts(language) {
+                Ok(l) => l,
+                Err(_) => continue,
+            };
             let call_query_str = call_expression_query(language);
             let Ok(call_query) = Query::new(ts_language, call_query_str) else {
                 continue;

@@ -19,4 +19,9 @@ pub struct FixArgs {
     /// Skip post-fix verification scan
     #[arg(long)]
     pub no_verify: bool,
+
+    /// Apply all fixes without prompting for confirmation (batch mode).
+    /// `--auto` is an alias for `--yes`.
+    #[arg(long, alias = "auto")]
+    pub yes: bool,
 }

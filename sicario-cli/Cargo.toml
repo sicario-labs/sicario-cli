@@ -25,6 +25,8 @@ tree-sitter-python.workspace = true
 tree-sitter-rust.workspace = true
 tree-sitter-go.workspace = true
 tree-sitter-java.workspace = true
+# tree-sitter-ruby and tree-sitter-php removed: no compatible crate at 0.20;
+# Ruby/PHP handled via "unknown language" rejection in validate_syntax.
 
 # TUI
 ratatui.workspace = true

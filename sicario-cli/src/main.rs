@@ -969,43 +969,60 @@ fn cmd_fix(args: cli::fix::FixArgs) -> Result<ExitCode> {
     }
 
     let engine = RemediationEngine::new(&cwd)?;
-    for vuln in &file_vulns {
-        let patch = engine.generate_patch(vuln)?;
-        let confirmed = engine.display_diff_and_confirm(&patch)?;
-        if confirmed {
-            engine.apply_patch(&patch)?;
-            eprintln!("sicario: patch applied to {}", args.file);
 
-            // Post-fix verification
-            if !args.no_verify {
-                let mut verifier = verification::VerificationScanner::new(&cwd);
-                let original = verification::OriginalFinding {
-                    rule_id: vuln.rule_id.clone(),
-                    fingerprint: engine::vulnerability::Finding::compute_fingerprint(
-                        &vuln.rule_id,
-                        &vuln.file_path,
-                        &vuln.snippet,
-                    ),
-                    file_path: vuln.file_path.clone(),
-                };
-                let rule_files = discover_bundled_rules();
-                match verifier.verify_fix(&file_path, &original, &rule_files)? {
-                    verification::VerificationResult::Resolved => {
-                        eprintln!("sicario: fix verified — vulnerability resolved");
-                    }
-                    verification::VerificationResult::StillPresent => {
-                        eprintln!("sicario: warning — vulnerability still present after fix");
-                    }
-                    verification::VerificationResult::NewFindingsIntroduced(new) => {
-                        eprintln!(
-                            "sicario: warning — fix introduced {} new finding(s)",
-                            new.len()
-                        );
+    if args.yes {
+        // Batch mode: process all vulnerabilities without per-fix prompts
+        let rule_files = discover_bundled_rules();
+        let batch = engine.generate_and_apply_batch(
+            &file_vulns,
+            true,       // auto_confirm
+            args.no_verify,
+            &rule_files,
+        )?;
+        eprintln!(
+            "sicario: batch complete — {} applied, {} reverted, {} skipped",
+            batch.applied, batch.reverted, batch.skipped
+        );
+    } else {
+        // Interactive mode: confirm each fix individually
+        for vuln in &file_vulns {
+            let patch = engine.generate_patch(vuln)?;
+            let confirmed = engine.display_diff_and_confirm(&patch)?;
+            if confirmed {
+                engine.apply_patch(&patch)?;
+                eprintln!("sicario: patch applied to {}", args.file);
+
+                // Post-fix verification
+                if !args.no_verify {
+                    let mut verifier = verification::VerificationScanner::new(&cwd);
+                    let original = verification::OriginalFinding {
+                        rule_id: vuln.rule_id.clone(),
+                        fingerprint: engine::vulnerability::Finding::compute_fingerprint(
+                            &vuln.rule_id,
+                            &vuln.file_path,
+                            &vuln.snippet,
+                        ),
+                        file_path: vuln.file_path.clone(),
+                    };
+                    let rule_files = discover_bundled_rules();
+                    match verifier.verify_fix(&file_path, &original, &rule_files)? {
+                        verification::VerificationResult::Resolved => {
+                            eprintln!("sicario: fix verified — vulnerability resolved");
+                        }
+                        verification::VerificationResult::StillPresent => {
+                            eprintln!("sicario: warning — vulnerability still present after fix");
+                        }
+                        verification::VerificationResult::NewFindingsIntroduced(new) => {
+                            eprintln!(
+                                "sicario: warning — fix introduced {} new finding(s)",
+                                new.len()
+                            );
+                        }
                     }
                 }
+            } else {
+                eprintln!("sicario: patch skipped");
             }
-        } else {
-            eprintln!("sicario: patch skipped");
         }
     }
 
@@ -1108,33 +1125,33 @@ fn cmd_config(args: cli::config::ConfigCommand) -> Result<ExitCode> {
         }
         ConfigAction::SetProvider(provider_args) => {
             let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-            let config_dir = cwd.join(".sicario");
-            std::fs::create_dir_all(&config_dir)?;
-            let config_path = config_dir.join("config.yaml");
 
             let model = provider_args
                 .model
                 .unwrap_or_else(|| "gpt-4o-mini".to_string());
-            let content = format!(
-                "# Sicario LLM provider config\nendpoint: \"{}\"\nmodel: \"{}\"\n",
-                provider_args.endpoint, model
-            );
-            std::fs::write(&config_path, content)?;
+
+            // Load existing config (if any) to preserve extra fields, then update
+            let mut config = key_manager::config_file::load_config_file(&cwd)
+                .unwrap_or_default();
+            config.endpoint = Some(provider_args.endpoint.clone());
+            config.model = Some(model.clone());
+
+            key_manager::config_file::save_config_file(&cwd, &config)?;
             eprintln!(
                 "sicario: provider set to {} (model: {})",
                 provider_args.endpoint, model
             );
         }
         ConfigAction::Show => {
-            let endpoint = key_manager::resolve_endpoint();
-            let model = key_manager::resolve_model();
+            let ep = key_manager::resolve_endpoint_with_source();
+            let mdl = key_manager::resolve_model_with_source();
             let key_info = key_manager::resolve_api_key();
             let key_source = key_info
                 .map(|k| k.source.label().to_string())
                 .unwrap_or_else(|| "not configured".to_string());
 
-            println!("Endpoint: {endpoint}");
-            println!("Model:    {model}");
+            println!("Endpoint: {} (from {})", ep.value, ep.source.label());
+            println!("Model:    {} (from {})", mdl.value, mdl.source.label());
             println!("API Key:  {key_source}");
         }
         ConfigAction::DeleteKey => {

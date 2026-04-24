@@ -16,6 +16,7 @@ import type * as http from "../http.js";
 import type * as memberships from "../memberships.js";
 import type * as organizations from "../organizations.js";
 import type * as projects from "../projects.js";
+import type * as providerSettings from "../providerSettings.js";
 import type * as rbac from "../rbac.js";
 import type * as scans from "../scans.js";
 import type * as sso from "../sso.js";
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   memberships: typeof memberships;
   organizations: typeof organizations;
   projects: typeof projects;
+  providerSettings: typeof providerSettings;
   rbac: typeof rbac;
   scans: typeof scans;
   sso: typeof sso;

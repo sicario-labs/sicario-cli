@@ -22,6 +22,8 @@ pub enum Language {
     Rust,
     Go,
     Java,
+    Ruby,
+    Php,
 }
 
 impl Language {
@@ -36,6 +38,8 @@ impl Language {
                 "rs" => Some(Language::Rust),
                 "go" => Some(Language::Go),
                 "java" => Some(Language::Java),
+                "rb" | "rake" | "gemspec" => Some(Language::Ruby),
+                "php" => Some(Language::Php),
                 _ => None,
             })
     }

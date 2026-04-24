@@ -34,7 +34,7 @@ function base64UrlEncode(bytes: Uint8Array): string {
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
 }
@@ -377,6 +377,147 @@ http.route({
   }),
 });
 
+// ── GET /api/v1/provider-settings — Return provider config for authed user ──
+http.route({
+  path: "/api/v1/provider-settings",
+  method: "GET",
+  handler: httpAction(async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      });
+    }
+
+    try {
+      const settings = await ctx.runQuery(api.providerSettings.getForUser, {});
+      if (!settings) {
+        return new Response(JSON.stringify({ error: "No provider settings found" }), {
+          status: 404,
+          headers: { "Content-Type": "application/json", ...corsHeaders() },
+        });
+      }
+
+      return new Response(
+        JSON.stringify({
+          provider_name: settings.providerName,
+          endpoint: settings.endpoint,
+          model: settings.model,
+          has_api_key: settings.hasApiKey,
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders() },
+        },
+      );
+    } catch (e: any) {
+      return new Response(
+        JSON.stringify({ error: e.message || "Internal error" }),
+        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders() } },
+      );
+    }
+  }),
+});
+
+// ── PUT /api/v1/provider-settings — Create or update provider config ────────
+http.route({
+  path: "/api/v1/provider-settings",
+  method: "PUT",
+  handler: httpAction(async (ctx, request) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      });
+    }
+
+    try {
+      const body = await request.json();
+      await ctx.runMutation(api.providerSettings.upsert, {
+        providerName: body.provider_name || body.providerName || "",
+        endpoint: body.endpoint || "",
+        model: body.model || "",
+        apiKey: body.api_key || body.apiKey || undefined,
+      });
+
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      });
+    } catch (e: any) {
+      return new Response(
+        JSON.stringify({ error: e.message || "Internal error" }),
+        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders() } },
+      );
+    }
+  }),
+});
+
+// ── DELETE /api/v1/provider-settings — Remove provider config ───────────────
+http.route({
+  path: "/api/v1/provider-settings",
+  method: "DELETE",
+  handler: httpAction(async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      });
+    }
+
+    try {
+      await ctx.runMutation(api.providerSettings.remove, {});
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      });
+    } catch (e: any) {
+      return new Response(
+        JSON.stringify({ error: e.message || "Internal error" }),
+        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders() } },
+      );
+    }
+  }),
+});
+
+// ── GET /api/v1/provider-settings/key — Return decrypted API key (CLI only) ─
+http.route({
+  path: "/api/v1/provider-settings/key",
+  method: "GET",
+  handler: httpAction(async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      });
+    }
+
+    try {
+      const result = await ctx.runQuery(api.providerSettings.getDecryptedKey, {});
+      if (!result) {
+        return new Response(JSON.stringify({ error: "No API key stored" }), {
+          status: 404,
+          headers: { "Content-Type": "application/json", ...corsHeaders() },
+        });
+      }
+
+      return new Response(JSON.stringify({ api_key: result.apiKey }), {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      });
+    } catch (e: any) {
+      return new Response(
+        JSON.stringify({ error: e.message || "Internal error" }),
+        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders() } },
+      );
+    }
+  }),
+});
+
 // ── OPTIONS preflight for all API routes ────────────────────────────────────
 http.route({
   path: "/api/v1/scans",
@@ -404,6 +545,22 @@ http.route({
 
 http.route({
   path: "/oauth/token",
+  method: "OPTIONS",
+  handler: httpAction(async () => {
+    return new Response(null, { status: 204, headers: corsHeaders() });
+  }),
+});
+
+http.route({
+  path: "/api/v1/provider-settings",
+  method: "OPTIONS",
+  handler: httpAction(async () => {
+    return new Response(null, { status: 204, headers: corsHeaders() });
+  }),
+});
+
+http.route({
+  path: "/api/v1/provider-settings/key",
   method: "OPTIONS",
   handler: httpAction(async () => {
     return new Response(null, { status: 204, headers: corsHeaders() });

@@ -149,6 +149,16 @@ export default defineSchema({
     .index("by_deviceCode", ["deviceCode"])
     .index("by_userCode", ["userCode"]),
 
+  providerSettings: defineTable({
+    userId: v.string(),
+    providerName: v.string(),
+    endpoint: v.string(),
+    model: v.string(),
+    encryptedApiKey: v.optional(v.string()),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  }).index("by_userId", ["userId"]),
+
   userProfiles: defineTable({
     userId: v.string(),
     onboardingCompleted: v.boolean(),

@@ -118,6 +118,12 @@ impl SastEngine {
             Language::Rust => tree_sitter_rust::language(),
             Language::Go => tree_sitter_go::language(),
             Language::Java => tree_sitter_java::language(),
+            Language::Ruby => {
+                anyhow::bail!("No tree-sitter grammar available for Ruby")
+            }
+            Language::Php => {
+                anyhow::bail!("No tree-sitter grammar available for PHP")
+            }
         };
 
         Query::new(ts_language, query_str)
@@ -417,6 +423,12 @@ impl SastEngine {
             Language::Rust => tree_sitter_rust::language(),
             Language::Go => tree_sitter_go::language(),
             Language::Java => tree_sitter_java::language(),
+            Language::Ruby => {
+                anyhow::bail!("No tree-sitter grammar available for Ruby")
+            }
+            Language::Php => {
+                anyhow::bail!("No tree-sitter grammar available for PHP")
+            }
         };
         parser.set_language(ts_language)?;
 

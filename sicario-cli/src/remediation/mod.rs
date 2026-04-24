@@ -6,11 +6,12 @@
 //! Requirements: 9.1, 9.2, 9.3, 9.4, 11.1–11.10
 
 pub mod backup_manager;
-pub mod cerebras_client; // backward compat — delegates to llm_client
 pub mod llm_client;
 pub mod patch;
+pub mod progress;
 pub mod remediation_engine;
 pub mod remediation_property_tests;
+pub mod templates;
 
 pub use backup_manager::BackupManager;
 pub use llm_client::LlmClient;

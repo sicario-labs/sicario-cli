@@ -10,13 +10,40 @@ use owo_colors::OwoColorize;
 use similar::{ChangeTag, TextDiff};
 use std::fs;
 use std::io::{self, BufRead, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::backup_manager::{BackupManager, PatchHistoryEntry};
 use super::llm_client::LlmClient;
 use super::{FixContext, Patch};
 use crate::engine::Vulnerability;
 use crate::parser::TreeSitterEngine;
+
+// ── Batch mode types ──────────────────────────────────────────────────────────
+
+/// Summary of a batch fix run.
+#[derive(Debug, Clone)]
+pub struct BatchResult {
+    pub applied: usize,
+    pub reverted: usize,
+    pub skipped: usize,
+    pub details: Vec<BatchFixDetail>,
+}
+
+/// Detail for a single vulnerability processed in batch mode.
+#[derive(Debug, Clone)]
+pub struct BatchFixDetail {
+    pub rule_id: String,
+    pub file_path: PathBuf,
+    pub outcome: BatchFixOutcome,
+}
+
+/// Outcome of a single fix attempt in batch mode.
+#[derive(Debug, Clone)]
+pub enum BatchFixOutcome {
+    Applied,
+    Reverted(String),
+    Skipped(String),
+}
 
 // ── RemediationEngine ─────────────────────────────────────────────────────────
 
@@ -43,7 +70,7 @@ impl RemediationEngine {
     ///
     /// Strategy:
     /// 1. Extract vulnerability context (surrounding code) using tree-sitter.
-    /// 2. Attempt LLM-based fix via `CerebrasClient`.
+    /// 2. Attempt LLM-based fix via `LlmClient`.
     /// 3. Validate the generated code's syntax.
     /// 4. Fall back to AST-based template fix if LLM is unavailable or returns
     ///    invalid code (Requirement 13.5).
@@ -189,27 +216,49 @@ impl RemediationEngine {
     ///
     /// This is a synchronous wrapper that blocks on the async call using a
     /// single-threaded Tokio runtime so the engine can be used from sync code.
+    /// A terminal spinner is displayed while the request is in flight
+    /// (Requirements 2.1–2.5).
     fn generate_fixed_content(
         &self,
         context: &FixContext,
         original: &str,
         vuln: &Vulnerability,
     ) -> Result<String> {
+        use super::progress::LlmProgressSpinner;
+
+        // Start spinner before the async block (Requirement 2.1)
+        let spinner = LlmProgressSpinner::start("Generating AI fix...");
+
         // Build a minimal Tokio runtime for the async call
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .context("Failed to build Tokio runtime")?;
 
-        let fixed_snippet = rt.block_on(self.ai_client.generate_fix(context))?;
+        let result = rt.block_on(self.ai_client.generate_fix(context));
 
-        // Replace the vulnerable snippet in the original file with the fix
-        Ok(splice_fix(
-            original,
-            vuln.line,
-            &vuln.snippet,
-            &fixed_snippet,
-        ))
+        match result {
+            Ok(fixed_snippet) => {
+                spinner.finish_success("AI fix generated");
+                // Replace the vulnerable snippet in the original file with the fix
+                Ok(splice_fix(
+                    original,
+                    vuln.line,
+                    &vuln.snippet,
+                    &fixed_snippet,
+                ))
+            }
+            Err(e) => {
+                // Distinguish timeout from other errors (Requirement 2.5)
+                let msg = e.to_string();
+                if msg.contains("timed out") || msg.contains("timeout") || msg.contains("deadline") {
+                    spinner.finish_timeout();
+                } else {
+                    spinner.finish_error(&format!("LLM error: {}", msg));
+                }
+                Err(e)
+            }
+        }
     }
 
     /// Validate that `code` is syntactically valid for `language`.
@@ -225,7 +274,12 @@ impl RemediationEngine {
             "rust" | "rs" => Language::Rust,
             "go" => Language::Go,
             "java" => Language::Java,
-            _ => return true, // Unknown language — assume valid
+            "ruby" | "rb" => Language::Ruby,
+            "php" => Language::Php,
+            _ => {
+                eprintln!("sicario: warning — no syntax validator for {language}");
+                return false;
+            }
         };
 
         match self.tree_sitter.parse_source(code, lang) {
@@ -236,19 +290,12 @@ impl RemediationEngine {
 
     /// Apply a simple AST-based template fix as a fallback.
     ///
-    /// Detects the vulnerability type from `rule_id` and `cwe_id` and applies
-    /// a rule-specific template fix. Per Requirement 11.10, this MUST produce
-    /// code that differs from the original — returning original unchanged is
+    /// Delegates to `templates::apply_template_fix()` which supports 9
+    /// vulnerability types. Per Requirement 11.10, this MUST produce code
+    /// that differs from the original — returning original unchanged is
     /// NOT acceptable.
     fn apply_template_fix(&self, original: &str, vuln: &Vulnerability) -> String {
-        let vuln_type = classify_vulnerability(vuln);
-
-        match vuln_type {
-            VulnType::SqlInjection => apply_sql_injection_template(original, vuln),
-            VulnType::Xss => apply_xss_template(original, vuln),
-            VulnType::CommandInjection => apply_command_injection_template(original, vuln),
-            VulnType::Unknown => apply_unknown_template(original, vuln),
-        }
+        super::templates::apply_template_fix(original, vuln)
     }
 
     // ── Diff display and confirmation ─────────────────────────────────────────
@@ -284,11 +331,188 @@ impl RemediationEngine {
                 )
             })
     }
+
+    // ── Batch mode ────────────────────────────────────────────────────────────
+
+    /// Process multiple vulnerabilities sequentially in batch mode.
+    ///
+    /// When `auto_confirm` is true, fixes are applied without prompting.
+    /// When `auto_confirm` is false, each fix is shown and confirmed interactively.
+    /// On verification failure, the specific fix is reverted and processing continues.
+    ///
+    /// Requirements: 5.1, 5.3, 5.4, 5.5
+    pub fn generate_and_apply_batch(
+        &self,
+        vulns: &[&Vulnerability],
+        auto_confirm: bool,
+        no_verify: bool,
+        rule_files: &[PathBuf],
+    ) -> Result<BatchResult> {
+        use crate::engine::vulnerability::Finding;
+        use crate::verification::scanner::VerificationScanning;
+        use crate::verification::VerificationScanner;
+
+        let mut result = BatchResult {
+            applied: 0,
+            reverted: 0,
+            skipped: 0,
+            details: Vec::new(),
+        };
+
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+
+        for vuln in vulns {
+            let rule_id = vuln.rule_id.clone();
+            let file_path = vuln.file_path.clone();
+
+            // Generate patch
+            let patch = match self.generate_patch(vuln) {
+                Ok(p) => p,
+                Err(e) => {
+                    let reason = format!("patch generation failed: {e}");
+                    eprintln!("sicario: skipping {} in {} — {reason}", rule_id, file_path.display());
+                    result.skipped += 1;
+                    result.details.push(BatchFixDetail {
+                        rule_id,
+                        file_path,
+                        outcome: BatchFixOutcome::Skipped(reason),
+                    });
+                    continue;
+                }
+            };
+
+            // Confirm (skip prompt when auto_confirm is true)
+            let confirmed = if auto_confirm {
+                true
+            } else {
+                match self.display_diff_and_confirm(&patch) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        let reason = format!("confirmation prompt failed: {e}");
+                        eprintln!("sicario: skipping {} — {reason}", rule_id);
+                        result.skipped += 1;
+                        result.details.push(BatchFixDetail {
+                            rule_id,
+                            file_path,
+                            outcome: BatchFixOutcome::Skipped(reason),
+                        });
+                        continue;
+                    }
+                }
+            };
+
+            if !confirmed {
+                result.skipped += 1;
+                result.details.push(BatchFixDetail {
+                    rule_id,
+                    file_path,
+                    outcome: BatchFixOutcome::Skipped("user declined".to_string()),
+                });
+                continue;
+            }
+
+            // Apply patch
+            if let Err(e) = self.apply_patch(&patch) {
+                let reason = format!("apply failed: {e}");
+                eprintln!("sicario: skipping {} — {reason}", rule_id);
+                result.skipped += 1;
+                result.details.push(BatchFixDetail {
+                    rule_id,
+                    file_path,
+                    outcome: BatchFixOutcome::Skipped(reason),
+                });
+                continue;
+            }
+
+            // Post-fix verification
+            if !no_verify {
+                let mut verifier = VerificationScanner::new(&cwd);
+                let original_finding = crate::verification::OriginalFinding {
+                    rule_id: vuln.rule_id.clone(),
+                    fingerprint: Finding::compute_fingerprint(
+                        &vuln.rule_id,
+                        &vuln.file_path,
+                        &vuln.snippet,
+                    ),
+                    file_path: vuln.file_path.clone(),
+                };
+                match verifier.verify_fix(&file_path, &original_finding, rule_files) {
+                    Ok(crate::verification::VerificationResult::Resolved) => {
+                        eprintln!("sicario: fix verified — {} resolved", rule_id);
+                        result.applied += 1;
+                        result.details.push(BatchFixDetail {
+                            rule_id,
+                            file_path,
+                            outcome: BatchFixOutcome::Applied,
+                        });
+                    }
+                    Ok(crate::verification::VerificationResult::StillPresent) => {
+                        eprintln!("sicario: warning — {} still present, reverting", rule_id);
+                        let _ = self.revert_patch(&patch);
+                        result.reverted += 1;
+                        result.details.push(BatchFixDetail {
+                            rule_id,
+                            file_path,
+                            outcome: BatchFixOutcome::Reverted(
+                                "vulnerability still present after fix".to_string(),
+                            ),
+                        });
+                    }
+                    Ok(crate::verification::VerificationResult::NewFindingsIntroduced(new)) => {
+                        eprintln!(
+                            "sicario: warning — {} introduced {} new finding(s), reverting",
+                            rule_id,
+                            new.len()
+                        );
+                        let _ = self.revert_patch(&patch);
+                        result.reverted += 1;
+                        result.details.push(BatchFixDetail {
+                            rule_id,
+                            file_path,
+                            outcome: BatchFixOutcome::Reverted(format!(
+                                "fix introduced {} new finding(s)",
+                                new.len()
+                            )),
+                        });
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "sicario: warning — verification failed for {}, reverting: {e}",
+                            rule_id
+                        );
+                        let _ = self.revert_patch(&patch);
+                        result.reverted += 1;
+                        result.details.push(BatchFixDetail {
+                            rule_id,
+                            file_path,
+                            outcome: BatchFixOutcome::Reverted(format!(
+                                "verification error: {e}"
+                            )),
+                        });
+                    }
+                }
+            } else {
+                // No verification — count as applied
+                eprintln!("sicario: patch applied for {}", rule_id);
+                result.applied += 1;
+                result.details.push(BatchFixDetail {
+                    rule_id,
+                    file_path,
+                    outcome: BatchFixOutcome::Applied,
+                });
+            }
+        }
+
+        Ok(result)
+    }
 }
 
-// ── Vulnerability classification ──────────────────────────────────────────────
+// ── Vulnerability classification (kept for backward compatibility) ─────────────
+// The canonical versions now live in `templates.rs`. These are retained so
+// existing unit tests in this module continue to compile.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 enum VulnType {
     SqlInjection,
     Xss,
@@ -297,6 +521,7 @@ enum VulnType {
 }
 
 /// Classify a vulnerability by its `cwe_id` and `rule_id`.
+#[allow(dead_code)]
 fn classify_vulnerability(vuln: &Vulnerability) -> VulnType {
     // Check CWE first (most reliable)
     if let Some(cwe) = &vuln.cwe_id {
@@ -330,10 +555,13 @@ fn classify_vulnerability(vuln: &Vulnerability) -> VulnType {
     VulnType::Unknown
 }
 
-// ── Template fix implementations ──────────────────────────────────────────────
+// ── Template fix implementations (kept for backward compatibility) ─────────────
+// The canonical versions now live in `templates.rs`. These are retained so
+// existing unit tests in this module continue to compile.
 
 /// Apply SQL injection template fix: replace string concatenation/interpolation
 /// with parameterized queries. Supports Python, JavaScript, Java, Go, Rust.
+#[allow(dead_code)]
 fn apply_sql_injection_template(original: &str, vuln: &Vulnerability) -> String {
     let lang = detect_language_name(&vuln.file_path).to_lowercase();
     let target_line = vuln.line.saturating_sub(1);
@@ -408,6 +636,7 @@ fn apply_sql_injection_template(original: &str, vuln: &Vulnerability) -> String 
 
 /// Apply XSS template fix: replace dangerous HTML output with context-appropriate
 /// encoding/escaping.
+#[allow(dead_code)]
 fn apply_xss_template(original: &str, vuln: &Vulnerability) -> String {
     let lang = detect_language_name(&vuln.file_path).to_lowercase();
     let target_line = vuln.line.saturating_sub(1);
@@ -472,6 +701,7 @@ fn apply_xss_template(original: &str, vuln: &Vulnerability) -> String {
 
 /// Apply command injection template fix: replace shell invocations with
 /// allowlist-validated arguments.
+#[allow(dead_code)]
 fn apply_command_injection_template(original: &str, vuln: &Vulnerability) -> String {
     let lang = detect_language_name(&vuln.file_path).to_lowercase();
     let target_line = vuln.line.saturating_sub(1);
@@ -564,6 +794,7 @@ fn apply_command_injection_template(original: &str, vuln: &Vulnerability) -> Str
 
 /// For unknown vulnerability types, insert a warning comment rather than
 /// returning the original unchanged (Requirement 11.10).
+#[allow(dead_code)]
 fn apply_unknown_template(original: &str, vuln: &Vulnerability) -> String {
     let desc = vuln.cwe_id.as_deref().unwrap_or(&vuln.rule_id);
     apply_comment_warning(
@@ -578,6 +809,7 @@ fn apply_unknown_template(original: &str, vuln: &Vulnerability) -> String {
 
 /// Insert a warning comment above the vulnerable line. This ensures the output
 /// always differs from the original (Requirement 11.10).
+#[allow(dead_code)]
 fn apply_comment_warning(original: &str, vuln: &Vulnerability, message: &str) -> String {
     let lang = detect_language_name(&vuln.file_path).to_lowercase();
     let target_line = vuln.line.saturating_sub(1);
@@ -603,6 +835,7 @@ fn apply_comment_warning(original: &str, vuln: &Vulnerability, message: &str) ->
 }
 
 /// Format a comment in the appropriate style for the language.
+#[allow(dead_code)]
 fn format_comment(lang: &str, message: &str) -> String {
     match lang {
         "python" => format!("# SICARIO WARNING: {}", message),
@@ -611,11 +844,13 @@ fn format_comment(lang: &str, message: &str) -> String {
 }
 
 /// Get the leading whitespace of a line.
+#[allow(dead_code)]
 fn get_indent(line: &str) -> String {
     line.chars().take_while(|c| c.is_whitespace()).collect()
 }
 
 /// Replace a single line in the source with a (possibly multi-line) replacement.
+#[allow(dead_code)]
 fn replace_line(original: &str, line_idx: usize, replacement: &str) -> String {
     let lines: Vec<&str> = original.lines().collect();
     let mut result: Vec<String> = Vec::with_capacity(lines.len());
@@ -690,7 +925,7 @@ pub fn display_diff_and_confirm_with_io(
 // ── Standalone helpers ────────────────────────────────────────────────────────
 
 /// Detect the human-readable language name from a file path extension.
-fn detect_language_name(path: &Path) -> String {
+pub(crate) fn detect_language_name(path: &Path) -> String {
     match path.extension().and_then(|e| e.to_str()) {
         Some("js") => "JavaScript".to_string(),
         Some("ts") | Some("tsx") => "TypeScript".to_string(),

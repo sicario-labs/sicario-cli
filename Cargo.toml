@@ -18,6 +18,8 @@ tree-sitter-python = "0.20"
 tree-sitter-rust = "0.20"
 tree-sitter-go = "0.20"
 tree-sitter-java = "0.20"
+# tree-sitter-ruby and tree-sitter-php: no compatible crate at 0.20 API;
+# Ruby/PHP syntax validation falls back to "unknown language" rejection path.
 
 # TUI
 ratatui = "0.26"
@@ -121,7 +123,7 @@ miette = { version = "7", features = ["fancy"] }
 # Config for 'cargo dist'
 [workspace.metadata.dist]
 # The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.14.1"
+cargo-dist-version = "0.22.0"
 # CI backends to support
 ci = ["github"]
 # The installers to generate for each app

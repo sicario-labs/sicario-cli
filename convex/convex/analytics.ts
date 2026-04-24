@@ -2,10 +2,10 @@ import { query } from "./_generated/server";
 import { v } from "convex/values";
 
 export const overview = query({
-  args: {},
-  handler: async (ctx) => {
-    const findings = await ctx.db.query("findings").collect();
-    const scans = await ctx.db.query("scans").collect();
+  args: { orgId: v.string() },
+  handler: async (ctx, args) => {
+    const findings = await ctx.db.query("findings").withIndex("by_orgId", (q) => q.eq("orgId", args.orgId)).collect();
+    const scans = await ctx.db.query("scans").withIndex("by_orgId", (q) => q.eq("orgId", args.orgId)).collect();
 
     let total = 0, open = 0, fixed = 0, ignored = 0;
     let critical = 0, high = 0, medium = 0, low = 0, info = 0;
@@ -50,12 +50,13 @@ export const overview = query({
 
 export const trends = query({
   args: {
+    orgId: v.string(),
     from: v.optional(v.string()),
     to: v.optional(v.string()),
     interval: v.optional(v.string()),
   },
-  handler: async (ctx) => {
-    const findings = await ctx.db.query("findings").collect();
+  handler: async (ctx, args) => {
+    const findings = await ctx.db.query("findings").withIndex("by_orgId", (q) => q.eq("orgId", args.orgId)).collect();
 
     const byDay: Record<string, { open: number; new: number; fixed: number }> = {};
 
@@ -83,9 +84,9 @@ export const trends = query({
 });
 
 export const mttr = query({
-  args: {},
-  handler: async (ctx) => {
-    const findings = await ctx.db.query("findings").collect();
+  args: { orgId: v.string() },
+  handler: async (ctx, args) => {
+    const findings = await ctx.db.query("findings").withIndex("by_orgId", (q) => q.eq("orgId", args.orgId)).collect();
 
     let totalHours = 0;
     let count = 0;
@@ -119,21 +120,12 @@ export const mttr = query({
 });
 
 export const topVulnerableProjects = query({
-  args: {},
-  handler: async (ctx) => {
-    const projects = await ctx.db.query("projects").collect();
-    const scans = await ctx.db.query("scans").collect();
-    const findings = await ctx.db.query("findings").collect();
+  args: { orgId: v.string() },
+  handler: async (ctx, args) => {
+    const projects = await ctx.db.query("projects").withIndex("by_orgId", (q) => q.eq("orgId", args.orgId)).collect();
+    const findings = await ctx.db.query("findings").withIndex("by_orgId", (q) => q.eq("orgId", args.orgId)).collect();
 
-    // Build scanId → projectId map
-    const scanToProject: Record<string, string> = {};
-    for (const scan of scans) {
-      if (scan.projectId) {
-        scanToProject[scan.scanId] = scan.projectId;
-      }
-    }
-
-    // Group open findings by projectId
+    // Group open findings by projectId (using f.projectId directly, no scans join needed)
     const openStates = new Set(["Open", "Reviewing", "ToFix"]);
     const projectStats: Record<
       string,
@@ -141,7 +133,7 @@ export const topVulnerableProjects = query({
     > = {};
 
     for (const f of findings) {
-      const projectId = scanToProject[f.scanId];
+      const projectId = f.projectId;
       if (!projectId) continue;
       if (!openStates.has(f.triageState)) continue;
 
@@ -179,9 +171,9 @@ export const topVulnerableProjects = query({
 });
 
 export const owaspCompliance = query({
-  args: {},
-  handler: async (ctx) => {
-    const findings = await ctx.db.query("findings").collect();
+  args: { orgId: v.string() },
+  handler: async (ctx, args) => {
+    const findings = await ctx.db.query("findings").withIndex("by_orgId", (q) => q.eq("orgId", args.orgId)).collect();
 
     const resolvedStates = new Set(["Fixed", "Ignored", "AutoIgnored"]);
     const openStates = new Set(["Open", "Reviewing", "ToFix"]);
@@ -249,10 +241,10 @@ export const owaspCompliance = query({
 });
 
 export const findingsByLanguage = query({
-  args: {},
-  handler: async (ctx) => {
-    const scans = await ctx.db.query("scans").collect();
-    const findings = await ctx.db.query("findings").collect();
+  args: { orgId: v.string() },
+  handler: async (ctx, args) => {
+    const scans = await ctx.db.query("scans").withIndex("by_orgId", (q) => q.eq("orgId", args.orgId)).collect();
+    const findings = await ctx.db.query("findings").withIndex("by_orgId", (q) => q.eq("orgId", args.orgId)).collect();
 
     // Group findings by scanId
     const findingsByScan: Record<string, number> = {};

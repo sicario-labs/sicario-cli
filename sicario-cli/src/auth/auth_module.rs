@@ -83,32 +83,63 @@ impl AuthModule {
         let code_challenge = compute_code_challenge(&code_verifier);
 
         let url = format!("{}/oauth/device/code", self.auth_server_url);
-        let resp = self
-            .http
-            .post(&url)
-            .form(&[
-                ("client_id", self.client_id.as_str()),
-                ("code_challenge", &code_challenge),
-                ("code_challenge_method", "S256"),
-            ])
-            .send()?;
 
-        if !resp.status().is_success() {
-            bail!(
-                "Device authorization request failed with status {}",
-                resp.status()
-            );
+        // Retry up to 3 times on network errors with exponential backoff (1s, 2s, 4s)
+        let mut last_err = None;
+        let mut backoff = Duration::from_secs(1);
+        for attempt in 0..4 {
+            match self
+                .http
+                .post(&url)
+                .form(&[
+                    ("client_id", self.client_id.as_str()),
+                    ("code_challenge", &code_challenge),
+                    ("code_challenge_method", "S256"),
+                ])
+                .send()
+            {
+                Ok(resp) => {
+                    if !resp.status().is_success() {
+                        bail!(
+                            "Device authorization request failed with status {}",
+                            resp.status()
+                        );
+                    }
+
+                    let raw: RawDeviceCodeResponse = resp.json()?;
+                    let device_response = DeviceCodeResponse {
+                        device_code: raw.device_code,
+                        user_code: raw.user_code,
+                        verification_uri: raw.verification_uri,
+                        interval: raw.interval,
+                    };
+
+                    return Ok((device_response, code_verifier));
+                }
+                Err(e) => {
+                    // Only retry on network/connection errors, not HTTP status errors
+                    if e.is_connect() || e.is_timeout() || e.is_request() {
+                        last_err = Some(e);
+                        if attempt < 3 {
+                            eprintln!(
+                                "  Network error, retrying in {}s (attempt {}/3)...",
+                                backoff.as_secs(),
+                                attempt + 1
+                            );
+                            std::thread::sleep(backoff);
+                            backoff *= 2;
+                            continue;
+                        }
+                    } else {
+                        return Err(e.into());
+                    }
+                }
+            }
         }
 
-        let raw: RawDeviceCodeResponse = resp.json()?;
-        let device_response = DeviceCodeResponse {
-            device_code: raw.device_code,
-            user_code: raw.user_code,
-            verification_uri: raw.verification_uri,
-            interval: raw.interval,
-        };
-
-        Ok((device_response, code_verifier))
+        Err(last_err
+            .map(|e| anyhow!("Device authorization request failed after 3 retries: {}", e))
+            .unwrap_or_else(|| anyhow!("Device authorization request failed")))
     }
 
     /// Poll the token endpoint until the user completes authentication or the
@@ -126,7 +157,8 @@ impl AuthModule {
         expires_in: u64,
     ) -> Result<TokenResponse> {
         let url = format!("{}/oauth/token", self.auth_server_url);
-        let poll_interval = Duration::from_secs(interval.max(1));
+        let mut current_interval = Duration::from_secs(interval.max(1));
+        let max_interval = Duration::from_secs(30);
         let deadline = if expires_in > 0 {
             Some(Instant::now() + Duration::from_secs(expires_in))
         } else {
@@ -140,7 +172,7 @@ impl AuthModule {
                 }
             }
 
-            std::thread::sleep(poll_interval);
+            std::thread::sleep(current_interval);
 
             let resp = self
                 .http
@@ -174,8 +206,8 @@ impl AuthModule {
                         continue;
                     }
                     "slow_down" => {
-                        // Server requests slower polling
-                        std::thread::sleep(poll_interval);
+                        // RFC 8628 §3.5: double the interval on slow_down, capped at 30s
+                        current_interval = (current_interval * 2).min(max_interval);
                         continue;
                     }
                     "access_denied" => {
@@ -214,6 +246,11 @@ impl AuthModule {
             .send()?;
 
         if !resp.status().is_success() {
+            if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+                bail!(
+                    "Your session has expired. Run `sicario login` to re-authenticate."
+                );
+            }
             bail!("Token refresh failed with status {}", resp.status());
         }
 
@@ -298,12 +335,17 @@ impl AuthModule {
 
         // Poll for token
         let token_url = format!("{}/oauth/token", cloud_auth_url);
-        let poll_interval = Duration::from_secs(raw.interval.max(1));
+        let mut current_interval = Duration::from_secs(raw.interval.max(1));
+        let max_interval = Duration::from_secs(30);
         let deadline = if raw.expires_in > 0 {
             Some(Instant::now() + Duration::from_secs(raw.expires_in))
         } else {
             Some(Instant::now() + Duration::from_secs(300)) // 5 min default
         };
+
+        let polling_start = Instant::now();
+        let mut last_progress = Instant::now();
+        let progress_interval = Duration::from_secs(30);
 
         loop {
             if let Some(dl) = deadline {
@@ -312,7 +354,17 @@ impl AuthModule {
                 }
             }
 
-            std::thread::sleep(poll_interval);
+            // Print periodic progress message every 30 seconds
+            if last_progress.elapsed() >= progress_interval {
+                let elapsed = polling_start.elapsed().as_secs();
+                eprintln!(
+                    "  Still waiting for browser authentication... ({}s elapsed)",
+                    elapsed
+                );
+                last_progress = Instant::now();
+            }
+
+            std::thread::sleep(current_interval);
 
             let resp = self
                 .http
@@ -333,7 +385,12 @@ impl AuthModule {
                     return Ok(());
                 }
                 RawTokenResult::Error(e) => match e.error.as_str() {
-                    "authorization_pending" | "slow_down" => continue,
+                    "authorization_pending" => continue,
+                    "slow_down" => {
+                        // RFC 8628 §3.5: double the interval on slow_down, capped at 30s
+                        current_interval = (current_interval * 2).min(max_interval);
+                        continue;
+                    }
                     "access_denied" => bail!("Login denied by user."),
                     "expired_token" => bail!("Device code expired."),
                     other => {

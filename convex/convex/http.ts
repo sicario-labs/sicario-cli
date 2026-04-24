@@ -39,6 +39,56 @@ function corsHeaders() {
   };
 }
 
+/**
+ * Resolve the authenticated user from either:
+ * 1. Convex Auth JWT (standard browser sessions), or
+ * 2. Opaque `sic_` token from the device auth flow (CLI sessions).
+ *
+ * Returns `{ subject, email?, name? }` or `null` if unauthenticated.
+ */
+async function resolveIdentity(
+  ctx: any,
+  request?: Request,
+): Promise<{ subject: string; email?: string; name?: string } | null> {
+  // 1. Try Convex Auth JWT first
+  try {
+    const identity = await ctx.auth.getUserIdentity();
+    if (identity) {
+      return {
+        subject: identity.subject,
+        email: identity.email ?? undefined,
+        name: identity.name ?? undefined,
+      };
+    }
+  } catch {
+    // JWT parsing failed — fall through to opaque token lookup
+  }
+
+  // 2. Extract Bearer token from Authorization header
+  const authHeader = request
+    ? request.headers.get("Authorization")
+    : null;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return null;
+  }
+  const token = authHeader.slice(7).trim();
+  if (!token) return null;
+
+  // 3. Look up opaque token in deviceCodes table
+  try {
+    const record = await ctx.runQuery(api.deviceAuth.getByAccessToken, {
+      accessToken: token,
+    });
+    if (record && record.userId) {
+      return { subject: record.userId };
+    }
+  } catch {
+    // Lookup failed — treat as unauthenticated
+  }
+
+  return null;
+}
+
 // ── Helper: extract repo name from URL ───────────────────────────────────────
 function repoNameFromUrl(url: string): string {
   try {
@@ -56,8 +106,8 @@ http.route({
   path: "/api/v1/scans",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
-    // Validate Bearer token
-    const identity = await ctx.auth.getUserIdentity();
+    // Validate Bearer token (supports both Convex Auth JWT and opaque sic_ tokens)
+    const identity = await resolveIdentity(ctx, request);
     if (!identity) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -171,8 +221,8 @@ http.route({
 http.route({
   path: "/api/v1/whoami",
   method: "GET",
-  handler: httpAction(async (ctx, _request) => {
-    const identity = await ctx.auth.getUserIdentity();
+  handler: httpAction(async (ctx, request) => {
+    const identity = await resolveIdentity(ctx, request);
     if (!identity) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -381,8 +431,8 @@ http.route({
 http.route({
   path: "/api/v1/provider-settings",
   method: "GET",
-  handler: httpAction(async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
+  handler: httpAction(async (ctx, request) => {
+    const identity = await resolveIdentity(ctx, request);
     if (!identity) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -391,7 +441,9 @@ http.route({
     }
 
     try {
-      const settings = await ctx.runQuery(api.providerSettings.getForUser, {});
+      const settings = await ctx.runQuery(api.providerSettings.getForUserById, {
+        userId: identity.subject,
+      });
       if (!settings) {
         return new Response(JSON.stringify({ error: "No provider settings found" }), {
           status: 404,
@@ -425,7 +477,7 @@ http.route({
   path: "/api/v1/provider-settings",
   method: "PUT",
   handler: httpAction(async (ctx, request) => {
-    const identity = await ctx.auth.getUserIdentity();
+    const identity = await resolveIdentity(ctx, request);
     if (!identity) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -435,7 +487,8 @@ http.route({
 
     try {
       const body = await request.json();
-      await ctx.runMutation(api.providerSettings.upsert, {
+      await ctx.runMutation(api.providerSettings.upsertById, {
+        userId: identity.subject,
         providerName: body.provider_name || body.providerName || "",
         endpoint: body.endpoint || "",
         model: body.model || "",
@@ -459,8 +512,8 @@ http.route({
 http.route({
   path: "/api/v1/provider-settings",
   method: "DELETE",
-  handler: httpAction(async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
+  handler: httpAction(async (ctx, request) => {
+    const identity = await resolveIdentity(ctx, request);
     if (!identity) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -469,7 +522,9 @@ http.route({
     }
 
     try {
-      await ctx.runMutation(api.providerSettings.remove, {});
+      await ctx.runMutation(api.providerSettings.removeById, {
+        userId: identity.subject,
+      });
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
         headers: { "Content-Type": "application/json", ...corsHeaders() },
@@ -487,8 +542,8 @@ http.route({
 http.route({
   path: "/api/v1/provider-settings/key",
   method: "GET",
-  handler: httpAction(async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
+  handler: httpAction(async (ctx, request) => {
+    const identity = await resolveIdentity(ctx, request);
     if (!identity) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -497,7 +552,9 @@ http.route({
     }
 
     try {
-      const result = await ctx.runQuery(api.providerSettings.getDecryptedKey, {});
+      const result = await ctx.runQuery(api.providerSettings.getDecryptedKeyById, {
+        userId: identity.subject,
+      });
       if (!result) {
         return new Response(JSON.stringify({ error: "No API key stored" }), {
           status: 404,

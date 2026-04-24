@@ -16,6 +16,7 @@ export const get = query({
 
 export const list = query({
   args: {
+    orgId: v.string(),
     page: v.optional(v.number()),
     perPage: v.optional(v.number()),
     severity: v.optional(v.string()),
@@ -27,11 +28,30 @@ export const list = query({
     const page = args.page ?? 1;
     const perPage = args.perPage ?? 20;
 
-    const allFindings = await ctx.db.query("findings").order("desc").collect();
+    // Use composite indexes when a single filter is provided, otherwise base org index
+    let baseQuery;
+    if (args.severity) {
+      baseQuery = ctx.db
+        .query("findings")
+        .withIndex("by_orgId_severity", (q) =>
+          q.eq("orgId", args.orgId).eq("severity", args.severity!)
+        );
+    } else if (args.triageState) {
+      baseQuery = ctx.db
+        .query("findings")
+        .withIndex("by_orgId_triageState", (q) =>
+          q.eq("orgId", args.orgId).eq("triageState", args.triageState!)
+        );
+    } else {
+      baseQuery = ctx.db
+        .query("findings")
+        .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId));
+    }
 
+    const allFindings = await baseQuery.collect();
+
+    // JS-level filtering for confidenceMin and scanId
     const filtered = allFindings.filter((f) => {
-      if (args.severity && f.severity !== args.severity) return false;
-      if (args.triageState && f.triageState !== args.triageState) return false;
       if (args.confidenceMin !== undefined && f.confidenceScore < args.confidenceMin) return false;
       if (args.scanId && f.scanId !== args.scanId) return false;
       return true;
@@ -118,11 +138,34 @@ export const bulkTriage = mutation({
 
 export const listForExport = query({
   args: {
+    orgId: v.string(),
     severity: v.optional(v.string()),
     triageState: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const allFindings = await ctx.db.query("findings").collect();
+    // Use composite indexes when a single filter is provided, otherwise base org index
+    let baseQuery;
+    if (args.severity) {
+      baseQuery = ctx.db
+        .query("findings")
+        .withIndex("by_orgId_severity", (q) =>
+          q.eq("orgId", args.orgId).eq("severity", args.severity!)
+        );
+    } else if (args.triageState) {
+      baseQuery = ctx.db
+        .query("findings")
+        .withIndex("by_orgId_triageState", (q) =>
+          q.eq("orgId", args.orgId).eq("triageState", args.triageState!)
+        );
+    } else {
+      baseQuery = ctx.db
+        .query("findings")
+        .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId));
+    }
+
+    const allFindings = await baseQuery.collect();
+
+    // JS-level filtering for remaining filters not handled by the index
     return allFindings
       .filter((f) => {
         if (args.severity && f.severity !== args.severity) return false;
@@ -156,6 +199,7 @@ const SEVERITY_ORDER: Record<string, number> = {
 
 export const listAdvanced = query({
   args: {
+    orgId: v.string(),
     severity: v.optional(v.array(v.string())),
     triageState: v.optional(v.array(v.string())),
     search: v.optional(v.string()),
@@ -170,7 +214,27 @@ export const listAdvanced = query({
     perPage: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const allFindings = await ctx.db.query("findings").collect();
+    // Use composite indexes when a single filter is provided, otherwise base org index
+    let baseQuery;
+    if (args.severity && args.severity.length === 1) {
+      baseQuery = ctx.db
+        .query("findings")
+        .withIndex("by_orgId_severity", (q) =>
+          q.eq("orgId", args.orgId).eq("severity", args.severity![0])
+        );
+    } else if (args.triageState && args.triageState.length === 1) {
+      baseQuery = ctx.db
+        .query("findings")
+        .withIndex("by_orgId_triageState", (q) =>
+          q.eq("orgId", args.orgId).eq("triageState", args.triageState![0])
+        );
+    } else {
+      baseQuery = ctx.db
+        .query("findings")
+        .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId));
+    }
+
+    const allFindings = await baseQuery.collect();
 
     const filtered = allFindings.filter((f) => {
       if (args.severity && args.severity.length > 0 && !args.severity.includes(f.severity)) return false;
@@ -256,6 +320,7 @@ export const getTimeline = query({
 
 export const getAdjacentIds = query({
   args: {
+    orgId: v.string(),
     currentId: v.string(),
     severity: v.optional(v.array(v.string())),
     triageState: v.optional(v.array(v.string())),
@@ -265,7 +330,10 @@ export const getAdjacentIds = query({
     sortOrder: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const allFindings = await ctx.db.query("findings").collect();
+    const allFindings = await ctx.db
+      .query("findings")
+      .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId))
+      .collect();
 
     const filtered = allFindings.filter((f) => {
       if (args.severity && args.severity.length > 0 && !args.severity.includes(f.severity)) return false;

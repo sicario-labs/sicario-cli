@@ -157,28 +157,41 @@ export const list = query({
     const offset = (page - 1) * perPage;
     const paged = filtered.slice(offset, offset + perPage);
 
-    // Enrich each scan with its findings count
-    const items = await Promise.all(
-      paged.map(async (s) => {
-        const findings = await ctx.db
-          .query("findings")
-          .withIndex("by_scanId", (q) => q.eq("scanId", s.scanId))
-          .collect();
-        return {
-          id: s.scanId,
-          repository: s.repository,
-          branch: s.branch,
-          commit_sha: s.commitSha,
-          timestamp: s.timestamp,
-          duration_ms: s.durationMs,
-          rules_loaded: s.rulesLoaded,
-          files_scanned: s.filesScanned,
-          language_breakdown: s.languageBreakdown,
-          tags: s.tags,
-          findings_count: findings.length,
-        };
-      }),
-    );
+    // Batch-load findings counts to avoid N+1 query pattern
+    const countByScanId: Record<string, number> = {};
+    if (args.orgId) {
+      // When orgId is available, load all findings for the org in one query
+      const allFindings = await ctx.db
+        .query("findings")
+        .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId))
+        .collect();
+      for (const f of allFindings) {
+        countByScanId[f.scanId] = (countByScanId[f.scanId] ?? 0) + 1;
+      }
+    } else {
+      // Fallback: batch-load findings for all scanIds on the current page
+      const scanIds = new Set(paged.map((s) => s.scanId));
+      const allFindings = await ctx.db.query("findings").collect();
+      for (const f of allFindings) {
+        if (scanIds.has(f.scanId)) {
+          countByScanId[f.scanId] = (countByScanId[f.scanId] ?? 0) + 1;
+        }
+      }
+    }
+
+    const items = paged.map((s) => ({
+      id: s.scanId,
+      repository: s.repository,
+      branch: s.branch,
+      commit_sha: s.commitSha,
+      timestamp: s.timestamp,
+      duration_ms: s.durationMs,
+      rules_loaded: s.rulesLoaded,
+      files_scanned: s.filesScanned,
+      language_breakdown: s.languageBreakdown,
+      tags: s.tags,
+      findings_count: countByScanId[s.scanId] ?? 0,
+    }));
 
     return { page, per_page: perPage, total, items };
   },

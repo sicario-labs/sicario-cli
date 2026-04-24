@@ -3,9 +3,13 @@ import { v } from "convex/values";
 import { requireRole } from "./rbac";
 
 export const list = query({
-  args: {},
-  handler: async (ctx) => {
-    const teams = await ctx.db.query("teams").order("desc").collect();
+  args: { orgId: v.string() },
+  handler: async (ctx, args) => {
+    const teams = await ctx.db
+      .query("teams")
+      .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId))
+      .order("desc")
+      .collect();
     return teams.map(mapTeam);
   },
 });

@@ -13,6 +13,9 @@ pub mod token_store;
 #[cfg(test)]
 pub mod auth_property_tests;
 
+#[cfg(test)]
+pub mod preservation_property_tests;
+
 pub use auth_module::AuthModule;
 pub use pkce::{compute_code_challenge, generate_code_verifier};
 pub use token_store::TokenStore;

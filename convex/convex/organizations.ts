@@ -91,8 +91,41 @@ export const createOrg = mutation({
 });
 
 /**
+ * Check whether the authenticated user has at least one org membership.
+ * Returns a boolean so the frontend can skip the ensureOrg mutation for
+ * returning users, avoiding an unnecessary write on every page load.
+ */
+export const hasOrg = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return false;
+    }
+
+    const userId =
+      identity.tokenIdentifier.split("|").pop() ??
+      identity.tokenIdentifier;
+
+    const membership = await ctx.db
+      .query("memberships")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .first();
+
+    return membership !== null;
+  },
+});
+
+/**
  * List all organizations the authenticated user belongs to.
  * Joins memberships → organizations to return org details + user role.
+ *
+ * N+1 trade-off note: The Promise.all below issues one indexed `.first()`
+ * lookup per membership. This is the idiomatic Convex pattern and is
+ * acceptable here because N (memberships per user) is bounded and small
+ * (typically < 10). Each lookup uses the `by_orgId` index, so individual
+ * queries are O(1). Convex does not expose a batch-get API, so this is
+ * the most efficient approach available.
  */
 export const listUserOrgs = query({
   args: {},

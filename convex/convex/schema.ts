@@ -85,7 +85,11 @@ export default defineSchema({
     .index("by_severity", ["severity"])
     .index("by_triageState", ["triageState"])
     .index("by_fingerprint", ["fingerprint"])
-    .index("by_createdAt", ["createdAt"]),
+    .index("by_createdAt", ["createdAt"])
+    .index("by_orgId", ["orgId"])
+    .index("by_orgId_severity", ["orgId", "severity"])
+    .index("by_orgId_triageState", ["orgId", "triageState"])
+    .index("by_orgId_createdAt", ["orgId", "createdAt"]),
 
   webhooks: defineTable({
     webhookId: v.string(),
@@ -147,7 +151,8 @@ export default defineSchema({
     createdAt: v.string(),
   })
     .index("by_deviceCode", ["deviceCode"])
-    .index("by_userCode", ["userCode"]),
+    .index("by_userCode", ["userCode"])
+    .index("by_accessToken", ["accessToken"]),
 
   providerSettings: defineTable({
     userId: v.string(),

@@ -200,3 +200,129 @@ export const remove = mutation({
     return { success: true };
   },
 });
+
+// ── ById variants (for HTTP handlers using opaque CLI tokens) ────────────────
+
+/**
+ * Return provider settings by explicit userId.
+ * Used by HTTP handlers when auth is resolved via opaque token (CLI device flow).
+ */
+export const getForUserById = query({
+  args: { userId: v.string() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("providerSettings")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .first();
+
+    if (!row) return null;
+
+    return {
+      providerName: row.providerName,
+      endpoint: row.endpoint,
+      model: row.model,
+      hasApiKey: !!row.encryptedApiKey,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  },
+});
+
+/**
+ * Return the decrypted API key by explicit userId.
+ * Used by HTTP handlers when auth is resolved via opaque token (CLI device flow).
+ */
+export const getDecryptedKeyById = query({
+  args: { userId: v.string() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("providerSettings")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .first();
+
+    if (!row || !row.encryptedApiKey) return null;
+
+    const secret = process.env.PROVIDER_KEY_ENCRYPTION_SECRET;
+    if (!secret) {
+      throw new Error("PROVIDER_KEY_ENCRYPTION_SECRET is not configured");
+    }
+
+    const apiKey = await decryptApiKey(row.encryptedApiKey, secret);
+    return { apiKey };
+  },
+});
+
+/**
+ * Create or update provider settings by explicit userId.
+ * Used by HTTP handlers when auth is resolved via opaque token (CLI device flow).
+ */
+export const upsertById = mutation({
+  args: {
+    userId: v.string(),
+    providerName: v.string(),
+    endpoint: v.string(),
+    model: v.string(),
+    apiKey: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const now = new Date().toISOString();
+
+    let encryptedApiKey: string | undefined;
+    if (args.apiKey) {
+      const secret = process.env.PROVIDER_KEY_ENCRYPTION_SECRET;
+      if (!secret) {
+        throw new Error("PROVIDER_KEY_ENCRYPTION_SECRET is not configured");
+      }
+      encryptedApiKey = await encryptApiKey(args.apiKey, secret);
+    }
+
+    const existing = await ctx.db
+      .query("providerSettings")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .first();
+
+    if (existing) {
+      const updates: Record<string, unknown> = {
+        providerName: args.providerName,
+        endpoint: args.endpoint,
+        model: args.model,
+        updatedAt: now,
+      };
+      if (encryptedApiKey !== undefined) {
+        updates.encryptedApiKey = encryptedApiKey;
+      }
+      await ctx.db.patch(existing._id, updates);
+      return existing._id;
+    }
+
+    return await ctx.db.insert("providerSettings", {
+      userId: args.userId,
+      providerName: args.providerName,
+      endpoint: args.endpoint,
+      model: args.model,
+      encryptedApiKey,
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
+/**
+ * Delete provider settings by explicit userId.
+ * Used by HTTP handlers when auth is resolved via opaque token (CLI device flow).
+ */
+export const removeById = mutation({
+  args: { userId: v.string() },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("providerSettings")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .first();
+
+    if (existing) {
+      await ctx.db.delete(existing._id);
+    }
+
+    return { success: true };
+  },
+});

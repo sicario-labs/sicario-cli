@@ -1,7 +1,28 @@
 //! Secure token storage using system keychain
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use keyring::Entry;
+
+/// Helpful error message shown when keychain operations fail (e.g. headless CI).
+const KEYCHAIN_ERROR_HINT: &str =
+    "Could not access system keychain. If running in CI, use SICARIO_API_TOKEN environment variable instead.";
+
+/// Maximum reasonable token length — anything larger is almost certainly corrupted.
+const MAX_TOKEN_LEN: usize = 10_000;
+
+/// Validate that a retrieved token is non-empty and within a reasonable size.
+fn validate_token(token: &str, label: &str) -> Result<()> {
+    if token.is_empty() {
+        anyhow::bail!("{label} retrieved from keychain is empty — it may be corrupted. Try re-authenticating with `sicario login`.");
+    }
+    if token.len() > MAX_TOKEN_LEN {
+        anyhow::bail!(
+            "{label} retrieved from keychain is unreasonably large ({} chars) — it may be corrupted. Try re-authenticating with `sicario login`.",
+            token.len()
+        );
+    }
+    Ok(())
+}
 
 /// Secure token storage
 pub struct TokenStore {
@@ -54,8 +75,9 @@ impl TokenStore {
                 .insert("access_token".to_string(), token.to_string());
             return Ok(());
         }
-        let entry = Entry::new(&self.service_name, "access_token")?;
-        entry.set_password(token)?;
+        let entry = Entry::new(&self.service_name, "access_token")
+            .context(KEYCHAIN_ERROR_HINT)?;
+        entry.set_password(token).context(KEYCHAIN_ERROR_HINT)?;
         Ok(())
     }
 
@@ -70,8 +92,11 @@ impl TokenStore {
                 .cloned()
                 .ok_or_else(|| anyhow::anyhow!("No access token in memory store"));
         }
-        let entry = Entry::new(&self.service_name, "access_token")?;
-        Ok(entry.get_password()?)
+        let entry = Entry::new(&self.service_name, "access_token")
+            .context(KEYCHAIN_ERROR_HINT)?;
+        let token = entry.get_password().context(KEYCHAIN_ERROR_HINT)?;
+        validate_token(&token, "Access token")?;
+        Ok(token)
     }
 
     /// Store a refresh token securely
@@ -83,8 +108,9 @@ impl TokenStore {
                 .insert("refresh_token".to_string(), token.to_string());
             return Ok(());
         }
-        let entry = Entry::new(&self.service_name, "refresh_token")?;
-        entry.set_password(token)?;
+        let entry = Entry::new(&self.service_name, "refresh_token")
+            .context(KEYCHAIN_ERROR_HINT)?;
+        entry.set_password(token).context(KEYCHAIN_ERROR_HINT)?;
         Ok(())
     }
 
@@ -99,8 +125,11 @@ impl TokenStore {
                 .cloned()
                 .ok_or_else(|| anyhow::anyhow!("No refresh token in memory store"));
         }
-        let entry = Entry::new(&self.service_name, "refresh_token")?;
-        Ok(entry.get_password()?)
+        let entry = Entry::new(&self.service_name, "refresh_token")
+            .context(KEYCHAIN_ERROR_HINT)?;
+        let token = entry.get_password().context(KEYCHAIN_ERROR_HINT)?;
+        validate_token(&token, "Refresh token")?;
+        Ok(token)
     }
 
     /// Clear all stored tokens
@@ -110,8 +139,10 @@ impl TokenStore {
             mem.lock().unwrap().clear();
             return Ok(());
         }
-        let access_entry = Entry::new(&self.service_name, "access_token")?;
-        let refresh_entry = Entry::new(&self.service_name, "refresh_token")?;
+        let access_entry = Entry::new(&self.service_name, "access_token")
+            .context(KEYCHAIN_ERROR_HINT)?;
+        let refresh_entry = Entry::new(&self.service_name, "refresh_token")
+            .context(KEYCHAIN_ERROR_HINT)?;
 
         let _ = access_entry.delete_password();
         let _ = refresh_entry.delete_password();
@@ -130,8 +161,9 @@ impl TokenStore {
                 .insert("cloud_api_token".to_string(), token.to_string());
             return Ok(());
         }
-        let entry = Entry::new(&self.service_name, "cloud_api_token")?;
-        entry.set_password(token)?;
+        let entry = Entry::new(&self.service_name, "cloud_api_token")
+            .context(KEYCHAIN_ERROR_HINT)?;
+        entry.set_password(token).context(KEYCHAIN_ERROR_HINT)?;
         Ok(())
     }
 
@@ -146,8 +178,11 @@ impl TokenStore {
                 .cloned()
                 .ok_or_else(|| anyhow::anyhow!("No cloud API token in memory store"));
         }
-        let entry = Entry::new(&self.service_name, "cloud_api_token")?;
-        Ok(entry.get_password()?)
+        let entry = Entry::new(&self.service_name, "cloud_api_token")
+            .context(KEYCHAIN_ERROR_HINT)?;
+        let token = entry.get_password().context(KEYCHAIN_ERROR_HINT)?;
+        validate_token(&token, "Cloud API token")?;
+        Ok(token)
     }
 
     /// Remove the stored cloud API token.
@@ -157,7 +192,8 @@ impl TokenStore {
             mem.lock().unwrap().remove("cloud_api_token");
             return Ok(());
         }
-        let entry = Entry::new(&self.service_name, "cloud_api_token")?;
+        let entry = Entry::new(&self.service_name, "cloud_api_token")
+            .context(KEYCHAIN_ERROR_HINT)?;
         let _ = entry.delete_password();
         Ok(())
     }

@@ -53,6 +53,9 @@ export const approveDeviceCode = mutation({
     userId: v.string(),
   },
   handler: async (ctx, args) => {
+    if (!args.userId || args.userId.trim().length === 0) {
+      throw new Error("userId must be a non-empty string");
+    }
     const record = await ctx.db
       .query("deviceCodes")
       .withIndex("by_userCode", (q) => q.eq("userCode", args.userCode))
@@ -73,19 +76,28 @@ export const approveDeviceCode = mutation({
 
 /**
  * Look up a device code record by device_code (for token polling).
+ * Returns a virtual "expired" status if the code has passed its expiresAt
+ * while still marked as "pending", so the CLI receives a clear signal.
  */
 export const getDeviceCodeByDeviceCode = query({
   args: { deviceCode: v.string() },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const record = await ctx.db
       .query("deviceCodes")
       .withIndex("by_deviceCode", (q) => q.eq("deviceCode", args.deviceCode))
       .first();
+    if (!record) return null;
+    // Queries cannot mutate, so surface expiration as a virtual status
+    if (record.status === "pending" && Date.now() > record.expiresAt) {
+      return { ...record, status: "expired" as const };
+    }
+    return record;
   },
 });
 
 /**
  * Mark a device code as consumed and store the access token.
+ * Also checks expiration — if the code has expired, patches status and rejects.
  */
 export const consumeDeviceCode = mutation({
   args: {
@@ -98,10 +110,56 @@ export const consumeDeviceCode = mutation({
       .withIndex("by_deviceCode", (q) => q.eq("deviceCode", args.deviceCode))
       .first();
     if (!record) throw new Error("Device code not found");
+    if (record.status === "pending" && Date.now() > record.expiresAt) {
+      await ctx.db.patch(record._id, { status: "expired" });
+      throw new Error("Device code has expired");
+    }
+    if (record.status !== "approved") {
+      throw new Error(`Device code is not approved (status: ${record.status})`);
+    }
     await ctx.db.patch(record._id, {
       status: "consumed",
       accessToken: args.accessToken,
     });
     return { success: true };
+  },
+});
+
+/**
+ * Look up a consumed device code by its access token.
+ * Used by HTTP API endpoints to authenticate CLI requests that send
+ * opaque `sic_` tokens instead of Convex Auth JWTs.
+ */
+export const getByAccessToken = query({
+  args: { accessToken: v.string() },
+  handler: async (ctx, args) => {
+    const record = await ctx.db
+      .query("deviceCodes")
+      .withIndex("by_accessToken", (q) => q.eq("accessToken", args.accessToken))
+      .first();
+    if (!record) return null;
+    if (record.status !== "consumed") return null;
+    return { userId: record.userId ?? null };
+  },
+});
+
+/**
+ * Cleanup mutation that deletes device codes older than 24 hours.
+ * Can be called periodically or as a Convex cron to prevent table bloat.
+ */
+export const cleanupExpiredDeviceCodes = mutation({
+  handler: async (ctx) => {
+    const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
+    const staleRecords = await ctx.db
+      .query("deviceCodes")
+      .collect();
+    let deleted = 0;
+    for (const record of staleRecords) {
+      if (record.expiresAt < twentyFourHoursAgo) {
+        await ctx.db.delete(record._id);
+        deleted++;
+      }
+    }
+    return { deleted };
   },
 });

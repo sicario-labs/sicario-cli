@@ -128,7 +128,11 @@ export const createV2 = mutation({
   },
   handler: async (ctx, args) => {
     const now = new Date().toISOString();
-    const projectApiKey = crypto.randomUUID();
+    // Generate a proper project API key with prefix
+    const randomPart = Array.from(crypto.getRandomValues(new Uint8Array(24)))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    const projectApiKey = `sic_proj_${randomPart}`;
 
     await ctx.db.insert("projects", {
       projectId: args.id,

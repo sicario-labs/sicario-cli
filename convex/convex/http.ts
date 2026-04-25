@@ -866,14 +866,6 @@ http.route({
   method: "GET",
   handler: httpAction(async (ctx, request) => {
     try {
-      const identity = await resolveIdentity(ctx, request);
-      if (!identity) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401,
-          headers: { "Content-Type": "application/json", ...corsHeaders() },
-        });
-      }
-
       const url = new URL(request.url);
       const installationId = url.searchParams.get("installation_id");
       if (!installationId) {

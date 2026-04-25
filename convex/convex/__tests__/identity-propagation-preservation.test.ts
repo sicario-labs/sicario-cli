@@ -143,7 +143,7 @@ describe("Preservation 3.2: Pending Device Codes Reject Token Exchange", () => {
           expect(isExpired).toBe(false);
 
           // Then check status — pending is NOT approved, so it should throw
-          const isApproved = record.status === "approved";
+          const isApproved = (record.status as string) === "approved";
           expect(isApproved).toBe(false);
 
           // The error message matches the source code
@@ -377,7 +377,7 @@ describe("Preservation: consumeDeviceCode Transitions Approved to Consumed", () 
           };
 
           // Not expired (expiresAt is in the future)
-          const isExpired = record.status === "pending" && Date.now() > record.expiresAt;
+          const isExpired = (record.status as string) === "pending" && Date.now() > record.expiresAt;
           expect(isExpired).toBe(false);
 
           // Status is approved — consumption proceeds

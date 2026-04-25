@@ -16,9 +16,9 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       const normalizedEmail = email.toLowerCase();
 
       // Query pending invitations matching this email
-      const pendingInvitations = await ctx.db
-        .query("pendingInvitations")
-        .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
+      const pendingInvitations = await (ctx.db
+        .query("pendingInvitations") as any)
+        .withIndex("by_email", (q: any) => q.eq("email", normalizedEmail))
         .collect();
 
       if (pendingInvitations.length === 0) return;

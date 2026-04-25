@@ -27,7 +27,11 @@ pub enum ConnectionState {
 pub struct ConvexConfig {
     /// WebSocket URL of the Convex deployment, e.g. `wss://your-project.convex.cloud`
     pub ws_url: String,
-    /// JWT access token for Authorization header
+    /// JWT access token for Authorization header.
+    ///
+    /// Should be the full header value including the scheme, e.g.
+    /// `"Bearer {token}"` or `"Bearer project:{key}"`.
+    /// Use `AuthModule::resolve_auth_token()` to obtain this value.
     pub auth_token: String,
     /// Maximum number of reconnection attempts before giving up (0 = unlimited)
     pub max_reconnect_attempts: u32,
@@ -238,7 +242,8 @@ fn connect_and_run(
 
     request.headers_mut().insert(
         "Authorization",
-        format!("Bearer {}", config.auth_token)
+        config
+            .auth_token
             .parse()
             .context("Invalid auth token for header")?,
     );

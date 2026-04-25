@@ -193,6 +193,64 @@ impl TokenStore {
         let _ = entry.delete_password();
         Ok(())
     }
+
+    // ── Project API key methods ───────────────────────────────────────────
+
+    /// Store a project API key securely.
+    pub fn store_project_api_key(&self, key: &str) -> Result<()> {
+        #[cfg(test)]
+        if let Some(ref mem) = self.memory {
+            mem.lock()
+                .unwrap()
+                .insert("project_api_key".to_string(), key.to_string());
+            return Ok(());
+        }
+        let entry =
+            Entry::new(&self.service_name, "project_api_key").context(KEYCHAIN_ERROR_HINT)?;
+        entry.set_password(key).context(KEYCHAIN_ERROR_HINT)?;
+        Ok(())
+    }
+
+    /// Retrieve the project API key.
+    ///
+    /// Checks the `SICARIO_PROJECT_API_KEY` environment variable first,
+    /// falling back to the system keychain.
+    pub fn get_project_api_key(&self) -> Result<String> {
+        // Environment variable takes precedence
+        if let Ok(key) = std::env::var("SICARIO_PROJECT_API_KEY") {
+            if !key.is_empty() {
+                return Ok(key);
+            }
+        }
+
+        #[cfg(test)]
+        if let Some(ref mem) = self.memory {
+            return mem
+                .lock()
+                .unwrap()
+                .get("project_api_key")
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("No project API key in memory store"));
+        }
+        let entry =
+            Entry::new(&self.service_name, "project_api_key").context(KEYCHAIN_ERROR_HINT)?;
+        let key = entry.get_password().context(KEYCHAIN_ERROR_HINT)?;
+        validate_token(&key, "Project API key")?;
+        Ok(key)
+    }
+
+    /// Remove the stored project API key.
+    pub fn clear_project_api_key(&self) -> Result<()> {
+        #[cfg(test)]
+        if let Some(ref mem) = self.memory {
+            mem.lock().unwrap().remove("project_api_key");
+            return Ok(());
+        }
+        let entry =
+            Entry::new(&self.service_name, "project_api_key").context(KEYCHAIN_ERROR_HINT)?;
+        let _ = entry.delete_password();
+        Ok(())
+    }
 }
 
 impl Default for TokenStore {

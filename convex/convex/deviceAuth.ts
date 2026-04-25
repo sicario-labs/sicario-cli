@@ -51,6 +51,8 @@ export const approveDeviceCode = mutation({
   args: {
     userCode: v.string(),
     userId: v.string(),
+    userName: v.optional(v.string()),
+    userEmail: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     if (!args.userId || args.userId.trim().length === 0) {
@@ -69,6 +71,8 @@ export const approveDeviceCode = mutation({
     await ctx.db.patch(record._id, {
       status: "approved",
       userId: args.userId,
+      userName: args.userName,
+      userEmail: args.userEmail,
     });
     return { success: true };
   },
@@ -139,7 +143,7 @@ export const getByAccessToken = query({
       .first();
     if (!record) return null;
     if (record.status !== "consumed") return null;
-    return { userId: record.userId ?? null };
+    return { userId: record.userId ?? null, userName: record.userName ?? null, userEmail: record.userEmail ?? null };
   },
 });
 

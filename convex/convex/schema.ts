@@ -192,6 +192,8 @@ export default defineSchema({
     clientId: v.string(),
     scope: v.optional(v.string()),
     userId: v.optional(v.string()),
+    userName: v.optional(v.string()),
+    userEmail: v.optional(v.string()),
     status: v.string(), // "pending" | "approved" | "denied" | "expired"
     expiresAt: v.number(),
     accessToken: v.optional(v.string()),

@@ -124,7 +124,7 @@ async function resolveIdentity(
       accessToken: token,
     });
     if (record && record.userId) {
-      return { subject: record.userId };
+      return { subject: record.userId, name: record.userName ?? undefined, email: record.userEmail ?? undefined };
     }
   } catch {
     // Lookup failed — treat as unauthenticated

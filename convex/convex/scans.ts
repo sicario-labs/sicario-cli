@@ -58,6 +58,17 @@ export const insert = mutation({
       });
     }
 
+    // Transition project provisioning state from "pending" to "active" on first scan
+    if (projectId) {
+      const project = await ctx.db
+        .query("projects")
+        .withIndex("by_projectId", (q) => q.eq("projectId", projectId))
+        .first();
+      if (project && project.provisioningState === "pending") {
+        await ctx.db.patch(project._id, { provisioningState: "active" });
+      }
+    }
+
     return { scanId };
   },
 });

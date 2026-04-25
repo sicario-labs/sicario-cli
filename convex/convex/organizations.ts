@@ -2,6 +2,14 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 /**
+ * Returns true if the string looks like a raw Convex internal hash:
+ * 20+ alphanumeric characters with no spaces.
+ */
+function looksLikeHash(str: string): boolean {
+  return /^[a-z0-9]{20,}$/i.test(str);
+}
+
+/**
  * Ensure the authenticated user has an organization and membership.
  * If no membership exists, auto-creates a personal org + admin membership.
  * Idempotent — safe to call on every dashboard load.
@@ -25,13 +33,31 @@ export const ensureOrg = mutation({
       .first();
 
     if (existing) {
+      // Self-heal: if the org has a hash-based name and we now have a real name, fix it
+      const betterName = identity.name ?? identity.email ?? null;
+      if (betterName) {
+        const org = await ctx.db
+          .query("organizations")
+          .withIndex("by_orgId", (q) => q.eq("orgId", existing.orgId))
+          .first();
+        if (org) {
+          // Check if the org name follows the "<hash>'s Organization" pattern
+          const namePrefix = org.name.replace(/'s Organization$/, "");
+          if (looksLikeHash(namePrefix)) {
+            await ctx.db.patch(org._id, {
+              name: `${betterName}'s Organization`,
+            });
+          }
+        }
+      }
       return { orgId: existing.orgId, isNew: false };
     }
 
     // Create a new personal org
     const orgId = crypto.randomUUID();
     const now = new Date().toISOString();
-    const displayName = identity.name ?? identity.email ?? userId;
+    const rawDisplayName = identity.name ?? identity.email ?? userId;
+    const displayName = looksLikeHash(rawDisplayName) ? "User" : rawDisplayName;
 
     await ctx.db.insert("organizations", {
       orgId,

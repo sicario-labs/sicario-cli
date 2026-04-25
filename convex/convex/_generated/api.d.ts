@@ -15,6 +15,7 @@ import type * as crons from "../crons.js";
 import type * as deviceAuth from "../deviceAuth.js";
 import type * as findings from "../findings.js";
 import type * as githubApp from "../githubApp.js";
+import type * as githubAppNode from "../githubAppNode.js";
 import type * as http from "../http.js";
 import type * as memberships from "../memberships.js";
 import type * as organizations from "../organizations.js";
@@ -43,6 +44,7 @@ declare const fullApi: ApiFromModules<{
   deviceAuth: typeof deviceAuth;
   findings: typeof findings;
   githubApp: typeof githubApp;
+  githubAppNode: typeof githubAppNode;
   http: typeof http;
   memberships: typeof memberships;
   organizations: typeof organizations;

@@ -74,7 +74,7 @@ function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Auth-Token",
   };
 }
 
@@ -103,14 +103,19 @@ async function resolveIdentity(
     // JWT parsing failed — fall through to opaque token lookup
   }
 
-  // 2. Extract Bearer token from Authorization header
-  const authHeader = request
-    ? request.headers.get("Authorization")
-    : null;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return null;
+  // 2. Extract token from X-Auth-Token header or Authorization header
+  let token: string | null = null;
+  if (request) {
+    const xAuthToken = request.headers.get("X-Auth-Token");
+    if (xAuthToken) {
+      token = xAuthToken.trim();
+    } else {
+      const authHeader = request.headers.get("Authorization");
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        token = authHeader.slice(7).trim();
+      }
+    }
   }
-  const token = authHeader.slice(7).trim();
   if (!token) return null;
 
   // 3. Look up opaque token in deviceCodes table

@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 // ── Interfaces ──────────────────────────────────────────────────────────────
 
 export interface SastRule {
@@ -101,16 +99,29 @@ export function detectLanguage(filePath: string): string | null {
 // ── Fingerprint ─────────────────────────────────────────────────────────────
 
 /**
- * Compute a deterministic SHA-256 fingerprint for a finding.
+ * Compute a deterministic fingerprint for a finding.
+ * Uses a fast string hash suitable for deduplication (not cryptographic).
  */
 export function computeFingerprint(
   ruleId: string,
   filePath: string,
   snippet: string,
 ): string {
-  return createHash("sha256")
-    .update(`${ruleId}:${filePath}:${snippet}`)
-    .digest("hex");
+  const input = `${ruleId}:${filePath}:${snippet}`;
+  // FNV-1a inspired hash producing a 64-char hex string for compatibility
+  let h1 = 0x811c9dc5 >>> 0;
+  let h2 = 0x01000193 >>> 0;
+  for (let i = 0; i < input.length; i++) {
+    const c = input.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+    h2 = Math.imul(h2 ^ c, 0x811c9dc5) >>> 0;
+  }
+  // Repeat to fill 64 hex chars
+  const seg1 = h1.toString(16).padStart(8, "0");
+  const seg2 = h2.toString(16).padStart(8, "0");
+  const seg3 = (h1 ^ h2).toString(16).padStart(8, "0");
+  const seg4 = Math.imul(h1, h2).toString(16).padStart(8, "0");
+  return (seg1 + seg2 + seg3 + seg4 + seg1 + seg2 + seg3 + seg4).slice(0, 64);
 }
 
 // ── Threshold Evaluation ────────────────────────────────────────────────────

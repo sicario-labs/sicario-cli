@@ -216,9 +216,11 @@ http.route({
           }
           orgId = requestedOrgId;
         } else {
-          // Look up the user's first membership
-          const userOrgs: any[] = await ctx.runQuery(api.organizations.listUserOrgs);
-          if (!userOrgs || userOrgs.length === 0) {
+          // Look up the user's first membership directly by userId
+          const memberships: any[] = await ctx.runQuery(api.memberships.listByUser, {
+            userId,
+          });
+          if (!memberships || memberships.length === 0) {
             return new Response(
               JSON.stringify({ error: "No organization membership found. Please create an organization first." }),
               {
@@ -227,7 +229,7 @@ http.route({
               }
             );
           }
-          orgId = userOrgs[0].orgId;
+          orgId = memberships[0].orgId;
         }
 
         // ── (c) Match repository to existing project in this org ────────

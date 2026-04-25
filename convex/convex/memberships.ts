@@ -138,3 +138,17 @@ function mapMembership(m: any) {
     created_at: m.createdAt,
   };
 }
+
+/**
+ * List all memberships for a user (used by HTTP actions for CLI auth).
+ */
+export const listByUser = query({
+  args: { userId: v.string() },
+  handler: async (ctx, args) => {
+    const memberships = await ctx.db
+      .query("memberships")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .collect();
+    return memberships.map((m) => ({ orgId: m.orgId, role: m.role }));
+  },
+});

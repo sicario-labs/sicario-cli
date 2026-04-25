@@ -22,39 +22,39 @@ export const list = query({
       .collect();
 
     // Resolve display names from Convex Auth users table.
-    // Build a lookup: scan all auth users once, then match by checking
-    // if the membership userId appears in any user's tokenIdentifier.
-    let userNameMap = new Map<string, string>();
-    try {
-      const allUsers = await ctx.db.query("users").collect();
-      for (const user of allUsers) {
-        const name = (user as any).name ?? (user as any).email ?? null;
-        if (name) {
-          // Store by Convex document ID string representation
-          userNameMap.set(user._id.toString(), name);
+    // The membership userId is tokenIdentifier.split("|").pop() which is
+    // the Convex Auth users table document ID (as a string).
+    return await Promise.all(
+      memberships.map(async (m) => {
+        let displayName: string | null = null;
+        try {
+          // Try to use the userId directly as a Convex document ID
+          const user = await ctx.db.get(m.userId as any);
+          if (user) {
+            displayName = (user as any).name ?? (user as any).email ?? null;
+          }
+        } catch {
+          // Not a valid document ID — fall back to scanning
         }
-      }
-    } catch {
-      // users table lookup failed
-    }
 
-    return memberships.map((m) => {
-      // Try to find display name: the userId might be a Convex doc ID or a hash
-      let displayName = userNameMap.get(m.userId) ?? null;
-
-      // If no direct match, check if any user's ID ends with the membership userId
-      // (tokenIdentifier format: "issuer|docId" → split("|").pop() = docId)
-      if (!displayName) {
-        for (const [docId, name] of userNameMap.entries()) {
-          if (docId === m.userId || m.userId === docId) {
-            displayName = name;
-            break;
+        // If direct lookup failed, scan users table for a match
+        if (!displayName) {
+          try {
+            const allUsers = await ctx.db.query("users").collect();
+            for (const user of allUsers) {
+              if (user._id.toString() === m.userId) {
+                displayName = (user as any).name ?? (user as any).email ?? null;
+                break;
+              }
+            }
+          } catch {
+            // users table scan failed
           }
         }
-      }
 
-      return mapMembership(m, displayName);
-    });
+        return mapMembership(m, displayName);
+      })
+    );
   },
 });
 

@@ -424,11 +424,58 @@ http.route({
       });
     }
 
+    // Normalize userId for profile lookup
+    const rawUserId = identity.subject;
+    const userId = rawUserId.includes("|") ? rawUserId.split("|").pop()! : rawUserId;
+
+    // Look up user profile for name/email
+    let username = identity.name ?? identity.email ?? "unknown";
+    let email = identity.email ?? "";
+
+    try {
+      const profile = await ctx.runQuery(api.userProfiles.get, { userId });
+      if (profile && (profile as any).name) {
+        username = (profile as any).name;
+      }
+      if (profile && (profile as any).email) {
+        email = (profile as any).email;
+      }
+    } catch {
+      // Profile lookup failed — use identity defaults
+    }
+
+    // If still unknown, try to get from Convex Auth identity
+    if (username === "unknown") {
+      try {
+        const authIdentity = await ctx.auth.getUserIdentity();
+        if (authIdentity) {
+          username = authIdentity.name ?? authIdentity.email ?? username;
+          email = authIdentity.email ?? email;
+        }
+      } catch {
+        // Not a Convex Auth session
+      }
+    }
+
+    // Look up org name
+    let orgName = "personal";
+    try {
+      const memberships: any[] = await ctx.runQuery(api.memberships.listByUser, { userId });
+      if (memberships && memberships.length > 0) {
+        const org = await ctx.runQuery(api.organizations.getByOrgId, { orgId: memberships[0].orgId });
+        if (org) {
+          orgName = (org as any).name ?? "personal";
+        }
+      }
+    } catch {
+      // Org lookup failed
+    }
+
     return new Response(
       JSON.stringify({
-        username: identity.name ?? identity.email ?? "unknown",
-        email: identity.email ?? "",
-        organization: "personal",
+        username,
+        email,
+        organization: orgName,
         plan_tier: "free",
       }),
       {

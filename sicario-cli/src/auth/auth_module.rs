@@ -379,7 +379,36 @@ impl AuthModule {
             match raw_result {
                 RawTokenResult::Success(s) => {
                     self.token_store.store_cloud_token(&s.access_token)?;
-                    eprintln!("  Logged in to Sicario Cloud successfully.");
+
+                    // Fetch user info to show "Authenticated as:"
+                    let whoami_url = format!("{}/api/v1/whoami", cloud_auth_url.trim_end_matches('/'));
+                    if let Ok(whoami_resp) = reqwest::blocking::Client::new()
+                        .get(&whoami_url)
+                        .header("Authorization", format!("Bearer {}", s.access_token))
+                        .timeout(std::time::Duration::from_secs(5))
+                        .send()
+                    {
+                        if whoami_resp.status().is_success() {
+                            if let Ok(info) = whoami_resp.json::<serde_json::Value>() {
+                                let user = info.get("username").and_then(|v| v.as_str()).unwrap_or("unknown");
+                                let email = info.get("email").and_then(|v| v.as_str()).unwrap_or("");
+                                let org = info.get("organization").and_then(|v| v.as_str()).unwrap_or("personal");
+                                if !email.is_empty() {
+                                    eprintln!("  Authenticated as: {} ({})", user, email);
+                                } else {
+                                    eprintln!("  Authenticated as: {}", user);
+                                }
+                                eprintln!("  Organization: {}", org);
+                            } else {
+                                eprintln!("  Logged in to Sicario Cloud successfully.");
+                            }
+                        } else {
+                            eprintln!("  Logged in to Sicario Cloud successfully.");
+                        }
+                    } else {
+                        eprintln!("  Logged in to Sicario Cloud successfully.");
+                    }
+
                     return Ok(());
                 }
                 RawTokenResult::Error(e) => match e.error.as_str() {
@@ -452,5 +481,26 @@ impl AuthModule {
     /// Get the stored cloud API token, if any.
     pub fn get_cloud_token(&self) -> Result<String> {
         self.token_store.get_cloud_token()
+    }
+
+    /// Resolve the best available auth token for Convex API calls.
+    ///
+    /// Priority:
+    /// 1. Cloud OAuth token → `"Bearer {token}"`
+    /// 2. Project API key   → `"Bearer project:{key}"`
+    /// 3. Error with instructions
+    pub fn resolve_auth_token(&self) -> Result<String> {
+        // 1. Try cloud OAuth token first (preferred)
+        if let Ok(token) = self.token_store.get_cloud_token() {
+            return Ok(format!("Bearer {}", token));
+        }
+
+        // 2. Fall back to project API key
+        if let Ok(key) = self.token_store.get_project_api_key() {
+            return Ok(format!("Bearer project:{}", key));
+        }
+
+        // 3. Neither credential available
+        bail!("Run `sicario login` or set `SICARIO_PROJECT_API_KEY`")
     }
 }

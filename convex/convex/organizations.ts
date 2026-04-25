@@ -163,3 +163,19 @@ export const listUserOrgs = query({
     return orgs.filter((o) => o !== null);
   },
 });
+
+
+/**
+ * Get an organization by its orgId.
+ */
+export const getByOrgId = query({
+  args: { orgId: v.string() },
+  handler: async (ctx, args) => {
+    const org = await ctx.db
+      .query("organizations")
+      .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId))
+      .first();
+    if (!org) return null;
+    return { orgId: org.orgId, name: org.name, createdAt: org.createdAt };
+  },
+});

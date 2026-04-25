@@ -5,9 +5,9 @@ import { v } from "convex/values";
 import { api } from "./_generated/api";
 import {
   requireGitHubAppEnv,
-  generateAppJwt,
   getInstallationToken,
 } from "./githubApp";
+import * as crypto from "crypto";
 import {
   scanFiles,
   detectLanguage,
@@ -16,6 +16,33 @@ import {
   type ScanFinding,
 } from "./prSastEngine";
 import { PR_SAST_RULES } from "./prSastRules";
+
+// ── Helper: Generate JWT using Node.js crypto (handles PKCS#1 keys) ─────────
+
+function base64UrlEncode(data: Buffer): string {
+  return data.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function generateJwt(appId: string, privateKeyPem: string): string {
+  const now = Math.floor(Date.now() / 1000);
+  const header = base64UrlEncode(
+    Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })),
+  );
+  const payload = base64UrlEncode(
+    Buffer.from(JSON.stringify({ iss: appId, iat: now - 60, exp: now + 600 })),
+  );
+  const signingInput = `${header}.${payload}`;
+  // Normalize PEM: strip surrounding quotes, replace literal \n with real newlines
+  let normalizedPem = privateKeyPem.trim();
+  if (normalizedPem.startsWith("'") && normalizedPem.endsWith("'")) {
+    normalizedPem = normalizedPem.slice(1, -1);
+  }
+  normalizedPem = normalizedPem.replace(/\\n/g, "\n");
+  const sign = crypto.createSign("RSA-SHA256");
+  sign.update(signingInput);
+  const signature = sign.sign(normalizedPem);
+  return `${signingInput}.${base64UrlEncode(signature)}`;
+}
 
 // ── Helper: Build Check Run Summary ─────────────────────────────────────────
 
@@ -108,7 +135,7 @@ export const runPrScan = action({
 
       // Step 2: Acquire installation token
       const env = requireGitHubAppEnv();
-      const jwt = await generateAppJwt(env.appId, env.privateKey);
+      const jwt = generateJwt(env.appId, env.privateKey);
       const installationToken = await getInstallationToken(
         jwt,
         args.installationId,

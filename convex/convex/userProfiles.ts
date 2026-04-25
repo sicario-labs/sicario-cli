@@ -1,20 +1,46 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { getAuthUserId } from "@convex-dev/auth/server";
 
 /**
  * Return the currently authenticated user's identity.
  * Used by the frontend to get name, email, picture, and a stable userId.
+ *
+ * Falls back to the Convex Auth `users` table when the JWT claims
+ * don't include name/email (common with GitHub OAuth).
  */
 export const currentIdentity = query({
   args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
+
+    let name = identity.name ?? null;
+    let email = identity.email ?? null;
+    let pictureUrl = identity.pictureUrl ?? null;
+
+    // If JWT claims lack name/email, look up the Convex Auth users table
+    if (!name || !email) {
+      try {
+        const userId = await getAuthUserId(ctx);
+        if (userId) {
+          const user = await ctx.db.get(userId);
+          if (user) {
+            name = name ?? (user as any).name ?? null;
+            email = email ?? (user as any).email ?? null;
+            pictureUrl = pictureUrl ?? (user as any).image ?? null;
+          }
+        }
+      } catch {
+        // Auth user lookup failed — use JWT defaults
+      }
+    }
+
     return {
       tokenIdentifier: identity.tokenIdentifier,
-      name: identity.name ?? null,
-      email: identity.email ?? null,
-      pictureUrl: identity.pictureUrl ?? null,
+      name,
+      email,
+      pictureUrl,
     };
   },
 });

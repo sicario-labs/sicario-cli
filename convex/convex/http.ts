@@ -457,6 +457,31 @@ http.route({
       }
     }
 
+    // If still unknown, try the Convex Auth users table directly
+    if (username === "unknown" || email === "") {
+      try {
+        // The userId from device auth is the tokenIdentifier hash.
+        // We need to find the auth user by querying the users table.
+        // Try looking up by email index first, or scan for matching user.
+        const authIdentity = await ctx.auth.getUserIdentity();
+        if (authIdentity) {
+          const authUserId = authIdentity.subject;
+          // subject for Convex Auth is the users table document ID
+          const user = await ctx.db.get(authUserId as any);
+          if (user) {
+            if (username === "unknown" && (user as any).name) {
+              username = (user as any).name;
+            }
+            if (!email && (user as any).email) {
+              email = (user as any).email;
+            }
+          }
+        }
+      } catch {
+        // Auth users table lookup failed
+      }
+    }
+
     // Look up org name
     let orgName = "personal";
     try {

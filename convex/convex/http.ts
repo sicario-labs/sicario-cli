@@ -767,9 +767,22 @@ http.route({
 // ── GitHub App utilities (inlined to avoid module import crash) ──────────────
 
 function ghBase64UrlEncode(data: Uint8Array): string {
-  let binary = "";
-  for (const b of data) binary += String.fromCharCode(b);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  let result = "";
+  let i = 0;
+  while (i < data.length) {
+    const a = data[i++] ?? 0;
+    const b = i < data.length ? data[i++] : 0;
+    const c = i < data.length ? data[i++] : 0;
+    const triplet = (a << 16) | (b << 8) | c;
+    const padding = data.length - (i - (i < data.length ? 0 : (3 - (data.length % 3)) % 3));
+    result += base64Chars[(triplet >> 18) & 0x3f];
+    result += base64Chars[(triplet >> 12) & 0x3f];
+    result += (i - 2 < data.length) ? base64Chars[(triplet >> 6) & 0x3f] : "";
+    result += (i - 1 < data.length) ? base64Chars[triplet & 0x3f] : "";
+  }
+  // Convert to base64url
+  return result.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 function ghBase64UrlEncodeString(str: string): string {
@@ -808,7 +821,23 @@ async function generateAppJwt(appId: string, privateKeyPem: string): Promise<str
     .replace(/-----END (?:RSA )?PRIVATE KEY-----/g, "")
     .replace(/\s/g, "");
 
-  const binaryDer = Uint8Array.from(atob(pemBody), (c) => c.charCodeAt(0));
+  // Decode base64 to binary without atob (Convex runtime compatibility)
+  const base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const bytes: number[] = [];
+  let buffer = 0;
+  let bits = 0;
+  for (const ch of pemBody) {
+    if (ch === "=") break;
+    const val = base64Chars.indexOf(ch);
+    if (val === -1) continue;
+    buffer = (buffer << 6) | val;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      bytes.push((buffer >> bits) & 0xff);
+    }
+  }
+  const binaryDer = new Uint8Array(bytes);
 
   const key = await crypto.subtle.importKey(
     "pkcs8",
@@ -875,19 +904,11 @@ http.route({
         );
       }
 
-      let env;
-      try {
-        env = requireGitHubAppEnv();
-      } catch (e: any) {
-        return new Response(
-          JSON.stringify({ error: e.message || "Missing GitHub App configuration" }),
-          { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders() } },
-        );
-      }
+      // Delegate to Node.js action for JWT signing + GitHub API calls
+      const repos = await ctx.runAction(api.githubAppNode.fetchInstallationRepos, {
+        installationId,
+      });
 
-      const jwt = await generateAppJwt(env.appId, env.privateKey);
-      const token = await getInstallationToken(jwt, installationId);
-      const repos = await listInstallationRepos(token);
       return new Response(JSON.stringify(repos), {
         status: 200,
         headers: { "Content-Type": "application/json", ...corsHeaders() },

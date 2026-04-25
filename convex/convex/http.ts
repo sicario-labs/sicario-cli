@@ -369,7 +369,23 @@ http.route({
           repositoryUrl: repoUrl,
         });
 
-        // TODO: trigger actual scan workflow on the PR diff
+        // Schedule the PR scan workflow
+        const installationId = matchedProject.github_app_installation_id;
+        if (!installationId) {
+          await ctx.runMutation(api.prChecks.updatePrCheck, {
+            checkId,
+            status: "failed",
+          });
+        } else {
+          await ctx.scheduler.runAfter(0, (api as any).prScanWorkflow.runPrScan, {
+            checkId,
+            repositoryUrl: repoUrl,
+            prNumber,
+            projectId,
+            orgId,
+            installationId,
+          });
+        }
         return new Response(
           JSON.stringify({ ok: true, checkId }),
           { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders() } },
@@ -467,7 +483,7 @@ http.route({
         if (authIdentity) {
           const authUserId = authIdentity.subject;
           // subject for Convex Auth is the users table document ID
-          const user = await ctx.db.get(authUserId as any);
+          const user = await (ctx as any).db.get(authUserId as any);
           if (user) {
             if (username === "unknown" && (user as any).name) {
               username = (user as any).name;

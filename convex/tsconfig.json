@@ -9,6 +9,7 @@
     "noEmit": true,
     "isolatedModules": true,
     "skipLibCheck": true,
+    "types": ["node"],
     "paths": {
       "convex/*": ["./convex/*"]
     }

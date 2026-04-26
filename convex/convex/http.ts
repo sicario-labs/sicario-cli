@@ -884,7 +884,7 @@ function ghBase64UrlEncodeString(str: string): string {
 
 const GH_REQUIRED_ENV_VARS = [
   "GITHUB_APP_ID",
-  "GITHUB_APP_PRIVATE_KEY",
+  "GITHUB_APP_PRIVATE_KEY_BASE64",
   "GITHUB_APP_CLIENT_ID",
   "GITHUB_APP_CLIENT_SECRET",
 ] as const;
@@ -894,9 +894,13 @@ function requireGitHubAppEnv() {
   if (missing.length > 0) {
     throw new Error(`Missing GitHub App configuration: ${missing.join(", ")}`);
   }
+
+  // Decode the Base64 string back into the strict multiline PEM format required by OpenSSL
+  const formattedPrivateKey = atob(process.env.GITHUB_APP_PRIVATE_KEY_BASE64!);
+
   return {
     appId: process.env.GITHUB_APP_ID!,
-    privateKey: process.env.GITHUB_APP_PRIVATE_KEY!,
+    privateKey: formattedPrivateKey,
     clientId: process.env.GITHUB_APP_CLIENT_ID!,
     clientSecret: process.env.GITHUB_APP_CLIENT_SECRET!,
   };
@@ -908,8 +912,8 @@ async function generateAppJwt(appId: string, privateKeyPem: string): Promise<str
   const payload = ghBase64UrlEncodeString(JSON.stringify({ iss: appId, iat: now - 60, exp: now + 600 }));
   const signingInput = `${header}.${payload}`;
 
-  const normalizedPem = privateKeyPem.replace(/\\n/g, "\n");
-  const pemBody = normalizedPem
+  // Strip PEM headers and whitespace to get raw base64 DER
+  const pemBody = privateKeyPem
     .replace(/-----BEGIN (?:RSA )?PRIVATE KEY-----/g, "")
     .replace(/-----END (?:RSA )?PRIVATE KEY-----/g, "")
     .replace(/\s/g, "");

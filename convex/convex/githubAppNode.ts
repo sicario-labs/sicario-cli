@@ -23,7 +23,7 @@ function base64UrlEncode(data: Buffer): string {
 
 const REQUIRED_ENV_VARS = [
   "GITHUB_APP_ID",
-  "GITHUB_APP_PRIVATE_KEY",
+  "GITHUB_APP_PRIVATE_KEY_BASE64",
   "GITHUB_APP_CLIENT_ID",
   "GITHUB_APP_CLIENT_SECRET",
 ] as const;
@@ -33,9 +33,14 @@ export function requireGitHubAppEnv(): GitHubAppEnv {
   if (missing.length > 0) {
     throw new Error(`Missing GitHub App configuration: ${missing.join(", ")}`);
   }
+
+  const base64Key = process.env.GITHUB_APP_PRIVATE_KEY_BASE64!;
+  // Decode the Base64 string back into the strict multiline PEM format required by OpenSSL
+  const formattedPrivateKey = Buffer.from(base64Key, "base64").toString("ascii");
+
   return {
     appId: process.env.GITHUB_APP_ID!,
-    privateKey: process.env.GITHUB_APP_PRIVATE_KEY!,
+    privateKey: formattedPrivateKey,
     clientId: process.env.GITHUB_APP_CLIENT_ID!,
     clientSecret: process.env.GITHUB_APP_CLIENT_SECRET!,
   };
@@ -55,13 +60,9 @@ export function generateAppJwt(appId: string, privateKeyPem: string): string {
 
   const signingInput = `${header}.${payload}`;
 
-  // Handle stringified newlines from env var storage
-  const rawKey = privateKeyPem;
-  const formattedPrivateKey = rawKey.replace(/\\n/g, "\n");
-
   const sign = crypto.createSign("RSA-SHA256");
   sign.update(signingInput);
-  const signature = sign.sign(formattedPrivateKey);
+  const signature = sign.sign(privateKeyPem);
 
   return `${signingInput}.${base64UrlEncode(signature)}`;
 }

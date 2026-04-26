@@ -321,38 +321,45 @@ export const runPrScan = action({
       }
 
       // Step 11: Post commit status to GitHub (blocks merge button)
-      try {
+      {
         const totalFindings = thresholdResult.totalCount;
-        const state = thresholdResult.passed ? "success" : "failure";
+        const state = totalFindings > 0 ? "failure" : "success";
         const description = totalFindings > 0
           ? `Found ${totalFindings} vulnerabilities. Merge blocked.`
           : "All security checks passed.";
-        const targetUrl = `https://usesicario.xyz/dashboard/pr-checks/${args.checkId}`;
+        const targetUrl = "https://usesicario.xyz/dashboard";
 
-        const statusRes = await fetch(
-          `https://api.github.com/repos/${owner}/${repo}/statuses/${args.headSha}`,
-          {
+        const githubApiUrl = `https://api.github.com/repos/${owner}/${repo}/statuses/${args.headSha}`;
+        const payload = {
+          state,
+          target_url: targetUrl,
+          description,
+          context: "Sicario Security Scan",
+        };
+
+        console.log(`[GITHUB STATUS] Sending to: ${githubApiUrl}`);
+        console.log(`[GITHUB STATUS] Payload:`, JSON.stringify(payload));
+
+        try {
+          const statusRes = await fetch(githubApiUrl, {
             method: "POST",
             headers: {
-              ...headers,
-              "Content-Type": "application/json",
+              Authorization: `Bearer ${installationToken}`,
+              Accept: "application/vnd.github.v3+json",
               "X-GitHub-Api-Version": "2022-11-28",
             },
-            body: JSON.stringify({
-              state,
-              target_url: targetUrl,
-              description,
-              context: "Sicario Security Check",
-            }),
-          },
-        );
+            body: JSON.stringify(payload),
+          });
 
-        if (!statusRes.ok) {
-          const errorData = await statusRes.text();
-          console.error("Failed to post GitHub commit status:", errorData);
+          if (!statusRes.ok) {
+            const errorData = await statusRes.text();
+            console.error("[GITHUB STATUS] Failed response:", statusRes.status, errorData);
+          } else {
+            console.log("[GITHUB STATUS] Successfully posted to GitHub!");
+          }
+        } catch (err) {
+          console.error("[GITHUB STATUS] Fetch exception:", err);
         }
-      } catch (err) {
-        console.error("Error posting status to GitHub:", err);
       }
     } catch (error) {
       // On any error, update prCheck to "failed"

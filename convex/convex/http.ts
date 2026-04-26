@@ -333,6 +333,7 @@ http.route({
     const repoUrl = payload.repository?.html_url ?? "";
     const prNumber = payload.pull_request?.number ?? 0;
     const prTitle = payload.pull_request?.title ?? "";
+    const headSha = payload.pull_request?.head?.sha ?? "";
     const merged = payload.pull_request?.merged === true;
 
     // Resolve projectId from repository URL by scanning all projects
@@ -384,6 +385,7 @@ http.route({
             projectId,
             orgId,
             installationId,
+            headSha,
           });
         }
         return new Response(

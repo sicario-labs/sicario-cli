@@ -54,6 +54,7 @@ export default defineSchema({
     criticalCount: v.number(),
     highCount: v.number(),
     githubCheckRunId: v.optional(v.string()),
+    scanId: v.optional(v.string()),
     createdAt: v.string(),
     updatedAt: v.string(),
   })

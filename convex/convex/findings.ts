@@ -413,3 +413,14 @@ function mapFinding(f: any) {
     updated_at: f.updatedAt,
   };
 }
+
+export const listByScanId = query({
+  args: { scanId: v.string() },
+  handler: async (ctx, args) => {
+    const findings = await ctx.db
+      .query("findings")
+      .withIndex("by_scanId", (q) => q.eq("scanId", args.scanId))
+      .collect();
+    return findings.map(mapFinding);
+  },
+});

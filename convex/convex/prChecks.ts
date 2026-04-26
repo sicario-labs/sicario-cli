@@ -38,6 +38,7 @@ export const updatePrCheck = mutation({
     criticalCount: v.optional(v.number()),
     highCount: v.optional(v.number()),
     githubCheckRunId: v.optional(v.string()),
+    scanId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const record = await ctx.db
@@ -55,6 +56,7 @@ export const updatePrCheck = mutation({
     if (args.criticalCount !== undefined) updates.criticalCount = args.criticalCount;
     if (args.highCount !== undefined) updates.highCount = args.highCount;
     if (args.githubCheckRunId !== undefined) updates.githubCheckRunId = args.githubCheckRunId;
+    if (args.scanId !== undefined) updates.scanId = args.scanId;
 
     await ctx.db.patch(record._id, updates);
   },
@@ -96,7 +98,48 @@ function mapPrCheck(c: any) {
     critical_count: c.criticalCount,
     high_count: c.highCount,
     github_check_run_id: c.githubCheckRunId ?? null,
+    scan_id: c.scanId ?? null,
     created_at: c.createdAt,
     updated_at: c.updatedAt,
   };
 }
+
+export const getByCheckId = query({
+  args: { checkId: v.string() },
+  handler: async (ctx, args) => {
+    const check = await ctx.db
+      .query("prChecks")
+      .withIndex("by_checkId", (q) => q.eq("checkId", args.checkId))
+      .first();
+    if (!check) return null;
+
+    const mapped = mapPrCheck(check);
+
+    // If a scanId is linked, fetch the associated findings
+    if (check.scanId) {
+      const findings = await ctx.db
+        .query("findings")
+        .withIndex("by_scanId", (q) => q.eq("scanId", check.scanId!))
+        .collect();
+      return {
+        ...mapped,
+        findings: findings.map((f) => ({
+          finding_id: f.findingId,
+          rule_id: f.ruleId,
+          rule_name: f.ruleName,
+          file_path: f.filePath,
+          line: f.line,
+          column: f.column,
+          snippet: f.snippet,
+          severity: f.severity,
+          cwe_id: f.cweId ?? null,
+          owasp_category: f.owaspCategory ?? null,
+          fingerprint: f.fingerprint,
+          triage_state: f.triageState,
+        })),
+      };
+    }
+
+    return { ...mapped, findings: [] };
+  },
+});

@@ -283,6 +283,7 @@ export const runPrScan = action({
         criticalCount: thresholdResult.criticalCount,
         highCount: thresholdResult.highCount,
         githubCheckRunId: checkRunId ? String(checkRunId) : undefined,
+        scanId,
       });
 
       // Step 10: Update GitHub Check Run with conclusion

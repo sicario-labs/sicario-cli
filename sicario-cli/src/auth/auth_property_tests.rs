@@ -420,3 +420,378 @@ mod unit {
         assert!(!challenge.contains('='));
     }
 }
+
+// ── Property 4: Auth Priority Chain Resolution ────────────────────────────────
+//
+// For any combination of credential availability states, the auth resolver
+// SHALL always select the highest-priority available credential and format it
+// correctly:
+//   - Project API keys → "Bearer project:{key}"
+//   - Cloud OAuth tokens → "Bearer {token}"
+//
+// Priority order (1 = highest):
+//   1. SICARIO_API_KEY env var
+//   2. Cloud OAuth token from keychain
+//   3. SICARIO_PROJECT_API_KEY env var
+//   4. Project API key from keychain
+//   5. api_key from .sicario/config.yaml
+//
+// Validates: Requirements 14.1, 14.2, 14.6
+
+#[cfg(test)]
+mod prop4_auth_priority_chain {
+    use proptest::prelude::*;
+
+    use crate::auth::auth_module::resolve_auth_token_pure;
+
+    // ── Generators ────────────────────────────────────────────────────────────
+
+    /// Strategy for a non-empty credential value (simulates a real key/token).
+    fn arb_cred() -> impl Strategy<Value = String> {
+        "[a-zA-Z0-9_\\-]{16,64}"
+    }
+
+    /// Strategy for an optional credential: Some(value) or None.
+    fn arb_opt_cred() -> impl Strategy<Value = Option<String>> {
+        prop_oneof![
+            Just(None),
+            arb_cred().prop_map(Some),
+        ]
+    }
+
+    // ── Property 4a: Highest-priority credential is always selected ───────────
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(30))]
+
+        /// Feature: zero-exfil-edge-scanning, Property 4: Auth Priority Chain Resolution
+        ///
+        /// When SICARIO_API_KEY is set (priority 1), it must always be selected
+        /// regardless of what other credentials are available.
+        ///
+        /// Validates: Requirements 14.1, 14.6
+        #[test]
+        fn prop4_sicario_api_key_always_wins(
+            api_key          in arb_cred(),
+            cloud_token      in arb_opt_cred(),
+            project_api_key  in arb_opt_cred(),
+            keychain_key     in arb_opt_cred(),
+            config_key       in arb_opt_cred(),
+        ) {
+            let result = resolve_auth_token_pure(
+                Some(&api_key),
+                cloud_token.as_deref(),
+                project_api_key.as_deref(),
+                keychain_key.as_deref(),
+                config_key.as_deref(),
+            ).expect("should resolve when SICARIO_API_KEY is set");
+
+            prop_assert_eq!(
+                result,
+                format!("Bearer project:{}", api_key),
+                "SICARIO_API_KEY must always be selected as priority 1 and \
+                 formatted as 'Bearer project:{{key}}'"
+            );
+        }
+
+        /// Feature: zero-exfil-edge-scanning, Property 4: Auth Priority Chain Resolution
+        ///
+        /// When SICARIO_API_KEY is absent but a cloud OAuth token is present
+        /// (priority 2), the cloud token must be selected.
+        ///
+        /// Validates: Requirements 14.2, 14.6
+        #[test]
+        fn prop4_cloud_oauth_token_wins_when_api_key_absent(
+            cloud_token      in arb_cred(),
+            project_api_key  in arb_opt_cred(),
+            keychain_key     in arb_opt_cred(),
+            config_key       in arb_opt_cred(),
+        ) {
+            let result = resolve_auth_token_pure(
+                None,                          // no SICARIO_API_KEY
+                Some(&cloud_token),            // cloud OAuth token present
+                project_api_key.as_deref(),
+                keychain_key.as_deref(),
+                config_key.as_deref(),
+            ).expect("should resolve when cloud OAuth token is set");
+
+            prop_assert_eq!(
+                result,
+                format!("Bearer {}", cloud_token),
+                "Cloud OAuth token must be selected as priority 2 and \
+                 formatted as 'Bearer {{token}}' (no 'project:' prefix)"
+            );
+        }
+
+        /// Feature: zero-exfil-edge-scanning, Property 4: Auth Priority Chain Resolution
+        ///
+        /// When priorities 1–2 are absent but SICARIO_PROJECT_API_KEY is set
+        /// (priority 3), it must be selected.
+        ///
+        /// Validates: Requirements 14.1, 14.6
+        #[test]
+        fn prop4_project_api_key_env_wins_at_priority_3(
+            project_api_key  in arb_cred(),
+            keychain_key     in arb_opt_cred(),
+            config_key       in arb_opt_cred(),
+        ) {
+            let result = resolve_auth_token_pure(
+                None,                          // no SICARIO_API_KEY
+                None,                          // no cloud OAuth token
+                Some(&project_api_key),        // SICARIO_PROJECT_API_KEY present
+                keychain_key.as_deref(),
+                config_key.as_deref(),
+            ).expect("should resolve when SICARIO_PROJECT_API_KEY is set");
+
+            prop_assert_eq!(
+                result,
+                format!("Bearer project:{}", project_api_key),
+                "SICARIO_PROJECT_API_KEY must be selected as priority 3 and \
+                 formatted as 'Bearer project:{{key}}'"
+            );
+        }
+
+        /// Feature: zero-exfil-edge-scanning, Property 4: Auth Priority Chain Resolution
+        ///
+        /// When priorities 1–3 are absent but a keychain project key is present
+        /// (priority 4), it must be selected.
+        ///
+        /// Validates: Requirements 14.1, 14.6
+        #[test]
+        fn prop4_keychain_project_key_wins_at_priority_4(
+            keychain_key  in arb_cred(),
+            config_key    in arb_opt_cred(),
+        ) {
+            let result = resolve_auth_token_pure(
+                None,                  // no SICARIO_API_KEY
+                None,                  // no cloud OAuth token
+                None,                  // no SICARIO_PROJECT_API_KEY
+                Some(&keychain_key),   // keychain project key present
+                config_key.as_deref(),
+            ).expect("should resolve when keychain project key is set");
+
+            prop_assert_eq!(
+                result,
+                format!("Bearer project:{}", keychain_key),
+                "Keychain project API key must be selected as priority 4 and \
+                 formatted as 'Bearer project:{{key}}'"
+            );
+        }
+
+        /// Feature: zero-exfil-edge-scanning, Property 4: Auth Priority Chain Resolution
+        ///
+        /// When priorities 1–4 are absent but a config.yaml api_key is present
+        /// (priority 5), it must be selected.
+        ///
+        /// Validates: Requirements 14.4, 14.6
+        #[test]
+        fn prop4_config_api_key_wins_at_priority_5(
+            config_key in arb_cred(),
+        ) {
+            let result = resolve_auth_token_pure(
+                None,              // no SICARIO_API_KEY
+                None,              // no cloud OAuth token
+                None,              // no SICARIO_PROJECT_API_KEY
+                None,              // no keychain project key
+                Some(&config_key), // config.yaml api_key present
+            ).expect("should resolve when config.yaml api_key is set");
+
+            prop_assert_eq!(
+                result,
+                format!("Bearer project:{}", config_key),
+                "config.yaml api_key must be selected as priority 5 and \
+                 formatted as 'Bearer project:{{key}}'"
+            );
+        }
+
+        /// Feature: zero-exfil-edge-scanning, Property 4: Auth Priority Chain Resolution
+        ///
+        /// When no credentials are available at any priority level, the resolver
+        /// must return an error (never panic or return an empty token).
+        ///
+        /// Validates: Requirements 14.3, 14.6
+        #[test]
+        fn prop4_no_credentials_returns_error(_seed in 0u64..u64::MAX) {
+            let result = resolve_auth_token_pure(None, None, None, None, None);
+            prop_assert!(
+                result.is_err(),
+                "resolver must return an error when no credentials are available"
+            );
+            let err_msg = result.unwrap_err().to_string();
+            prop_assert!(
+                err_msg.contains("sicario login") || err_msg.contains("SICARIO_API_KEY"),
+                "error message must mention 'sicario login' or 'SICARIO_API_KEY', got: '{}'",
+                err_msg
+            );
+        }
+
+        /// Feature: zero-exfil-edge-scanning, Property 4: Auth Priority Chain Resolution
+        ///
+        /// For any combination of credential availability, the resolved token
+        /// must always start with "Bearer " (never a bare key or empty string).
+        ///
+        /// Validates: Requirements 14.2
+        #[test]
+        fn prop4_resolved_token_always_starts_with_bearer(
+            api_key         in arb_opt_cred(),
+            cloud_token     in arb_opt_cred(),
+            project_key_env in arb_opt_cred(),
+            keychain_key    in arb_opt_cred(),
+            config_key      in arb_opt_cred(),
+        ) {
+            // Only test cases where at least one credential is available
+            prop_assume!(
+                api_key.is_some()
+                    || cloud_token.is_some()
+                    || project_key_env.is_some()
+                    || keychain_key.is_some()
+                    || config_key.is_some()
+            );
+
+            let result = resolve_auth_token_pure(
+                api_key.as_deref(),
+                cloud_token.as_deref(),
+                project_key_env.as_deref(),
+                keychain_key.as_deref(),
+                config_key.as_deref(),
+            ).expect("should resolve when at least one credential is available");
+
+            prop_assert!(
+                result.starts_with("Bearer "),
+                "resolved token must always start with 'Bearer ', got: '{}'",
+                result
+            );
+        }
+
+        /// Feature: zero-exfil-edge-scanning, Property 4: Auth Priority Chain Resolution
+        ///
+        /// Project API keys (from any source) must always be formatted as
+        /// "Bearer project:{key}" — never as a bare OAuth token.
+        ///
+        /// Validates: Requirements 14.2
+        #[test]
+        fn prop4_project_keys_always_have_project_prefix(
+            key in arb_cred(),
+            // Which project key source to use (0=SICARIO_API_KEY, 1=SICARIO_PROJECT_API_KEY,
+            // 2=keychain, 3=config)
+            source in 0usize..4,
+        ) {
+            let (p1, p2, p3, p4, p5) = match source {
+                0 => (Some(key.as_str()), None, None, None, None),
+                1 => (None, None, Some(key.as_str()), None, None),
+                2 => (None, None, None, Some(key.as_str()), None),
+                _ => (None, None, None, None, Some(key.as_str())),
+            };
+
+            let result = resolve_auth_token_pure(p1, p2, p3, p4, p5)
+                .expect("should resolve when a project key is set");
+
+            prop_assert!(
+                result.starts_with("Bearer project:"),
+                "project API keys must be formatted as 'Bearer project:{{key}}', got: '{}'",
+                result
+            );
+            prop_assert!(
+                result.ends_with(&key),
+                "formatted token must end with the original key value. \
+                 Token: '{}', key: '{}'",
+                result, key
+            );
+        }
+
+        /// Feature: zero-exfil-edge-scanning, Property 4: Auth Priority Chain Resolution
+        ///
+        /// Cloud OAuth tokens must be formatted as "Bearer {token}" — without
+        /// the "project:" prefix that project API keys use.
+        ///
+        /// Validates: Requirements 14.2
+        #[test]
+        fn prop4_cloud_oauth_token_has_no_project_prefix(
+            token in arb_cred(),
+        ) {
+            let result = resolve_auth_token_pure(
+                None,           // no SICARIO_API_KEY (would override)
+                Some(&token),   // cloud OAuth token
+                None,
+                None,
+                None,
+            ).expect("should resolve when cloud OAuth token is set");
+
+            prop_assert!(
+                !result.contains("project:"),
+                "cloud OAuth token must NOT contain 'project:' prefix, got: '{}'",
+                result
+            );
+            prop_assert_eq!(
+                result,
+                format!("Bearer {}", token),
+                "cloud OAuth token must be formatted as 'Bearer {{token}}'"
+            );
+        }
+    }
+
+    // ── Unit tests: deterministic priority examples ───────────────────────────
+
+    #[test]
+    fn unit_priority_1_beats_all_others() {
+        let r = resolve_auth_token_pure(
+            Some("key1"),
+            Some("oauth_tok"),
+            Some("key3"),
+            Some("key4"),
+            Some("key5"),
+        ).unwrap();
+        assert_eq!(r, "Bearer project:key1");
+    }
+
+    #[test]
+    fn unit_priority_2_beats_3_4_5() {
+        let r = resolve_auth_token_pure(
+            None,
+            Some("oauth_tok"),
+            Some("key3"),
+            Some("key4"),
+            Some("key5"),
+        ).unwrap();
+        assert_eq!(r, "Bearer oauth_tok");
+    }
+
+    #[test]
+    fn unit_priority_3_beats_4_5() {
+        let r = resolve_auth_token_pure(None, None, Some("key3"), Some("key4"), Some("key5")).unwrap();
+        assert_eq!(r, "Bearer project:key3");
+    }
+
+    #[test]
+    fn unit_priority_4_beats_5() {
+        let r = resolve_auth_token_pure(None, None, None, Some("key4"), Some("key5")).unwrap();
+        assert_eq!(r, "Bearer project:key4");
+    }
+
+    #[test]
+    fn unit_priority_5_is_last_resort() {
+        let r = resolve_auth_token_pure(None, None, None, None, Some("key5")).unwrap();
+        assert_eq!(r, "Bearer project:key5");
+    }
+
+    #[test]
+    fn unit_all_absent_returns_error() {
+        let r = resolve_auth_token_pure(None, None, None, None, None);
+        assert!(r.is_err());
+        let msg = r.unwrap_err().to_string();
+        assert!(msg.contains("sicario login") || msg.contains("SICARIO_API_KEY"));
+    }
+
+    #[test]
+    fn unit_empty_string_credentials_are_skipped() {
+        // Empty strings must be treated as absent (same as None)
+        let r = resolve_auth_token_pure(
+            Some(""),   // empty → skip
+            Some(""),   // empty → skip
+            Some(""),   // empty → skip
+            Some(""),   // empty → skip
+            Some("key5"),
+        ).unwrap();
+        assert_eq!(r, "Bearer project:key5");
+    }
+}

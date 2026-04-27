@@ -915,12 +915,12 @@ pub fn display_diff_and_confirm_with_io(
         }
     }
 
-    write!(out, "\n{}", "Apply this fix? [y/N] ".bold())?;
+    write!(out, "\n{}", "Apply this fix? [Y/n] ".bold())?;
     out.flush()?;
 
     let mut answer = String::new();
     input.read_line(&mut answer)?;
-    let confirmed = answer.trim().eq_ignore_ascii_case("y");
+    let confirmed = answer.trim().is_empty() || answer.trim().eq_ignore_ascii_case("y");
 
     Ok(confirmed)
 }
@@ -1481,7 +1481,7 @@ mod tests {
     }
 
     #[test]
-    fn test_display_diff_and_confirm_default_no() {
+    fn test_display_diff_and_confirm_default_yes() {
         let patch = Patch::new(
             PathBuf::from("test.py"),
             "old line\n".to_string(),
@@ -1493,7 +1493,7 @@ mod tests {
         let mut output = Vec::new();
         let mut input = io::Cursor::new(b"\n".to_vec());
         let result = display_diff_and_confirm_with_io(&patch, &mut output, &mut input).unwrap();
-        assert!(!result, "Should return false on empty input (default N)");
+        assert!(result, "Should return true on empty input (default Y)");
     }
 
     #[test]

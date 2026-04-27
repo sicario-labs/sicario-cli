@@ -12,6 +12,7 @@
 
 pub mod auth;
 pub mod cloud;
+pub mod config;
 pub mod convex;
 pub mod engine;
 pub mod mcp;
@@ -23,6 +24,7 @@ pub mod scanner;
 pub mod tui;
 
 // New modules added by CLI overhaul
+pub mod audit;
 pub mod baseline;
 pub mod benchmark;
 pub mod cache;
@@ -35,6 +37,7 @@ pub mod lsp;
 pub mod output;
 pub mod publish;
 pub mod rule_harness;
+pub mod snippet;
 pub mod suppression_learner;
 pub mod verification;
 

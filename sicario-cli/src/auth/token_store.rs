@@ -239,6 +239,28 @@ impl TokenStore {
         Ok(key)
     }
 
+    /// Retrieve the project API key from the system keychain only (no env var check).
+    ///
+    /// Unlike `get_project_api_key()`, this method does NOT check the
+    /// `SICARIO_PROJECT_API_KEY` environment variable. Use this when the caller
+    /// needs to control the priority order of credential sources explicitly.
+    pub fn get_project_api_key_from_keychain(&self) -> Result<String> {
+        #[cfg(test)]
+        if let Some(ref mem) = self.memory {
+            return mem
+                .lock()
+                .unwrap()
+                .get("project_api_key")
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("No project API key in memory store"));
+        }
+        let entry =
+            Entry::new(&self.service_name, "project_api_key").context(KEYCHAIN_ERROR_HINT)?;
+        let key = entry.get_password().context(KEYCHAIN_ERROR_HINT)?;
+        validate_token(&key, "Project API key")?;
+        Ok(key)
+    }
+
     /// Remove the stored project API key.
     pub fn clear_project_api_key(&self) -> Result<()> {
         #[cfg(test)]

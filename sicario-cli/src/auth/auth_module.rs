@@ -485,22 +485,89 @@ impl AuthModule {
 
     /// Resolve the best available auth token for Convex API calls.
     ///
-    /// Priority:
-    /// 1. Cloud OAuth token → `"Bearer {token}"`
-    /// 2. Project API key   → `"Bearer project:{key}"`
-    /// 3. Error with instructions
+    /// Priority chain (highest to lowest):
+    /// 1. `SICARIO_API_KEY` env var         → `"Bearer project:{key}"`
+    /// 2. Cloud OAuth token from keychain   → `"Bearer {token}"`
+    /// 3. `SICARIO_PROJECT_API_KEY` env var → `"Bearer project:{key}"`
+    /// 4. Project API key from keychain     → `"Bearer project:{key}"`
+    /// 5. `api_key` field in `.sicario/config.yaml` → `"Bearer project:{key}"`
+    ///
+    /// If none are available, returns an error instructing the user to log in
+    /// or set `SICARIO_API_KEY`.
     pub fn resolve_auth_token(&self) -> Result<String> {
-        // 1. Try cloud OAuth token first (preferred)
+        // 1. SICARIO_API_KEY env var (highest priority — CI override)
+        if let Ok(key) = std::env::var("SICARIO_API_KEY") {
+            if !key.is_empty() {
+                return Ok(format!("Bearer project:{}", key));
+            }
+        }
+
+        // 2. Cloud OAuth token from keychain
         if let Ok(token) = self.token_store.get_cloud_token() {
             return Ok(format!("Bearer {}", token));
         }
 
-        // 2. Fall back to project API key
-        if let Ok(key) = self.token_store.get_project_api_key() {
+        // 3. SICARIO_PROJECT_API_KEY env var
+        if let Ok(key) = std::env::var("SICARIO_PROJECT_API_KEY") {
+            if !key.is_empty() {
+                return Ok(format!("Bearer project:{}", key));
+            }
+        }
+
+        // 4. Project API key from keychain
+        if let Ok(key) = self.token_store.get_project_api_key_from_keychain() {
             return Ok(format!("Bearer project:{}", key));
         }
 
-        // 3. Neither credential available
-        bail!("Run `sicario login` or set `SICARIO_PROJECT_API_KEY`")
+        // 5. api_key field from .sicario/config.yaml
+        let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        if let Some(config) = crate::key_manager::config_file::load_config_file(&cwd) {
+            if let Some(ref api_key) = config.api_key {
+                if !api_key.is_empty() {
+                    return Ok(format!("Bearer project:{}", api_key));
+                }
+            }
+        }
+
+        // No credentials available
+        bail!("Run 'sicario login' or set SICARIO_API_KEY")
     }
+}
+
+/// Pure, side-effect-free credential resolver used exclusively in tests.
+///
+/// Mirrors the exact 5-level priority chain of `AuthModule::resolve_auth_token()`
+/// without touching env vars, the system keychain, or the filesystem.
+/// Each `Option<String>` represents whether that credential source is available.
+///
+/// Priority order (index 0 = highest):
+/// 0. `SICARIO_API_KEY` env var         → `"Bearer project:{key}"`
+/// 1. Cloud OAuth token from keychain   → `"Bearer {token}"`
+/// 2. `SICARIO_PROJECT_API_KEY` env var → `"Bearer project:{key}"`
+/// 3. Project API key from keychain     → `"Bearer project:{key}"`
+/// 4. `api_key` from config.yaml        → `"Bearer project:{key}"`
+#[cfg(test)]
+pub fn resolve_auth_token_pure(
+    sicario_api_key: Option<&str>,
+    cloud_oauth_token: Option<&str>,
+    sicario_project_api_key: Option<&str>,
+    keychain_project_key: Option<&str>,
+    config_api_key: Option<&str>,
+) -> Result<String> {
+    if let Some(key) = sicario_api_key.filter(|k| !k.is_empty()) {
+        return Ok(format!("Bearer project:{}", key));
+    }
+    if let Some(token) = cloud_oauth_token.filter(|t| !t.is_empty()) {
+        return Ok(format!("Bearer {}", token));
+    }
+    if let Some(key) = sicario_project_api_key.filter(|k| !k.is_empty()) {
+        return Ok(format!("Bearer project:{}", key));
+    }
+    if let Some(key) = keychain_project_key.filter(|k| !k.is_empty()) {
+        return Ok(format!("Bearer project:{}", key));
+    }
+    if let Some(key) = config_api_key.filter(|k| !k.is_empty()) {
+        return Ok(format!("Bearer project:{}", key));
+    }
+    anyhow::bail!("Run 'sicario login' or set SICARIO_API_KEY")
 }

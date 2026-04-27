@@ -407,3 +407,123 @@ mod non_blocking_tests {
         }
     }
 }
+
+// ── Property 18: No MCP tool can execute shell commands ───────────────────────
+//
+// For any method name that matches a dangerous shell execution pattern,
+// parse_request() must return METHOD_NOT_FOUND.
+// For any propose_safe_mutation call with dangerous patched_syntax,
+// the guard must reject it.
+//
+// Validates: Architectural Guardrails (Task 14.3)
+
+#[cfg(test)]
+mod security_guard_tests {
+    use crate::mcp::protocol::{parse_request, JsonRpcError};
+    use crate::mcp::security_guard::ShellExecutionGuard;
+    use proptest::prelude::*;
+
+    /// Dangerous patterns from ShellExecutionGuard — mirrored here for test generation.
+    const DANGEROUS_PATTERNS: &[&str] = &[
+        "exec",
+        "shell",
+        "system",
+        "popen",
+        "spawn",
+        "eval",
+        "cmd",
+        "bash",
+        "sh",
+        "powershell",
+        "subprocess",
+        "os.system",
+        "child_process",
+        "execSync",
+        "spawnSync",
+    ];
+
+    /// Generate a method name that contains a dangerous pattern.
+    fn arb_dangerous_method() -> impl Strategy<Value = String> {
+        (
+            prop::sample::select(DANGEROUS_PATTERNS),
+            "[a-z_]{0,10}",
+            "[a-z_]{0,10}",
+        )
+            .prop_map(|(pattern, prefix, suffix)| format!("{}{}{}", prefix, pattern, suffix))
+    }
+
+    /// Generate a patched_syntax string that contains a dangerous pattern.
+    fn arb_dangerous_syntax() -> impl Strategy<Value = String> {
+        (
+            prop::sample::select(DANGEROUS_PATTERNS),
+            "[a-zA-Z0-9 =;(){}]{0,30}",
+            "[a-zA-Z0-9 =;(){}]{0,30}",
+        )
+            .prop_map(|(pattern, prefix, suffix)| format!("{}{}{}", prefix, pattern, suffix))
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(50))]
+
+        /// Property 18a: Any method name containing a dangerous shell execution pattern
+        /// must be rejected by parse_request() with METHOD_NOT_FOUND (-32601).
+        ///
+        /// **Validates: Architectural Guardrails**
+        #[test]
+        fn prop_dangerous_method_names_are_rejected(method in arb_dangerous_method()) {
+            let raw = serde_json::json!({
+                "jsonrpc": "2.0",
+                "method": method,
+                "params": {},
+                "id": 1
+            }).to_string();
+
+            let result = parse_request(&raw);
+            prop_assert!(
+                result.is_err(),
+                "Dangerous method '{}' should be rejected by parse_request",
+                method
+            );
+            if let Err(e) = result {
+                prop_assert_eq!(
+                    e.code,
+                    JsonRpcError::METHOD_NOT_FOUND,
+                    "Dangerous method '{}' should produce METHOD_NOT_FOUND (-32601), got code {}",
+                    method,
+                    e.code
+                );
+                prop_assert!(
+                    e.message.contains("cannot execute shell commands"),
+                    "Error message should mention shell command restriction, got: {}",
+                    e.message
+                );
+            }
+        }
+
+        /// Property 18b: Any propose_safe_mutation call with patched_syntax containing
+        /// a dangerous shell execution pattern must be rejected by ShellExecutionGuard.
+        ///
+        /// **Validates: Architectural Guardrails**
+        #[test]
+        fn prop_dangerous_mutation_syntax_is_rejected(syntax in arb_dangerous_syntax()) {
+            let result = ShellExecutionGuard::validate_mutation(&syntax);
+            prop_assert!(
+                result.is_err(),
+                "Dangerous syntax '{}' should be rejected by ShellExecutionGuard::validate_mutation",
+                syntax
+            );
+            if let Err(msg) = result {
+                prop_assert!(
+                    msg.contains("dangerous shell execution pattern"),
+                    "Error message should describe the danger, got: {}",
+                    msg
+                );
+                prop_assert!(
+                    msg.contains("MCP tools cannot execute shell commands"),
+                    "Error message should state MCP restriction, got: {}",
+                    msg
+                );
+            }
+        }
+    }
+}

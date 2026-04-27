@@ -7,6 +7,7 @@
 
 pub mod assistant_memory;
 pub mod protocol;
+pub mod security_guard;
 pub mod server;
 
 #[cfg(test)]
@@ -14,4 +15,5 @@ mod mcp_property_tests;
 
 pub use assistant_memory::AssistantMemory;
 pub use protocol::{JsonRpcError, McpRequest, McpResponse};
+pub use security_guard::ShellExecutionGuard;
 pub use server::McpServer;

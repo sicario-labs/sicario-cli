@@ -15,6 +15,15 @@ pub enum ConfigAction {
     SetKey,
     /// Set the LLM provider endpoint and model
     SetProvider(SetProviderArgs),
+    /// Set a configuration value in ~/.sicario/config.toml
+    ///
+    /// Valid keys: ANTHROPIC_API_KEY, OPENAI_API_KEY, llm_endpoint, llm_model
+    ///
+    /// Examples:
+    ///   sicario config set ANTHROPIC_API_KEY sk-ant-...
+    ///   sicario config set OPENAI_API_KEY sk-...
+    ///   sicario config set llm_model claude-3-5-sonnet-20241022
+    Set(SetArgs),
     /// Show current configuration
     Show,
     /// Delete the stored API key
@@ -33,4 +42,15 @@ pub struct SetProviderArgs {
     /// LLM model name
     #[arg(long)]
     pub model: Option<String>,
+}
+
+/// Arguments for `config set <KEY> <VALUE>`.
+#[derive(Parser, Debug)]
+pub struct SetArgs {
+    /// Configuration key to set.
+    /// Valid keys: ANTHROPIC_API_KEY, OPENAI_API_KEY, llm_endpoint, llm_model
+    pub key: String,
+
+    /// Value to assign to the key.
+    pub value: String,
 }

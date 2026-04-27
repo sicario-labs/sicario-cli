@@ -406,6 +406,7 @@ function mapFinding(f: any) {
     cwe_id: f.cweId ?? null,
     owasp_category: f.owaspCategory ?? null,
     fingerprint: f.fingerprint,
+    execution_trace: f.executionTrace ?? null,
     triage_state: f.triageState,
     triage_note: f.triageNote ?? null,
     assigned_to: f.assignedTo ?? null,

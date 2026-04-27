@@ -4,6 +4,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::mcp::security_guard::ShellExecutionGuard;
+
 /// A JSON-RPC 2.0 request object.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JsonRpcRequest {
@@ -136,6 +138,12 @@ pub enum McpMethod {
     ScanCode { code: String, language: String },
     /// Return all loaded security rules.
     GetRules,
+    /// Return the AST node at a specific file location.
+    GetAstNode { file_path: String, line_number: usize },
+    /// Analyze reachability between two function nodes.
+    AnalyzeReachability { source_node: String, sink_node: String },
+    /// Propose a safe AST-level mutation for developer review (never auto-applied).
+    ProposeSafeMutation { node_id: String, patched_syntax: String },
 }
 
 /// Response payload variants.
@@ -144,6 +152,40 @@ pub enum McpMethod {
 pub enum McpResponsePayload {
     Vulnerabilities(Vec<crate::engine::Vulnerability>),
     Rules(Vec<crate::engine::SecurityRule>),
+    AstNode(AstNodeResult),
+    ReachabilityResult(ReachabilityResult),
+    MutationProposal(MutationProposal),
+}
+
+/// Result of a `get_ast_node` call.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AstNodeResult {
+    pub file_path: String,
+    pub line_number: usize,
+    pub node_type: String,
+    pub node_text: String,
+    pub start_line: usize,
+    pub end_line: usize,
+}
+
+/// Result of an `analyze_reachability` call.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReachabilityResult {
+    pub source_node: String,
+    pub sink_node: String,
+    pub is_reachable: bool,
+    /// Function names along the reachability path.
+    pub path: Vec<String>,
+}
+
+/// Result of a `propose_safe_mutation` call.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MutationProposal {
+    pub node_id: String,
+    pub patched_syntax: String,
+    /// Always "queued" — mutations are never auto-applied.
+    pub status: String,
+    pub message: String,
 }
 
 /// Parse a raw JSON-RPC request into a typed `McpRequest`.
@@ -152,6 +194,18 @@ pub fn parse_request(raw: &str) -> Result<McpRequest, JsonRpcError> {
 
     if rpc.jsonrpc != "2.0" {
         return Err(JsonRpcError::invalid_request("jsonrpc must be \"2.0\""));
+    }
+
+    // Security guardrail: block dangerous shell execution method names BEFORE dispatch
+    if ShellExecutionGuard::is_dangerous_method(&rpc.method) {
+        return Err(JsonRpcError {
+            code: JsonRpcError::METHOD_NOT_FOUND,
+            message: format!(
+                "Method '{}' is not permitted: MCP tools cannot execute shell commands",
+                rpc.method
+            ),
+            data: None,
+        });
     }
 
     let method = match rpc.method.as_str() {
@@ -180,6 +234,75 @@ pub fn parse_request(raw: &str) -> Result<McpRequest, JsonRpcError> {
             McpMethod::ScanCode { code, language }
         }
         "get_rules" => McpMethod::GetRules,
+        "get_ast_node" => {
+            let file_path = rpc
+                .params
+                .get("file_path")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    JsonRpcError::invalid_params("get_ast_node requires 'file_path' param")
+                })?
+                .to_string();
+            let line_number = rpc
+                .params
+                .get("line_number")
+                .and_then(|v| v.as_u64())
+                .ok_or_else(|| {
+                    JsonRpcError::invalid_params("get_ast_node requires 'line_number' param (u64)")
+                })? as usize;
+            McpMethod::GetAstNode {
+                file_path,
+                line_number,
+            }
+        }
+        "analyze_reachability" => {
+            let source_node = rpc
+                .params
+                .get("source_node")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    JsonRpcError::invalid_params(
+                        "analyze_reachability requires 'source_node' param",
+                    )
+                })?
+                .to_string();
+            let sink_node = rpc
+                .params
+                .get("sink_node")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    JsonRpcError::invalid_params("analyze_reachability requires 'sink_node' param")
+                })?
+                .to_string();
+            McpMethod::AnalyzeReachability {
+                source_node,
+                sink_node,
+            }
+        }
+        "propose_safe_mutation" => {
+            let node_id = rpc
+                .params
+                .get("node_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    JsonRpcError::invalid_params("propose_safe_mutation requires 'node_id' param")
+                })?
+                .to_string();
+            let patched_syntax = rpc
+                .params
+                .get("patched_syntax")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    JsonRpcError::invalid_params(
+                        "propose_safe_mutation requires 'patched_syntax' param",
+                    )
+                })?
+                .to_string();
+            McpMethod::ProposeSafeMutation {
+                node_id,
+                patched_syntax,
+            }
+        }
         other => return Err(JsonRpcError::method_not_found(other)),
     };
 
@@ -277,5 +400,47 @@ mod tests {
         let resp = JsonRpcResponse::error(None, JsonRpcError::parse_error());
         assert!(resp.result.is_none());
         assert!(resp.error.is_some());
+    }
+
+    #[test]
+    fn test_parse_get_ast_node_request() {
+        let raw = r#"{"jsonrpc":"2.0","method":"get_ast_node","params":{"file_path":"src/main.rs","line_number":10},"id":5}"#;
+        let req = parse_request(raw).unwrap();
+        assert!(
+            matches!(req.method, McpMethod::GetAstNode { file_path, line_number } if file_path == "src/main.rs" && line_number == 10)
+        );
+    }
+
+    #[test]
+    fn test_parse_analyze_reachability_request() {
+        let raw = r#"{"jsonrpc":"2.0","method":"analyze_reachability","params":{"source_node":"handler","sink_node":"query"},"id":6}"#;
+        let req = parse_request(raw).unwrap();
+        assert!(
+            matches!(req.method, McpMethod::AnalyzeReachability { source_node, sink_node } if source_node == "handler" && sink_node == "query")
+        );
+    }
+
+    #[test]
+    fn test_parse_propose_safe_mutation_request() {
+        let raw = r#"{"jsonrpc":"2.0","method":"propose_safe_mutation","params":{"node_id":"node-1","patched_syntax":"let x = sanitize(input);"},"id":7}"#;
+        let req = parse_request(raw).unwrap();
+        assert!(
+            matches!(req.method, McpMethod::ProposeSafeMutation { node_id, patched_syntax } if node_id == "node-1" && patched_syntax == "let x = sanitize(input);")
+        );
+    }
+
+    #[test]
+    fn test_dangerous_method_blocked() {
+        let raw = r#"{"jsonrpc":"2.0","method":"exec_command","params":{},"id":8}"#;
+        let err = parse_request(raw).unwrap_err();
+        assert_eq!(err.code, JsonRpcError::METHOD_NOT_FOUND);
+        assert!(err.message.contains("cannot execute shell commands"));
+    }
+
+    #[test]
+    fn test_dangerous_method_shell_blocked() {
+        let raw = r#"{"jsonrpc":"2.0","method":"run_shell","params":{},"id":9}"#;
+        let err = parse_request(raw).unwrap_err();
+        assert_eq!(err.code, JsonRpcError::METHOD_NOT_FOUND);
     }
 }

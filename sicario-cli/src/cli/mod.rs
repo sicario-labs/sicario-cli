@@ -5,8 +5,10 @@ pub mod benchmark;
 pub mod cache;
 pub mod config;
 pub mod exit_code;
+pub mod exit_code_property_tests;
 pub mod fix;
 pub mod hook;
+pub mod link;
 pub mod lsp;
 pub mod rules;
 pub mod scan;
@@ -20,6 +22,7 @@ use self::cache::CacheCommand;
 use self::config::ConfigCommand;
 use self::fix::FixArgs;
 use self::hook::HookCommand;
+use self::link::LinkArgs;
 use self::lsp::LspArgs;
 use self::rules::RulesCommand;
 use self::scan::ScanArgs;
@@ -71,6 +74,8 @@ pub enum Command {
     Rules(RulesCommand),
     /// Manage the scan cache
     Cache(CacheCommand),
+    /// Link the current project to a Sicario Cloud project
+    Link(LinkArgs),
 }
 
 /// Arguments for the `report` subcommand.

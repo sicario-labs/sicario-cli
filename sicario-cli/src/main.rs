@@ -16,10 +16,12 @@ mod scanner;
 mod tui;
 
 // New modules added by CLI overhaul
+mod audit;
 mod baseline;
 mod benchmark;
 mod cache;
 mod cli;
+mod config;
 mod confidence;
 mod diff;
 mod hook;
@@ -28,6 +30,7 @@ mod lsp;
 mod output;
 mod publish;
 mod rule_harness;
+mod snippet;
 mod suppression_learner;
 mod verification;
 
@@ -135,6 +138,10 @@ fn dispatch(cmd: Command) -> Result<ExitCode> {
         Command::Benchmark(args) => cmd_benchmark(args),
         Command::Rules(args) => cmd_rules(args),
         Command::Cache(args) => cmd_cache(args),
+        Command::Link(args) => {
+            crate::cli::link::cmd_link(args)?;
+            Ok(ExitCode::Clean)
+        }
     }
 }
 
@@ -182,6 +189,38 @@ fn cmd_scan(args: cli::scan::ScanArgs) -> Result<ExitCode> {
 
     let mut vulns = eng.scan_directory(&dir)?;
     let scan_duration = scan_start.elapsed();
+
+    // ── Snippet extraction (zero-exfiltration guarantee) ──────────────────
+    // Re-extract snippets for each finding using the configured context window,
+    // enforcing the 100-char-per-line truncation before any telemetry submission.
+    {
+        use snippet::extractor::{SnippetConfig, SnippetExtractor};
+
+        let context_lines = match args.resolve_snippet_context() {
+            Ok(n) => n,
+            Err(msg) => {
+                eprintln!("sicario: {msg}");
+                return Ok(ExitCode::InternalError);
+            }
+        };
+        let snippet_config = SnippetConfig::new(context_lines, 100);
+
+        for vuln in &mut vulns {
+            // Only re-extract for real file paths (skip synthetic SCA entries like <ecosystem/pkg>)
+            let path_str = vuln.file_path.to_string_lossy();
+            if path_str.starts_with('<') {
+                continue;
+            }
+            let abs_path = if vuln.file_path.is_absolute() {
+                vuln.file_path.clone()
+            } else {
+                dir.join(&vuln.file_path)
+            };
+            if let Ok(content) = std::fs::read_to_string(&abs_path) {
+                vuln.snippet = SnippetExtractor::extract(&content, vuln.line, &snippet_config);
+            }
+        }
+    }
 
     // Cloud exposure analysis: auto-detect K8s manifests and adjust priorities
     if !args.no_cloud {
@@ -395,21 +434,23 @@ fn cmd_scan(args: cli::scan::ScanArgs) -> Result<ExitCode> {
         }
     }
 
-    // Auto-publish to Sicario Cloud if --publish flag is set
+    // Resolve exit-code gating values before args fields are partially moved
+    let severity_threshold: Severity = match args.resolve_fail_on() {
+        Ok(s) => s,
+        Err(msg) => {
+            eprintln!("sicario: {msg}");
+            return Ok(ExitCode::InternalError);
+        }
+    };
+    let confidence_threshold = args.confidence_threshold;
+    let in_github_actions = std::env::var("GITHUB_ACTIONS").is_ok();
+
+    // Auto-publish to Sicario Cloud via telemetry endpoint if --publish flag is set
     if args.publish {
-        let language_breakdown = build_language_breakdown(&files_to_scan);
-        publish_scan_results(
-            &vulns,
-            scan_duration,
-            rules_loaded,
-            files_scanned,
-            language_breakdown,
-            args.org,
-        );
+        submit_telemetry(&vulns, scan_duration, rules_loaded, files_scanned, args.org.clone());
     }
 
     // Compute exit code
-    let severity_threshold: Severity = args.severity_threshold.into();
     let summaries: Vec<FindingSummary> = vulns
         .iter()
         .map(|v| FindingSummary {
@@ -419,14 +460,190 @@ fn cmd_scan(args: cli::scan::ScanArgs) -> Result<ExitCode> {
         })
         .collect();
 
-    Ok(ExitCode::from_findings(
-        &summaries,
-        severity_threshold,
-        args.confidence_threshold,
-    ))
+    let exit_code = ExitCode::from_findings(&summaries, severity_threshold, confidence_threshold);
+
+    // GitHub Actions annotation
+    if in_github_actions {
+        let above_threshold = summaries
+            .iter()
+            .filter(|f| !f.suppressed && f.severity >= severity_threshold)
+            .count();
+        if above_threshold > 0 {
+            println!(
+                "::warning title=Sicario Security Scan::Found {above_threshold} finding(s) at or above {} severity. Build will fail.",
+                severity_threshold
+            );
+        } else {
+            println!("::notice title=Sicario Security Scan::No findings at or above {} severity. Build passed.", severity_threshold);
+        }
+    }
+
+    Ok(exit_code)
 }
 
-/// Helper: publish scan results to Sicario Cloud (best-effort, never fails the scan).
+/// Submit scan results to the zero-exfiltration telemetry endpoint (best-effort, never fails the scan).
+///
+/// Resolves auth via the 5-level priority chain, builds a TelemetryPayload from
+/// the scan results, and POSTs to `POST /api/v1/telemetry/scan`.
+///
+/// Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 15.1, 15.2
+fn submit_telemetry(
+    vulns: &[engine::vulnerability::Vulnerability],
+    scan_duration: std::time::Duration,
+    rules_loaded: usize,
+    files_scanned: usize,
+    org_id: Option<String>,
+) {
+    use publish::{collect_git_metadata, resolve_cloud_url, TelemetryClient, TelemetryFinding, TelemetryPayload};
+
+    let client_id =
+        std::env::var("SICARIO_CLOUD_CLIENT_ID").unwrap_or_else(|_| "sicario-cli".to_string());
+    let auth_url = std::env::var("SICARIO_CLOUD_AUTH_URL")
+        .unwrap_or_else(|_| "https://flexible-terrier-680.convex.site".to_string());
+
+    let auth_module = match auth::auth_module::AuthModule::new(client_id, auth_url) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("warning: --publish skipped (could not initialize auth module: {e})");
+            return;
+        }
+    };
+
+    let auth_token = match auth_module.resolve_auth_token() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("warning: --publish skipped ({e})");
+            return;
+        }
+    };
+
+    // Read project ID from priority chain:
+    // 1. SICARIO_PROJECT_ID env var
+    // 2. .sicario/config.yaml (extra fields)
+    // 3. ~/.sicario/config.toml (extra fields via global_config)
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let project_id = std::env::var("SICARIO_PROJECT_ID")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            crate::key_manager::config_file::load_config_file(&cwd).and_then(|c| {
+                c.extra
+                    .get("project_id")
+                    .and_then(|v| v.as_str().map(|s| s.to_string()))
+            })
+        })
+        .or_else(|| {
+            // Check global config (~/.sicario/config.toml)
+            crate::config::global_config::load_global_config().and_then(|c| {
+                c.extra
+                    .get("project_id")
+                    .and_then(|v| v.as_str().map(|s| s.to_string()))
+            })
+        })
+        .unwrap_or_default();
+
+    if project_id.is_empty() {
+        eprintln!(
+            "warning: --publish skipped (no project_id configured). \
+             Run `sicario link --project=<PROJECT_ID>` or set SICARIO_PROJECT_ID."
+        );
+        return;
+    }
+
+    let (repository_url, branch, commit_sha) = collect_git_metadata();
+
+    // Generate a unique scan ID
+    let scan_id = format!(
+        "scan-{}-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0),
+        uuid::Uuid::new_v4()
+            .to_string()
+            .replace('-', "")
+            .chars()
+            .take(8)
+            .collect::<String>()
+            .to_uppercase()
+    );
+
+    // Map vulnerabilities to TelemetryFinding, skipping synthetic SCA entries
+    let findings: Vec<TelemetryFinding> = vulns
+        .iter()
+        .filter(|v| !v.file_path.to_string_lossy().starts_with('<'))
+        .map(|v| {
+            let severity_str = match v.severity {
+                engine::vulnerability::Severity::Critical => "Critical",
+                engine::vulnerability::Severity::High => "High",
+                engine::vulnerability::Severity::Medium => "Medium",
+                engine::vulnerability::Severity::Low => "Low",
+                engine::vulnerability::Severity::Info => "Low", // map Info → Low for telemetry
+            };
+            // Truncate snippet to 100 chars as a final safety measure
+            let snippet = if v.snippet.len() > 100 {
+                v.snippet.chars().take(100).collect()
+            } else {
+                v.snippet.clone()
+            };
+            // Include execution trace if available
+            let execution_trace = v.execution_trace.as_ref().map(|t| t.as_strings());
+            TelemetryFinding {
+                rule: v.rule_id.clone(),
+                severity: severity_str.to_string(),
+                file: v.file_path.to_string_lossy().to_string(),
+                line: v.line,
+                snippet,
+                cwe_id: v.cwe_id.clone(),
+                owasp_category: v.owasp_category.map(|c| format!("{:?}", c)),
+                fingerprint: None,
+                execution_trace,
+            }
+        })
+        .collect();
+
+    // Resolve optional PR number from environment (CI integration)
+    let pr_number: Option<u32> = std::env::var("SICARIO_PR_NUMBER")
+        .ok()
+        .and_then(|s| s.parse().ok());
+
+    let payload = TelemetryPayload {
+        project_id,
+        repository_url,
+        commit_sha,
+        scan_id: scan_id.clone(),
+        branch: if branch.is_empty() { None } else { Some(branch) },
+        pr_number,
+        duration_ms: Some(scan_duration.as_millis() as u64),
+        rules_loaded: Some(rules_loaded),
+        files_scanned: Some(files_scanned),
+        findings,
+    };
+
+    let cloud_url = resolve_cloud_url();
+    let client = match TelemetryClient::new(cloud_url, auth_token) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("warning: --publish skipped (could not create telemetry client: {e})");
+            return;
+        }
+    };
+
+    match client.submit(&payload) {
+        Ok(resp) => {
+            eprintln!("Scan published to Sicario Cloud (scan ID: {}).", resp.scan_id);
+            if let Some(url) = resp.dashboard_url {
+                eprintln!("  Dashboard: {url}");
+            }
+        }
+        Err(e) => {
+            eprintln!("warning: --publish failed: {e}");
+        }
+    }
+}
+
+/// Helper: publish scan results to Sicario Cloud via the legacy /api/v1/scans endpoint.
+/// Used by `sicario cloud publish` for backward compatibility.
 fn publish_scan_results(
     vulns: &[engine::vulnerability::Vulnerability],
     scan_duration: std::time::Duration,
@@ -930,6 +1147,7 @@ fn cmd_rules(args: cli::rules::RulesCommand) -> Result<ExitCode> {
 // ─── Fix command ──────────────────────────────────────────────────────────────
 
 fn cmd_fix(args: cli::fix::FixArgs) -> Result<ExitCode> {
+    use remediation::iteration_guard::IterationGuard;
     use remediation::remediation_engine::RemediationEngine;
     use verification::scanner::VerificationScanning;
 
@@ -942,6 +1160,15 @@ fn cmd_fix(args: cli::fix::FixArgs) -> Result<ExitCode> {
         eprintln!("sicario: reverted patch {patch_id}");
         return Ok(ExitCode::Clean);
     }
+
+    // Resolve --max-iterations (also reads SICARIO_MAX_ITERATIONS via clap env)
+    let max_iterations = match args.resolve_max_iterations() {
+        Ok(n) => n,
+        Err(msg) => {
+            eprintln!("sicario: {msg}");
+            return Ok(ExitCode::InternalError);
+        }
+    };
 
     let file_path = PathBuf::from(&args.file);
     if !file_path.exists() {
@@ -984,9 +1211,41 @@ fn cmd_fix(args: cli::fix::FixArgs) -> Result<ExitCode> {
             batch.applied, batch.reverted, batch.skipped
         );
     } else {
-        // Interactive mode: confirm each fix individually
+        // Interactive mode: confirm each fix individually, with iteration cap
         for vuln in &file_vulns {
-            let patch = engine.generate_patch(vuln)?;
+            let mut guard = IterationGuard::new(max_iterations, &cwd);
+            let patch = loop {
+                match engine.generate_patch(vuln) {
+                    Ok(p) => break p,
+                    Err(e) => {
+                        let reason = e.to_string();
+                        eprintln!(
+                            "sicario: fix attempt {}/{} failed for {} — {reason}",
+                            guard.attempts() + 1,
+                            max_iterations,
+                            vuln.rule_id
+                        );
+                        if guard.record_failure(reason).is_err() {
+                            // Iteration cap reached — log diagnostic and block CI
+                            let file_str = vuln.file_path.to_string_lossy();
+                            if let Err(log_err) =
+                                guard.flush_trace_log(&vuln.rule_id, &file_str)
+                            {
+                                eprintln!("sicario: warning — could not write trace log: {log_err}");
+                            }
+                            eprintln!(
+                                "sicario: error — could not produce a valid fix for {} in {} \
+                                 after {max_iterations} attempt(s). \
+                                 Diagnostic written to .sicario/trace.log",
+                                vuln.rule_id,
+                                vuln.file_path.display()
+                            );
+                            return Ok(ExitCode::FindingsDetected);
+                        }
+                    }
+                }
+            };
+
             let confirmed = engine.display_diff_and_confirm(&patch)?;
             if confirmed {
                 engine.apply_patch(&patch)?;
@@ -1123,6 +1382,15 @@ fn cmd_config(args: cli::config::ConfigCommand) -> Result<ExitCode> {
             key_manager::store_key_in_keyring(key)?;
             eprintln!("sicario: API key stored in OS credential store");
         }
+        ConfigAction::Set(set_args) => {
+            config::set_global_config_value(&set_args.key, &set_args.value)?;
+            let path = config::global_config_path()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| "~/.sicario/config.toml".to_string());
+            eprintln!("sicario: {} saved to {}", set_args.key, path);
+            eprintln!("  Note: LLM keys are stored locally and never sent to Sicario Cloud.");
+            eprintln!("  SICARIO_API_KEY is separate — it authenticates telemetry uploads only.");
+        }
         ConfigAction::SetProvider(provider_args) => {
             let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
@@ -1152,6 +1420,31 @@ fn cmd_config(args: cli::config::ConfigCommand) -> Result<ExitCode> {
             println!("Endpoint: {} (from {})", ep.value, ep.source.label());
             println!("Model:    {} (from {})", mdl.value, mdl.source.label());
             println!("API Key:  {key_source}");
+
+            // Show LLM BYOK key resolution (Zero-Liability boundary)
+            println!();
+            println!("LLM Key Resolution (for `sicario fix`, never sent to cloud):");
+            match config::resolve_llm_api_key() {
+                Some(resolved) => {
+                    println!(
+                        "  Provider: {} (from {})",
+                        resolved.provider.label(),
+                        resolved.source.label()
+                    );
+                }
+                None => {
+                    println!("  Not configured. Run `sicario config set ANTHROPIC_API_KEY <key>`");
+                    println!("  or set the ANTHROPIC_API_KEY / OPENAI_API_KEY environment variable.");
+                }
+            }
+
+            // Telemetry auth separation note
+            println!();
+            println!("Telemetry Auth (SICARIO_API_KEY — for cloud uploads only):");
+            match std::env::var("SICARIO_API_KEY") {
+                Ok(k) if !k.is_empty() => println!("  Set via environment variable"),
+                _ => println!("  Not set (required for `sicario scan --publish`)"),
+            }
         }
         ConfigAction::DeleteKey => {
             key_manager::delete_key_from_keyring()?;

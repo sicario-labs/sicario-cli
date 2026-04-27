@@ -50,6 +50,7 @@ export const insert = mutation({
         cweId: f.cwe_id ?? undefined,
         owaspCategory: f.owasp_category ?? undefined,
         fingerprint: f.fingerprint ?? "",
+        executionTrace: f.execution_trace ?? undefined,
         orgId,
         projectId,
         triageState: "Open",
@@ -70,6 +71,17 @@ export const insert = mutation({
     }
 
     return { scanId };
+  },
+});
+
+export const getByScanId = query({
+  args: { scanId: v.string() },
+  handler: async (ctx, args) => {
+    const scan = await ctx.db
+      .query("scans")
+      .withIndex("by_scanId", (q) => q.eq("scanId", args.scanId))
+      .first();
+    return scan ? { scanId: scan.scanId } : null;
   },
 });
 

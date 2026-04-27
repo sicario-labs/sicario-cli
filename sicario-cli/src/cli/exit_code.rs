@@ -15,6 +15,7 @@ pub enum ExitCode {
 
 /// A minimal finding representation used for exit code computation.
 /// This decouples exit code logic from the full `Vulnerability` struct.
+#[derive(Debug)]
 pub struct FindingSummary {
     pub severity: Severity,
     pub confidence_score: f64,

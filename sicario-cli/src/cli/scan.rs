@@ -3,6 +3,38 @@
 use crate::engine::vulnerability::Severity;
 use clap::{ArgGroup, Parser, ValueEnum};
 
+/// Severity level for the `--fail-on` CI/CD exit code gate.
+/// Only Critical, High, Medium, and Low are valid (no Info).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum FailOnLevel {
+    Critical,
+    High,
+    Medium,
+    Low,
+}
+
+impl From<FailOnLevel> for Severity {
+    fn from(level: FailOnLevel) -> Self {
+        match level {
+            FailOnLevel::Critical => Severity::Critical,
+            FailOnLevel::High => Severity::High,
+            FailOnLevel::Medium => Severity::Medium,
+            FailOnLevel::Low => Severity::Low,
+        }
+    }
+}
+
+impl std::fmt::Display for FailOnLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FailOnLevel::Critical => write!(f, "Critical"),
+            FailOnLevel::High => write!(f, "High"),
+            FailOnLevel::Medium => write!(f, "Medium"),
+            FailOnLevel::Low => write!(f, "Low"),
+        }
+    }
+}
+
 /// Output format for scan results.
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum OutputFormat {
@@ -152,6 +184,17 @@ pub struct ScanArgs {
     /// Organization ID to publish scan results under (used with --publish)
     #[arg(long)]
     pub org: Option<String>,
+
+    /// Severity threshold for CI/CD exit code gating (default: High).
+    /// Exit code 1 if any non-suppressed finding is at or above this level.
+    /// Overrides SICARIO_FAIL_ON env var.
+    #[arg(long, value_enum)]
+    pub fail_on: Option<FailOnLevel>,
+
+    /// Number of surrounding context lines to include in each finding snippet (default: 3, min: 0, max: 10).
+    /// Overrides SICARIO_SNIPPET_CONTEXT env var.
+    #[arg(long)]
+    pub snippet_context: Option<u8>,
 }
 
 impl Default for ScanArgs {
@@ -186,6 +229,67 @@ impl Default for ScanArgs {
             publish: false,
             no_cloud: false,
             org: None,
+            fail_on: None,
+            snippet_context: None,
         }
+    }
+}
+
+impl ScanArgs {
+    /// Resolve the `--fail-on` severity threshold.
+    ///
+    /// Priority: `--fail-on` flag > `SICARIO_FAIL_ON` env var > default (`High`).
+    /// Returns `Err` with exit-code-2 message if the env var contains an invalid value.
+    pub fn resolve_fail_on(&self) -> Result<Severity, String> {
+        if let Some(level) = self.fail_on {
+            return Ok(level.into());
+        }
+        if let Ok(val) = std::env::var("SICARIO_FAIL_ON") {
+            return parse_fail_on_str(&val);
+        }
+        Ok(Severity::High)
+    }
+
+    /// Resolve the `--snippet-context` value.
+    ///
+    /// Priority: `--snippet-context` flag > `SICARIO_SNIPPET_CONTEXT` env var > default (3).
+    /// Returns `Err` with exit-code-2 message if the value is out of range [0, 10].
+    pub fn resolve_snippet_context(&self) -> Result<usize, String> {
+        if let Some(n) = self.snippet_context {
+            let n = n as usize;
+            if n > 10 {
+                return Err(format!(
+                    "Invalid --snippet-context value '{n}'. Must be between 0 and 10."
+                ));
+            }
+            return Ok(n);
+        }
+        if let Ok(val) = std::env::var("SICARIO_SNIPPET_CONTEXT") {
+            let n: usize = val.trim().parse().map_err(|_| {
+                format!(
+                    "Invalid SICARIO_SNIPPET_CONTEXT value '{val}'. Must be an integer between 0 and 10."
+                )
+            })?;
+            if n > 10 {
+                return Err(format!(
+                    "Invalid SICARIO_SNIPPET_CONTEXT value '{n}'. Must be between 0 and 10."
+                ));
+            }
+            return Ok(n);
+        }
+        Ok(3)
+    }
+}
+
+/// Parse a `--fail-on` / `SICARIO_FAIL_ON` string into a `Severity`.
+pub fn parse_fail_on_str(s: &str) -> Result<Severity, String> {
+    match s.trim() {
+        "Critical" => Ok(Severity::Critical),
+        "High" => Ok(Severity::High),
+        "Medium" => Ok(Severity::Medium),
+        "Low" => Ok(Severity::Low),
+        other => Err(format!(
+            "Invalid severity '{other}'. Valid values: Critical, High, Medium, Low"
+        )),
     }
 }

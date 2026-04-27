@@ -1,0 +1,37 @@
+{
+  "timestamp": "2026-04-25T12:02:08.335417500Z",
+  "total_wall_clock_ms": 11136,
+  "files_per_second": 28.645833333333336,
+  "rules_per_second": 9481.770833333334,
+  "peak_memory_bytes": 16494592,
+  "files_scanned": 319,
+  "rules_loaded": 331,
+  "findings_count": 3373,
+  "per_language": {
+    "Ruby": {
+      "files_scanned": 1,
+      "scan_time_ms": 0,
+      "rules_evaluated": 331
+    },
+    "JavaScript": {
+      "files_scanned": 51,
+      "scan_time_ms": 29,
+      "rules_evaluated": 331
+    },
+    "TypeScript": {
+      "files_scanned": 147,
+      "scan_time_ms": 6185,
+      "rules_evaluated": 331
+    },
+    "Rust": {
+      "files_scanned": 118,
+      "scan_time_ms": 1618,
+      "rules_evaluated": 331
+    },
+    "Python": {
+      "files_scanned": 2,
+      "scan_time_ms": 37,
+      "rules_evaluated": 331
+    }
+  }
+}

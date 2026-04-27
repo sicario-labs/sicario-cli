@@ -6,6 +6,7 @@
 //! Requirements: 9.1, 9.2, 9.3, 9.4, 11.1–11.10
 
 pub mod backup_manager;
+pub mod iteration_guard;
 pub mod llm_client;
 pub mod patch;
 pub mod progress;

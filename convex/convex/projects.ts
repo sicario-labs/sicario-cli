@@ -43,6 +43,12 @@ export const create = mutation({
     }
 
     const now = new Date().toISOString();
+    // Always generate a project API key so every project can authenticate CLI telemetry
+    const randomPart = Array.from(crypto.getRandomValues(new Uint8Array(24)))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    const projectApiKey = `sic_proj_${randomPart}`;
+
     await ctx.db.insert("projects", {
       projectId: args.id,
       name: args.name,
@@ -51,8 +57,10 @@ export const create = mutation({
       orgId: args.orgId,
       teamId: args.team_id,
       createdAt: now,
+      provisioningState: "pending",
+      projectApiKey,
     });
-    return { id: args.id };
+    return { id: args.id, projectApiKey };
   },
 });
 
@@ -123,7 +131,6 @@ export const createV2 = mutation({
     name: v.string(),
     repositoryUrl: v.string(),
     orgId: v.string(),
-    githubAppInstallationId: v.string(),
     framework: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -142,7 +149,6 @@ export const createV2 = mutation({
       orgId: args.orgId,
       createdAt: now,
       provisioningState: "pending",
-      githubAppInstallationId: args.githubAppInstallationId,
       framework: args.framework,
       projectApiKey,
     });
@@ -193,6 +199,32 @@ export const getByApiKey = query({
   },
 });
 
+/** Rotate the project API key. Returns the new key. */
+export const regenerateApiKey = mutation({
+  args: {
+    projectId: v.string(),
+    userId: v.string(),
+    orgId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, args.userId, args.orgId, "manager");
+
+    const project = await ctx.db
+      .query("projects")
+      .withIndex("by_projectId", (q) => q.eq("projectId", args.projectId))
+      .first();
+    if (!project) throw new Error("Project not found");
+
+    const randomPart = Array.from(crypto.getRandomValues(new Uint8Array(24)))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    const projectApiKey = `sic_proj_${randomPart}`;
+
+    await ctx.db.patch(project._id, { projectApiKey });
+    return { projectApiKey };
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -221,7 +253,6 @@ function mapProject(p: any) {
     team_id: p.teamId ?? null,
     created_at: p.createdAt,
     provisioning_state: defaults.provisioningState,
-    github_app_installation_id: p.githubAppInstallationId ?? null,
     framework: p.framework ?? null,
     project_api_key: p.projectApiKey ?? null,
     severity_threshold: defaults.severityThreshold,

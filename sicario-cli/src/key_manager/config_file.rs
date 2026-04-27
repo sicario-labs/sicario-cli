@@ -14,6 +14,8 @@ pub struct LocalConfig {
     pub endpoint: Option<String>,
     pub model: Option<String>,
     pub key: Option<String>,
+    /// Project API key for authenticating with the Sicario Cloud telemetry endpoint.
+    pub api_key: Option<String>,
     /// Unknown fields are preserved on round-trip.
     #[serde(flatten)]
     pub extra: HashMap<String, serde_yaml::Value>,

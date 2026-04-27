@@ -14,9 +14,10 @@ use tracing::{debug, error, info, warn};
 use crate::engine::{SastEngine, SecurityRule, Vulnerability};
 use crate::mcp::assistant_memory::AssistantMemory;
 use crate::mcp::protocol::{
-    parse_request, serialize_error, serialize_response, JsonRpcError, McpMethod, McpResponse,
-    McpResponsePayload,
+    parse_request, serialize_error, serialize_response, AstNodeResult, JsonRpcError, McpMethod,
+    McpResponse, McpResponsePayload, MutationProposal, ReachabilityResult,
 };
+use crate::mcp::security_guard::ShellExecutionGuard;
 
 /// The MCP server.
 ///
@@ -225,6 +226,18 @@ fn handle_method(
             handle_scan_code(code, language, engine, memory, id)
         }
         McpMethod::GetRules => handle_get_rules(engine, id),
+        McpMethod::GetAstNode {
+            file_path,
+            line_number,
+        } => handle_get_ast_node(file_path, line_number, id),
+        McpMethod::AnalyzeReachability {
+            source_node,
+            sink_node,
+        } => handle_analyze_reachability(source_node, sink_node, id),
+        McpMethod::ProposeSafeMutation {
+            node_id,
+            patched_syntax,
+        } => handle_propose_safe_mutation(node_id, patched_syntax, id),
     }
 }
 
@@ -325,6 +338,268 @@ fn handle_get_rules(engine: &Arc<Mutex<SastEngine>>, id: Option<serde_json::Valu
     let response = McpResponse {
         id,
         payload: McpResponsePayload::Rules(rules),
+    };
+    serialize_response(response)
+}
+
+/// Handle `get_ast_node` — parse the file with tree-sitter and return the node at `line_number`.
+fn handle_get_ast_node(
+    file_path: String,
+    line_number: usize,
+    id: Option<serde_json::Value>,
+) -> String {
+    use std::path::Path;
+
+    let path = Path::new(&file_path);
+
+    // Read the file
+    let source = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => {
+            return serialize_error(
+                id,
+                JsonRpcError::internal_error(format!("Failed to read file '{}': {}", file_path, e)),
+            );
+        }
+    };
+
+    // Detect language from extension
+    let ts_language = match path.extension().and_then(|e| e.to_str()) {
+        Some("js") | Some("mjs") | Some("cjs") => tree_sitter_javascript::language(),
+        Some("ts") | Some("tsx") => tree_sitter_typescript::language_typescript(),
+        Some("py") => tree_sitter_python::language(),
+        Some("rs") => tree_sitter_rust::language(),
+        Some("go") => tree_sitter_go::language(),
+        Some("java") => tree_sitter_java::language(),
+        _ => {
+            return serialize_error(
+                id,
+                JsonRpcError::internal_error(format!(
+                    "Unsupported file extension for AST parsing: '{}'",
+                    file_path
+                )),
+            );
+        }
+    };
+
+    let mut parser = tree_sitter::Parser::new();
+    if parser.set_language(ts_language).is_err() {
+        return serialize_error(
+            id,
+            JsonRpcError::internal_error("Failed to initialise tree-sitter parser"),
+        );
+    }
+
+    let tree = match parser.parse(&source, None) {
+        Some(t) => t,
+        None => {
+            return serialize_error(
+                id,
+                JsonRpcError::internal_error(format!("Failed to parse file '{}'", file_path)),
+            );
+        }
+    };
+
+    // line_number is 1-indexed; tree-sitter uses 0-indexed rows
+    if line_number == 0 {
+        return serialize_error(
+            id,
+            JsonRpcError::invalid_params("line_number must be >= 1"),
+        );
+    }
+    let row = line_number - 1;
+
+    let root = tree.root_node();
+    let node = root.descendant_for_point_range(
+        tree_sitter::Point { row, column: 0 },
+        tree_sitter::Point {
+            row,
+            column: usize::MAX,
+        },
+    );
+
+    let node = match node {
+        Some(n) => n,
+        None => {
+            return serialize_error(
+                id,
+                JsonRpcError::internal_error(format!(
+                    "No AST node found at line {} in '{}'",
+                    line_number, file_path
+                )),
+            );
+        }
+    };
+
+    let node_text = node
+        .utf8_text(source.as_bytes())
+        .unwrap_or("")
+        .chars()
+        .take(500)
+        .collect::<String>();
+
+    let result = AstNodeResult {
+        file_path,
+        line_number,
+        node_type: node.kind().to_string(),
+        node_text,
+        start_line: node.start_position().row + 1,
+        end_line: node.end_position().row + 1,
+    };
+
+    let response = McpResponse {
+        id,
+        payload: McpResponsePayload::AstNode(result),
+    };
+    serialize_response(response)
+}
+
+/// Handle `analyze_reachability` — best-effort reachability check between two named functions.
+///
+/// Returns `is_reachable: false, path: []` when no call graph data is available.
+/// Full integration with pre-built call graphs comes in a later task.
+fn handle_analyze_reachability(
+    source_node: String,
+    sink_node: String,
+    id: Option<serde_json::Value>,
+) -> String {
+    use crate::engine::reachability::ReachabilityAnalyzer;
+
+    let analyzer = ReachabilityAnalyzer::new();
+
+    // Check if both nodes exist in the (empty) call graph
+    let source_exists = analyzer
+        .call_graph
+        .nodes
+        .values()
+        .any(|n| n.name == source_node);
+    let sink_exists = analyzer
+        .call_graph
+        .nodes
+        .values()
+        .any(|n| n.name == sink_node);
+
+    let (is_reachable, path) = if source_exists && sink_exists {
+        // Find source and sink IDs and check reachability
+        let source_id = analyzer
+            .call_graph
+            .nodes
+            .values()
+            .find(|n| n.name == source_node)
+            .map(|n| n.id);
+        let sink_id = analyzer
+            .call_graph
+            .nodes
+            .values()
+            .find(|n| n.name == sink_node)
+            .map(|n| n.id);
+
+        if let (Some(src), Some(snk)) = (source_id, sink_id) {
+            // Use BFS path to find reachability
+            let path_ids = analyzer
+                .call_graph
+                .nodes
+                .get(&src)
+                .map(|_| {
+                    // Simple BFS
+                    let mut visited = std::collections::HashSet::new();
+                    let mut queue = std::collections::VecDeque::new();
+                    let mut parent: std::collections::HashMap<uuid::Uuid, uuid::Uuid> =
+                        std::collections::HashMap::new();
+                    visited.insert(src);
+                    queue.push_back(src);
+                    let mut found = false;
+                    while let Some(cur) = queue.pop_front() {
+                        if cur == snk {
+                            found = true;
+                            break;
+                        }
+                        if let Some(node) = analyzer.call_graph.nodes.get(&cur) {
+                            for &callee in &node.calls {
+                                if visited.insert(callee) {
+                                    parent.insert(callee, cur);
+                                    queue.push_back(callee);
+                                }
+                            }
+                        }
+                    }
+                    if found {
+                        // Reconstruct path
+                        let mut path = vec![snk];
+                        let mut cur = snk;
+                        while let Some(&p) = parent.get(&cur) {
+                            path.push(p);
+                            cur = p;
+                        }
+                        path.reverse();
+                        path
+                    } else {
+                        vec![]
+                    }
+                })
+                .unwrap_or_default();
+
+            let is_reachable = !path_ids.is_empty();
+            let path_names: Vec<String> = path_ids
+                .iter()
+                .filter_map(|id| analyzer.call_graph.nodes.get(id))
+                .map(|n| n.name.clone())
+                .collect();
+            (is_reachable, path_names)
+        } else {
+            (false, vec![])
+        }
+    } else {
+        // No call graph data available — best-effort returns not reachable
+        (false, vec![])
+    };
+
+    let result = ReachabilityResult {
+        source_node,
+        sink_node,
+        is_reachable,
+        path,
+    };
+
+    let response = McpResponse {
+        id,
+        payload: McpResponsePayload::ReachabilityResult(result),
+    };
+    serialize_response(response)
+}
+
+/// Handle `propose_safe_mutation` — queue a patch for developer review.
+///
+/// NEVER writes to any file. Returns a `MutationProposal` with status "queued".
+fn handle_propose_safe_mutation(
+    node_id: String,
+    patched_syntax: String,
+    id: Option<serde_json::Value>,
+) -> String {
+    // Security guardrail: reject dangerous shell execution patterns
+    if let Err(msg) = ShellExecutionGuard::validate_mutation(&patched_syntax) {
+        return serialize_error(id, JsonRpcError::invalid_params(msg));
+    }
+
+    // Audit log — never write to files
+    info!(
+        "MCP propose_safe_mutation: node_id='{}' queued for developer review",
+        node_id
+    );
+
+    let proposal = MutationProposal {
+        node_id: node_id.clone(),
+        patched_syntax,
+        status: "queued".to_string(),
+        message: format!(
+            "Patch queued for developer review. Run `sicario fix --id={}` to apply.",
+            node_id
+        ),
+    };
+
+    let response = McpResponse {
+        id,
+        payload: McpResponsePayload::MutationProposal(proposal),
     };
     serialize_response(response)
 }

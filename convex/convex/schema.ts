@@ -31,11 +31,11 @@ export default defineSchema({
 
     // V2 extensions (all optional for backward compatibility)
     provisioningState: v.optional(v.string()), // "pending" | "active" | "failed"
-    githubAppInstallationId: v.optional(v.string()),
     framework: v.optional(v.string()),
     projectApiKey: v.optional(v.string()),
     severityThreshold: v.optional(v.string()), // default: "high"
     autoFixEnabled: v.optional(v.boolean()), // default: true
+    githubAppInstallationId: v.optional(v.string()), // legacy field — kept for backward compat
   })
     .index("by_projectId", ["projectId"])
     .index("by_teamId", ["teamId"])
@@ -53,8 +53,8 @@ export default defineSchema({
     findingsCount: v.number(),
     criticalCount: v.number(),
     highCount: v.number(),
-    githubCheckRunId: v.optional(v.string()),
     scanId: v.optional(v.string()),
+    githubCheckRunId: v.optional(v.string()), // legacy field — kept for backward compat with existing documents
     createdAt: v.string(),
     updatedAt: v.string(),
   })
@@ -119,6 +119,7 @@ export default defineSchema({
     cweId: v.optional(v.string()),
     owaspCategory: v.optional(v.string()),
     fingerprint: v.string(),
+    executionTrace: v.optional(v.array(v.string())),
     triageState: v.string(),
     triageNote: v.optional(v.string()),
     assignedTo: v.optional(v.string()),
@@ -216,16 +217,6 @@ export default defineSchema({
     .index("by_deviceCode", ["deviceCode"])
     .index("by_userCode", ["userCode"])
     .index("by_accessToken", ["accessToken"]),
-
-  providerSettings: defineTable({
-    userId: v.string(),
-    providerName: v.string(),
-    endpoint: v.string(),
-    model: v.string(),
-    encryptedApiKey: v.optional(v.string()),
-    createdAt: v.string(),
-    updatedAt: v.string(),
-  }).index("by_userId", ["userId"]),
 
   userProfiles: defineTable({
     userId: v.string(),

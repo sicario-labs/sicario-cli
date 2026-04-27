@@ -37,7 +37,6 @@ export const updatePrCheck = mutation({
     findingsCount: v.optional(v.number()),
     criticalCount: v.optional(v.number()),
     highCount: v.optional(v.number()),
-    githubCheckRunId: v.optional(v.string()),
     scanId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -55,7 +54,6 @@ export const updatePrCheck = mutation({
     if (args.findingsCount !== undefined) updates.findingsCount = args.findingsCount;
     if (args.criticalCount !== undefined) updates.criticalCount = args.criticalCount;
     if (args.highCount !== undefined) updates.highCount = args.highCount;
-    if (args.githubCheckRunId !== undefined) updates.githubCheckRunId = args.githubCheckRunId;
     if (args.scanId !== undefined) updates.scanId = args.scanId;
 
     await ctx.db.patch(record._id, updates);
@@ -97,7 +95,6 @@ function mapPrCheck(c: any) {
     findings_count: c.findingsCount,
     critical_count: c.criticalCount,
     high_count: c.highCount,
-    github_check_run_id: c.githubCheckRunId ?? null,
     scan_id: c.scanId ?? null,
     created_at: c.createdAt,
     updated_at: c.updatedAt,
@@ -121,22 +118,34 @@ export const getByCheckId = query({
         .query("findings")
         .withIndex("by_scanId", (q) => q.eq("scanId", check.scanId!))
         .collect();
+      const mappedFindings = findings.map((f) => ({
+        id: f.findingId,
+        scan_id: f.scanId,
+        rule_id: f.ruleId,
+        rule_name: f.ruleName,
+        file_path: f.filePath,
+        line: f.line,
+        column: f.column,
+        end_line: f.endLine ?? null,
+        end_column: f.endColumn ?? null,
+        snippet: f.snippet,
+        severity: f.severity,
+        confidence_score: f.confidenceScore,
+        reachable: f.reachable,
+        cloud_exposed: f.cloudExposed ?? null,
+        cwe_id: f.cweId ?? null,
+        owasp_category: f.owaspCategory ?? null,
+        fingerprint: f.fingerprint,
+        execution_trace: f.executionTrace ?? null,
+        triage_state: f.triageState,
+        triage_note: f.triageNote ?? null,
+        assigned_to: f.assignedTo ?? null,
+        created_at: f.createdAt,
+        updated_at: f.updatedAt,
+      }));
       return {
         ...mapped,
-        findings: findings.map((f) => ({
-          finding_id: f.findingId,
-          rule_id: f.ruleId,
-          rule_name: f.ruleName,
-          file_path: f.filePath,
-          line: f.line,
-          column: f.column,
-          snippet: f.snippet,
-          severity: f.severity,
-          cwe_id: f.cweId ?? null,
-          owasp_category: f.owaspCategory ?? null,
-          fingerprint: f.fingerprint,
-          triage_state: f.triageState,
-        })),
+        findings: mappedFindings,
       };
     }
 

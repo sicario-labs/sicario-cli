@@ -87,12 +87,31 @@ pub struct LlmClient {
 }
 
 impl LlmClient {
-    /// Create a new LLM client with configuration resolved from env/keyring.
+    /// Create a new LLM client with configuration resolved from env/keyring/global config.
+    ///
+    /// Resolution order for LLM API key:
+    /// 1. `SICARIO_LLM_API_KEY` env var
+    /// 2. OS keyring (set via `sicario config set-key`)
+    /// 3. `OPENAI_API_KEY` env var
+    /// 4. `CEREBRAS_API_KEY` env var
+    /// 5. `.sicario/config.yaml` (project-local)
+    /// 6. `~/.sicario/config.toml` via `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` (global BYOK)
+    /// 7. Cloud config (authenticated users only)
+    ///
+    /// Note: `SICARIO_API_KEY` is **never** used here — it is strictly reserved
+    /// for authenticating HTTP requests to the Convex telemetry endpoint.
     pub fn new() -> Result<Self> {
         let resolved = key_manager::resolve_api_key();
         let (api_key, key_source) = match resolved {
             Some(r) => (Some(r.key), r.source),
-            None => (None, key_manager::KeySource::None),
+            None => {
+                // Fallback: check ~/.sicario/config.toml for BYOK LLM keys
+                if let Some(llm_res) = crate::config::resolve_llm_api_key() {
+                    (Some(llm_res.key), key_manager::KeySource::ConfigFile)
+                } else {
+                    (None, key_manager::KeySource::None)
+                }
+            }
         };
 
         let endpoint = key_manager::resolve_endpoint();
@@ -131,12 +150,16 @@ impl LlmClient {
             anyhow!(
                 "No LLM API key configured.\n\n\
                  Set one of the following:\n  \
+                 • ANTHROPIC_API_KEY env var (recommended)\n  \
+                 • OPENAI_API_KEY env var\n  \
+                 • sicario config set ANTHROPIC_API_KEY <key>  (saves to ~/.sicario/config.toml)\n  \
+                 • sicario config set OPENAI_API_KEY <key>\n  \
                  • SICARIO_LLM_API_KEY env var\n  \
-                 • sicario config set-key (stores in OS keyring)\n  \
-                 • OPENAI_API_KEY env var\n\n\
+                 • sicario config set-key (stores in OS keyring)\n\n\
                  Or use a local model (no key needed):\n  \
                  • SICARIO_LLM_ENDPOINT=http://localhost:11434/v1/chat/completions\n  \
-                 • SICARIO_LLM_MODEL=llama3.1"
+                 • SICARIO_LLM_MODEL=llama3.1\n\n\
+                 Note: SICARIO_API_KEY is for telemetry uploads only, not LLM auth."
             )
         })?;
 

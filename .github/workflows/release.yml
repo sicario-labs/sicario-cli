@@ -89,6 +89,18 @@ jobs:
           sha256sum ${{ env.BIN }}-windows-amd64.zip \
             > ${{ env.BIN }}-windows-amd64.zip.sha256
 
+      # ── macOS SDK (required for Apple framework linking via cargo-zigbuild) ───
+      # cargo-zigbuild can cross-compile macOS binaries but needs the macOS SDK
+      # to resolve Apple frameworks (Security, CoreFoundation, etc.).
+      # We download the MacOSX14.0 SDK from the open-source osxcross project.
+      - name: Download macOS SDK
+        run: |
+          curl -fsSL -o MacOSX14.0.sdk.tar.xz \
+            "https://github.com/joseluisq/macosx-sdks/releases/download/14.0/MacOSX14.0.sdk.tar.xz"
+          sudo mkdir -p /opt/MacOSX14.0.sdk
+          sudo tar -xJf MacOSX14.0.sdk.tar.xz -C /opt/MacOSX14.0.sdk --strip-components=1
+          echo "SDKROOT=/opt/MacOSX14.0.sdk" >> "$GITHUB_ENV"
+
       # ── macOS Intel (x86_64-apple-darwin) ────────────────────────────────────
       - name: Build — macOS Intel
         run: |

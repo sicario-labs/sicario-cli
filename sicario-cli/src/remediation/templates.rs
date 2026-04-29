@@ -122,18 +122,18 @@ pub fn apply_template_fix_with_registry(
     registry: &TemplateRegistry,
 ) -> String {
     let lines: Vec<&str> = original.lines().collect();
-    let line_idx = vuln.line.saturating_sub(1).min(lines.len().saturating_sub(1));
+    let line_idx = vuln
+        .line
+        .saturating_sub(1)
+        .min(lines.len().saturating_sub(1));
 
     if !lines.is_empty() {
         let vulnerable_line = lines[line_idx];
         let lang = parser_language_for_path(&vuln.file_path);
 
-        if let Some(fixed_line) = registry.apply(
-            &vuln.rule_id,
-            vuln.cwe_id.as_deref(),
-            vulnerable_line,
-            lang,
-        ) {
+        if let Some(fixed_line) =
+            registry.apply(&vuln.rule_id, vuln.cwe_id.as_deref(), vulnerable_line, lang)
+        {
             // Re-apply original indentation if the template stripped it
             let original_indent: String = vulnerable_line
                 .chars()

@@ -1300,7 +1300,10 @@ fn cmd_fix(args: cli::fix::FixArgs) -> Result<ExitCode> {
     // Normalise both sides to lowercase strings for a case-insensitive,
     // separator-insensitive comparison (handles Windows drive-letter casing
     // and mixed slash styles).
-    let target = file_path.to_string_lossy().replace('\\', "/").to_lowercase();
+    let target = file_path
+        .to_string_lossy()
+        .replace('\\', "/")
+        .to_lowercase();
 
     // Filter to the target file and optionally the specified rule
     let file_vulns: Vec<_> = vulns

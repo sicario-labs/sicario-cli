@@ -93,22 +93,21 @@ impl RemediationEngine {
             .with_context(|| format!("Failed to read file: {}", file_path.display()))?;
 
         // ── Step 1: Try the deterministic registry (zero LLM calls) ──────────
-        let fixed_content = if let Some(fixed) =
-            self.try_registry_fix(vulnerability, &original_content)
-        {
-            fixed
-        } else {
-            // ── Step 2: LLM verification loop (up to 3 attempts) ─────────────
-            match self.remediate_with_retries(vulnerability, &original_content, 3) {
-                Ok(content) => content,
-                // ── Step 3: Classification-based template fallback ────────────
-                Err(_) => super::templates::apply_template_fix_with_registry(
-                    &original_content,
-                    vulnerability,
-                    &self.registry,
-                ),
-            }
-        };
+        let fixed_content =
+            if let Some(fixed) = self.try_registry_fix(vulnerability, &original_content) {
+                fixed
+            } else {
+                // ── Step 2: LLM verification loop (up to 3 attempts) ─────────────
+                match self.remediate_with_retries(vulnerability, &original_content, 3) {
+                    Ok(content) => content,
+                    // ── Step 3: Classification-based template fallback ────────────
+                    Err(_) => super::templates::apply_template_fix_with_registry(
+                        &original_content,
+                        vulnerability,
+                        &self.registry,
+                    ),
+                }
+            };
 
         // Compute unified diff
         let diff = compute_unified_diff(
@@ -192,9 +191,10 @@ impl RemediationEngine {
             ));
 
             // ── Step A: Call the LLM ──────────────────────────────────────────
-            let raw_response = match rt
-                .block_on(self.ai_client.generate_fix_xml(&base_context, extra_feedback.as_deref()))
-            {
+            let raw_response = match rt.block_on(
+                self.ai_client
+                    .generate_fix_xml(&base_context, extra_feedback.as_deref()),
+            ) {
                 Ok(r) => {
                     spinner.finish_success("LLM responded");
                     r
@@ -216,9 +216,7 @@ impl RemediationEngine {
                 Ok(p) => p,
                 Err(e) => {
                     last_error = format!("XML extraction failed: {e}");
-                    eprintln!(
-                        "sicario: attempt {attempt}/{max_retries} — {last_error}"
-                    );
+                    eprintln!("sicario: attempt {attempt}/{max_retries} — {last_error}");
                     extra_feedback = Some(format!(
                         "PREVIOUS ATTEMPT FAILED: Your response did not contain valid \
                          <sicario_patch> tags. Error: {e}\n\
@@ -246,9 +244,7 @@ impl RemediationEngine {
                     "patch too large: {patch_line_count} lines for a \
                      {original_line_count}-line snippet"
                 );
-                eprintln!(
-                    "sicario: attempt {attempt}/{max_retries} — {last_error}"
-                );
+                eprintln!("sicario: attempt {attempt}/{max_retries} — {last_error}");
                 extra_feedback = Some(format!(
                     "PREVIOUS ATTEMPT FAILED: Your patch was {patch_line_count} lines \
                      but the vulnerable snippet is only {original_line_count} line(s). \
@@ -267,9 +263,7 @@ impl RemediationEngine {
                 // Find the first tree-sitter error node for feedback
                 let syntax_error = get_syntax_error_description(&candidate, &language, self);
                 last_error = format!("syntax error: {syntax_error}");
-                eprintln!(
-                    "sicario: attempt {attempt}/{max_retries} — patch has syntax errors"
-                );
+                eprintln!("sicario: attempt {attempt}/{max_retries} — patch has syntax errors");
                 extra_feedback = Some(format!(
                     "PREVIOUS ATTEMPT FAILED: The patch you provided has a syntax error.\n\
                      Tree-sitter error: {syntax_error}\n\
@@ -286,13 +280,8 @@ impl RemediationEngine {
                     return Ok(candidate);
                 }
                 Ok(false) => {
-                    last_error = format!(
-                        "vulnerability {} still present after fix",
-                        vuln.rule_id
-                    );
-                    eprintln!(
-                        "sicario: attempt {attempt}/{max_retries} — {last_error}"
-                    );
+                    last_error = format!("vulnerability {} still present after fix", vuln.rule_id);
+                    eprintln!("sicario: attempt {attempt}/{max_retries} — {last_error}");
                     extra_feedback = Some(format!(
                         "PREVIOUS ATTEMPT FAILED: The patch was applied but the vulnerability \
                          '{}' is still detected by the SAST scanner. \
@@ -470,27 +459,22 @@ impl RemediationEngine {
     ///
     /// Returns `Some(fixed_content)` if a registered template matched and
     /// produced a valid replacement, `None` otherwise.
-    fn try_registry_fix(
-        &self,
-        vuln: &Vulnerability,
-        original_content: &str,
-    ) -> Option<String> {
+    fn try_registry_fix(&self, vuln: &Vulnerability, original_content: &str) -> Option<String> {
         let lines: Vec<&str> = original_content.lines().collect();
-        let line_idx = vuln.line.saturating_sub(1).min(lines.len().saturating_sub(1));
+        let line_idx = vuln
+            .line
+            .saturating_sub(1)
+            .min(lines.len().saturating_sub(1));
         if lines.is_empty() {
             return None;
         }
 
         let vulnerable_line = lines[line_idx];
-        let lang = ParserLanguage::from_path(&vuln.file_path)
-            .unwrap_or(ParserLanguage::JavaScript);
+        let lang = ParserLanguage::from_path(&vuln.file_path).unwrap_or(ParserLanguage::JavaScript);
 
-        let fixed_line = self.registry.apply(
-            &vuln.rule_id,
-            vuln.cwe_id.as_deref(),
-            vulnerable_line,
-            lang,
-        )?;
+        let fixed_line =
+            self.registry
+                .apply(&vuln.rule_id, vuln.cwe_id.as_deref(), vulnerable_line, lang)?;
 
         // Re-apply original indentation if the template stripped it
         let original_indent: String = vulnerable_line
@@ -506,12 +490,8 @@ impl RemediationEngine {
         };
 
         // Splice the fixed line back into the full file
-        let fixed_content = splice_patch(
-            original_content,
-            vuln.line,
-            &vuln.snippet,
-            &fixed_indented,
-        );
+        let fixed_content =
+            splice_patch(original_content, vuln.line, &vuln.snippet, &fixed_indented);
 
         // Validate syntax — if the registry fix breaks syntax, fall through to LLM
         let language = detect_language_name(&vuln.file_path);
@@ -635,7 +615,10 @@ impl RemediationEngine {
                         let _ = eng.load_rules(f);
                     }
                     let parent = file_path.parent().unwrap_or(&cwd);
-                    let target_str = file_path.to_string_lossy().replace('\\', "/").to_lowercase();
+                    let target_str = file_path
+                        .to_string_lossy()
+                        .replace('\\', "/")
+                        .to_lowercase();
                     match eng.scan_directory(parent) {
                         Ok(all) => all
                             .into_iter()
@@ -655,12 +638,15 @@ impl RemediationEngine {
                 };
 
                 // Find the first remaining rule_id that still has a finding
-                let next = remaining_rule_ids.iter().enumerate().find_map(|(i, rule_id)| {
-                    current_vulns
-                        .iter()
-                        .find(|v| &v.rule_id == rule_id)
-                        .map(|v| (i, v.clone()))
-                });
+                let next = remaining_rule_ids
+                    .iter()
+                    .enumerate()
+                    .find_map(|(i, rule_id)| {
+                        current_vulns
+                            .iter()
+                            .find(|v| &v.rule_id == rule_id)
+                            .map(|v| (i, v.clone()))
+                    });
 
                 let (idx, vuln) = match next {
                     Some(x) => x,
@@ -1285,7 +1271,7 @@ pub fn get_context_window(source: &str, target_line: usize, context_lines: usize
         .map(|(i, line)| {
             let lineno = start + i + 1;
             if lineno == target_line {
-                format!("{lineno:4} >> {line}")  // >> marks the vulnerable line
+                format!("{lineno:4} >> {line}") // >> marks the vulnerable line
             } else {
                 format!("{lineno:4}    {line}")
             }
@@ -1303,7 +1289,12 @@ pub fn get_context_window(source: &str, target_line: usize, context_lines: usize
 /// 2. If the patch has no leading indentation but the original line does,
 ///    re-apply the original indentation to each patch line so the fix
 ///    stays properly indented in the file.
-pub fn splice_patch(source: &str, target_line: usize, original_snippet: &str, patch: &str) -> String {
+pub fn splice_patch(
+    source: &str,
+    target_line: usize,
+    original_snippet: &str,
+    patch: &str,
+) -> String {
     let lines: Vec<&str> = source.lines().collect();
     if lines.is_empty() {
         return source.to_string();
@@ -1320,24 +1311,23 @@ pub fn splice_patch(source: &str, target_line: usize, original_snippet: &str, pa
 
     // If the patch has no leading indentation but the original line does,
     // prepend the original indentation to each line of the patch.
-    let indented_patch: String = if !original_indent.is_empty()
-        && !patch.starts_with(|c: char| c.is_whitespace())
-    {
-        patch
-            .lines()
-            .enumerate()
-            .map(|(i, l)| {
-                if i == 0 || !l.is_empty() {
-                    format!("{original_indent}{l}")
-                } else {
-                    l.to_string()
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    } else {
-        patch.to_string()
-    };
+    let indented_patch: String =
+        if !original_indent.is_empty() && !patch.starts_with(|c: char| c.is_whitespace()) {
+            patch
+                .lines()
+                .enumerate()
+                .map(|(i, l)| {
+                    if i == 0 || !l.is_empty() {
+                        format!("{original_indent}{l}")
+                    } else {
+                        l.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        } else {
+            patch.to_string()
+        };
 
     let mut result = lines.to_vec();
     result[line_idx] = &indented_patch;
@@ -1660,7 +1650,12 @@ mod tests {
     fn test_splice_patch_line_replacement() {
         let source = "let x = dangerous_call(input);\nlet y = 2;\n";
         // splice_patch replaces the whole target line
-        let result = splice_patch(source, 1, "dangerous_call(input)", "let x = safe_call(input);");
+        let result = splice_patch(
+            source,
+            1,
+            "dangerous_call(input)",
+            "let x = safe_call(input);",
+        );
         assert!(result.contains("safe_call(input)"));
         assert!(!result.contains("dangerous_call(input)"));
     }

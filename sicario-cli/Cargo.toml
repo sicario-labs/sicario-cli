@@ -130,7 +130,7 @@ workspace = true
 
 [features]
 # Enable vendored C libraries for fully static / cross-compiled builds.
-# Used by the cargo-zigbuild CI pipeline (zigbuild-release.yml).
+# Used by the cargo-zigbuild CI pipeline.
 # Activating this feature vendors libgit2 (via git2) and switches keyring
 # to its file-based backend so no system libraries are required at link time.
 vendored-libs = ["keyring/linux-no-secret-service"]

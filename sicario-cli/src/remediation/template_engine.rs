@@ -79,11 +79,7 @@ impl TemplateRegistry {
     ///
     /// Returns a reference to the best matching template, or `None` if no
     /// static template is registered for this vulnerability.
-    pub fn lookup(
-        &self,
-        rule_id: &str,
-        cwe_id: Option<&str>,
-    ) -> Option<&dyn PatchTemplate> {
+    pub fn lookup(&self, rule_id: &str, cwe_id: Option<&str>) -> Option<&dyn PatchTemplate> {
         // 1. Exact rule ID match
         if let Some(t) = self.by_rule.get(rule_id) {
             return Some(t.as_ref());
@@ -129,130 +125,241 @@ impl Default for TemplateRegistry {
         let mut r = Self::new();
 
         // ── Crypto ────────────────────────────────────────────────────────────
-        r.register_cwe("328", Box::new(CryptoWeakHashTemplate));   // Weak hash (MD5/SHA1)
+        r.register_cwe("328", Box::new(CryptoWeakHashTemplate)); // Weak hash (MD5/SHA1)
         r.register_cwe("338", Box::new(CryptoMathRandomTemplate)); // Insecure PRNG
-        r.register_cwe("327", Box::new(CryptoEcbModeTemplate));    // Weak cipher mode (ECB)
-        r.register_cwe("759", Box::new(AuthMissingSaltTemplate));   // Missing salt
+        r.register_cwe("327", Box::new(CryptoEcbModeTemplate)); // Weak cipher mode (ECB)
+        r.register_cwe("759", Box::new(AuthMissingSaltTemplate)); // Missing salt
 
         // Rule-ID aliases for the PRNG template (our own rules use these IDs)
-        r.register_rule("js-crypto-math-random",  Box::new(CryptoMathRandomTemplate));
-        r.register_rule("js-math-random-crypto",  Box::new(CryptoMathRandomTemplate));
+        r.register_rule("js-crypto-math-random", Box::new(CryptoMathRandomTemplate));
+        r.register_rule("js-math-random-crypto", Box::new(CryptoMathRandomTemplate));
 
         // Rule-ID aliases for ECB mode
-        r.register_rule("crypto-ecb-mode",        Box::new(CryptoEcbModeTemplate));
-        r.register_rule("js-crypto-ecb",          Box::new(CryptoEcbModeTemplate));
-        r.register_rule("py-crypto-ecb",          Box::new(CryptoEcbModeTemplate));
+        r.register_rule("crypto-ecb-mode", Box::new(CryptoEcbModeTemplate));
+        r.register_rule("js-crypto-ecb", Box::new(CryptoEcbModeTemplate));
+        r.register_rule("py-crypto-ecb", Box::new(CryptoEcbModeTemplate));
 
         // Rule-ID aliases for hardcoded JWT secret (CWE-798 is also used by
         // hardcoded-creds, so we register by rule ID to avoid collision)
-        r.register_rule("js-jwt-hardcoded-secret", Box::new(CryptoHardcodedJwtTemplate));
-        r.register_rule("py-jwt-hardcoded-secret", Box::new(CryptoHardcodedJwtTemplate));
-        r.register_rule("jwt-hardcoded-secret",    Box::new(CryptoHardcodedJwtTemplate));
+        r.register_rule(
+            "js-jwt-hardcoded-secret",
+            Box::new(CryptoHardcodedJwtTemplate),
+        );
+        r.register_rule(
+            "py-jwt-hardcoded-secret",
+            Box::new(CryptoHardcodedJwtTemplate),
+        );
+        r.register_rule("jwt-hardcoded-secret", Box::new(CryptoHardcodedJwtTemplate));
 
         // Rule-ID aliases for missing bcrypt salt
-        r.register_rule("js-bcrypt-missing-salt",  Box::new(AuthMissingSaltTemplate));
-        r.register_rule("bcrypt-missing-rounds",   Box::new(AuthMissingSaltTemplate));
+        r.register_rule("js-bcrypt-missing-salt", Box::new(AuthMissingSaltTemplate));
+        r.register_rule("bcrypt-missing-rounds", Box::new(AuthMissingSaltTemplate));
 
         // ── DOM / XSS ─────────────────────────────────────────────────────────
-        r.register_rule("js-innerhtml",                Box::new(DomInnerHtmlTemplate));
-        r.register_rule("js-xss-innerhtml-assignment", Box::new(DomInnerHtmlTemplate));
-        r.register_rule("js-document-write",           Box::new(DomDocumentWriteTemplate));
-        r.register_rule("js-xss-document-write",       Box::new(DomDocumentWriteTemplate));
+        r.register_rule("js-innerhtml", Box::new(DomInnerHtmlTemplate));
+        r.register_rule(
+            "js-xss-innerhtml-assignment",
+            Box::new(DomInnerHtmlTemplate),
+        );
+        r.register_rule("js-document-write", Box::new(DomDocumentWriteTemplate));
+        r.register_rule("js-xss-document-write", Box::new(DomDocumentWriteTemplate));
 
         // postMessage wildcard origin
         r.register_cwe("345", Box::new(DomPostMessageWildcardTemplate));
-        r.register_rule("js-postmessage-wildcard",     Box::new(DomPostMessageWildcardTemplate));
-        r.register_rule("dom-postmessage-wildcard",    Box::new(DomPostMessageWildcardTemplate));
+        r.register_rule(
+            "js-postmessage-wildcard",
+            Box::new(DomPostMessageWildcardTemplate),
+        );
+        r.register_rule(
+            "dom-postmessage-wildcard",
+            Box::new(DomPostMessageWildcardTemplate),
+        );
 
         // ── CORS ──────────────────────────────────────────────────────────────
-        r.register_rule("cors-wildcard",               Box::new(WebCorsWildcardTemplate));
-        r.register_rule("js-cors-wildcard",            Box::new(WebCorsWildcardTemplate));
+        r.register_rule("cors-wildcard", Box::new(WebCorsWildcardTemplate));
+        r.register_rule("js-cors-wildcard", Box::new(WebCorsWildcardTemplate));
 
         // ── Cookie security ───────────────────────────────────────────────────
-        r.register_cwe("614",  Box::new(WebCookieInsecureTemplate)); // Missing Secure flag
+        r.register_cwe("614", Box::new(WebCookieInsecureTemplate)); // Missing Secure flag
         r.register_cwe("1004", Box::new(WebCookieInsecureTemplate)); // Missing HttpOnly flag
-        r.register_rule("js-cookie-no-httponly",       Box::new(WebCookieInsecureTemplate));
-        r.register_rule("js-cookie-no-secure",         Box::new(WebCookieInsecureTemplate));
-        r.register_rule("express-cookie-insecure",     Box::new(WebCookieInsecureTemplate));
+        r.register_rule("js-cookie-no-httponly", Box::new(WebCookieInsecureTemplate));
+        r.register_rule("js-cookie-no-secure", Box::new(WebCookieInsecureTemplate));
+        r.register_rule(
+            "express-cookie-insecure",
+            Box::new(WebCookieInsecureTemplate),
+        );
 
         // ── Express security headers ──────────────────────────────────────────
         r.register_cwe("200", Box::new(WebExpressXPoweredByTemplate)); // Info exposure
-        r.register_rule("express-x-powered-by",        Box::new(WebExpressXPoweredByTemplate));
-        r.register_rule("js-express-xpoweredby",       Box::new(WebExpressXPoweredByTemplate));
+        r.register_rule(
+            "express-x-powered-by",
+            Box::new(WebExpressXPoweredByTemplate),
+        );
+        r.register_rule(
+            "js-express-xpoweredby",
+            Box::new(WebExpressXPoweredByTemplate),
+        );
 
         // ── Python unsafe deserialization ─────────────────────────────────────
-        r.register_rule("py-unsafe-yaml",              Box::new(PyUnsafeDeserializeTemplate));
-        r.register_rule("py-pickle-loads",             Box::new(PyUnsafeDeserializeTemplate));
-        r.register_rule("python-unsafe-deserialization", Box::new(PyUnsafeDeserializeTemplate));
+        r.register_rule("py-unsafe-yaml", Box::new(PyUnsafeDeserializeTemplate));
+        r.register_rule("py-pickle-loads", Box::new(PyUnsafeDeserializeTemplate));
+        r.register_rule(
+            "python-unsafe-deserialization",
+            Box::new(PyUnsafeDeserializeTemplate),
+        );
 
         // ── Python TLS verification disabled ─────────────────────────────────
         r.register_cwe("295", Box::new(PyRequestsVerifyFalseTemplate)); // Improper cert validation
-        r.register_rule("py-requests-verify-false",    Box::new(PyRequestsVerifyFalseTemplate));
-        r.register_rule("python-ssl-verify-false",     Box::new(PyRequestsVerifyFalseTemplate));
+        r.register_rule(
+            "py-requests-verify-false",
+            Box::new(PyRequestsVerifyFalseTemplate),
+        );
+        r.register_rule(
+            "python-ssl-verify-false",
+            Box::new(PyRequestsVerifyFalseTemplate),
+        );
 
         // ── Go resource leak ──────────────────────────────────────────────────
-        r.register_rule("go-defer-close",              Box::new(GoDeferCloseTemplate));
-        r.register_rule("go-missing-defer-close",      Box::new(GoDeferCloseTemplate));
+        r.register_rule("go-defer-close", Box::new(GoDeferCloseTemplate));
+        r.register_rule("go-missing-defer-close", Box::new(GoDeferCloseTemplate));
 
         // ── Injection ─────────────────────────────────────────────────────────
-        r.register_cwe("94",  Box::new(InjectEvalTemplate));          // Code injection via eval
-        r.register_rule("js-eval-injection",           Box::new(InjectEvalTemplate));
-        r.register_rule("py-eval-injection",           Box::new(InjectEvalTemplate));
+        r.register_cwe("94", Box::new(InjectEvalTemplate)); // Code injection via eval
+        r.register_rule("js-eval-injection", Box::new(InjectEvalTemplate));
+        r.register_rule("py-eval-injection", Box::new(InjectEvalTemplate));
 
-        r.register_rule("js-child-process-exec",       Box::new(InjectOsExecTemplate));
-        r.register_rule("node-exec-injection",         Box::new(InjectOsExecTemplate));
+        r.register_rule("js-child-process-exec", Box::new(InjectOsExecTemplate));
+        r.register_rule("node-exec-injection", Box::new(InjectOsExecTemplate));
 
         r.register_cwe("943", Box::new(InjectNoSqlTypeCastTemplate)); // NoSQL injection
-        r.register_rule("js-nosql-injection",          Box::new(InjectNoSqlTypeCastTemplate));
-        r.register_rule("mongoose-nosql-injection",    Box::new(InjectNoSqlTypeCastTemplate));
+        r.register_rule("js-nosql-injection", Box::new(InjectNoSqlTypeCastTemplate));
+        r.register_rule(
+            "mongoose-nosql-injection",
+            Box::new(InjectNoSqlTypeCastTemplate),
+        );
 
-        r.register_rule("react-dangerously-set-innerhtml", Box::new(ReactDangerouslySetInnerHtmlTemplate));
-        r.register_rule("js-react-xss",                Box::new(ReactDangerouslySetInnerHtmlTemplate));
+        r.register_rule(
+            "react-dangerously-set-innerhtml",
+            Box::new(ReactDangerouslySetInnerHtmlTemplate),
+        );
+        r.register_rule(
+            "js-react-xss",
+            Box::new(ReactDangerouslySetInnerHtmlTemplate),
+        );
 
         // ── IaC / Dockerfile ──────────────────────────────────────────────────
-        r.register_cwe("269", Box::new(IacDockerRootUserTemplate));   // Privilege escalation
-        r.register_rule("dockerfile-root-user",        Box::new(IacDockerRootUserTemplate));
-        r.register_rule("iac-docker-root",             Box::new(IacDockerRootUserTemplate));
+        r.register_cwe("269", Box::new(IacDockerRootUserTemplate)); // Privilege escalation
+        r.register_rule("dockerfile-root-user", Box::new(IacDockerRootUserTemplate));
+        r.register_rule("iac-docker-root", Box::new(IacDockerRootUserTemplate));
 
         // ── Sprint 1: Cryptography & Secrets ─────────────────────────────────
         r.register_cwe("916", Box::new(CryptoPbkdf2LowIterationsTemplate)); // Weak KDF iterations
-        r.register_rule("js-pbkdf2-low-iterations",    Box::new(CryptoPbkdf2LowIterationsTemplate));
-        r.register_rule("py-pbkdf2-low-iterations",    Box::new(CryptoPbkdf2LowIterationsTemplate));
-        r.register_rule("crypto-pbkdf2-iterations",    Box::new(CryptoPbkdf2LowIterationsTemplate));
+        r.register_rule(
+            "js-pbkdf2-low-iterations",
+            Box::new(CryptoPbkdf2LowIterationsTemplate),
+        );
+        r.register_rule(
+            "py-pbkdf2-low-iterations",
+            Box::new(CryptoPbkdf2LowIterationsTemplate),
+        );
+        r.register_rule(
+            "crypto-pbkdf2-iterations",
+            Box::new(CryptoPbkdf2LowIterationsTemplate),
+        );
 
         r.register_cwe("326", Box::new(CryptoRsaKeyTooShortTemplate)); // Inadequate key strength
-        r.register_rule("js-rsa-key-too-short",        Box::new(CryptoRsaKeyTooShortTemplate));
-        r.register_rule("py-rsa-key-too-short",        Box::new(CryptoRsaKeyTooShortTemplate));
-        r.register_rule("crypto-rsa-weak-key",         Box::new(CryptoRsaKeyTooShortTemplate));
+        r.register_rule(
+            "js-rsa-key-too-short",
+            Box::new(CryptoRsaKeyTooShortTemplate),
+        );
+        r.register_rule(
+            "py-rsa-key-too-short",
+            Box::new(CryptoRsaKeyTooShortTemplate),
+        );
+        r.register_rule(
+            "crypto-rsa-weak-key",
+            Box::new(CryptoRsaKeyTooShortTemplate),
+        );
 
         r.register_cwe("321", Box::new(CryptoHardcodedAesKeyTemplate)); // Hardcoded crypto key
-        r.register_rule("js-hardcoded-aes-key",        Box::new(CryptoHardcodedAesKeyTemplate));
-        r.register_rule("py-hardcoded-aes-key",        Box::new(CryptoHardcodedAesKeyTemplate));
-        r.register_rule("crypto-hardcoded-key",        Box::new(CryptoHardcodedAesKeyTemplate));
+        r.register_rule(
+            "js-hardcoded-aes-key",
+            Box::new(CryptoHardcodedAesKeyTemplate),
+        );
+        r.register_rule(
+            "py-hardcoded-aes-key",
+            Box::new(CryptoHardcodedAesKeyTemplate),
+        );
+        r.register_rule(
+            "crypto-hardcoded-key",
+            Box::new(CryptoHardcodedAesKeyTemplate),
+        );
 
         r.register_cwe("335", Box::new(CryptoInsecureRandomSeedTemplate)); // Predictable seed
-        r.register_rule("py-random-seed-fixed",        Box::new(CryptoInsecureRandomSeedTemplate));
-        r.register_rule("py-insecure-random-seed",     Box::new(CryptoInsecureRandomSeedTemplate));
+        r.register_rule(
+            "py-random-seed-fixed",
+            Box::new(CryptoInsecureRandomSeedTemplate),
+        );
+        r.register_rule(
+            "py-insecure-random-seed",
+            Box::new(CryptoInsecureRandomSeedTemplate),
+        );
 
         // CWE-916 is shared with PBKDF2; register md5-password by rule ID only
-        r.register_rule("js-md5-password-hash",        Box::new(CryptoMd5PasswordHashTemplate));
-        r.register_rule("py-md5-password-hash",        Box::new(CryptoMd5PasswordHashTemplate));
-        r.register_rule("go-md5-password-hash",        Box::new(CryptoMd5PasswordHashTemplate));
-        r.register_rule("crypto-md5-password",         Box::new(CryptoMd5PasswordHashTemplate));
+        r.register_rule(
+            "js-md5-password-hash",
+            Box::new(CryptoMd5PasswordHashTemplate),
+        );
+        r.register_rule(
+            "py-md5-password-hash",
+            Box::new(CryptoMd5PasswordHashTemplate),
+        );
+        r.register_rule(
+            "go-md5-password-hash",
+            Box::new(CryptoMd5PasswordHashTemplate),
+        );
+        r.register_rule(
+            "crypto-md5-password",
+            Box::new(CryptoMd5PasswordHashTemplate),
+        );
 
         r.register_cwe("347", Box::new(CryptoJwtNoneAlgorithmTemplate)); // Missing signature verification
-        r.register_rule("js-jwt-none-algorithm",       Box::new(CryptoJwtNoneAlgorithmTemplate));
-        r.register_rule("py-jwt-none-algorithm",       Box::new(CryptoJwtNoneAlgorithmTemplate));
-        r.register_rule("jwt-algorithm-none",          Box::new(CryptoJwtNoneAlgorithmTemplate));
+        r.register_rule(
+            "js-jwt-none-algorithm",
+            Box::new(CryptoJwtNoneAlgorithmTemplate),
+        );
+        r.register_rule(
+            "py-jwt-none-algorithm",
+            Box::new(CryptoJwtNoneAlgorithmTemplate),
+        );
+        r.register_rule(
+            "jwt-algorithm-none",
+            Box::new(CryptoJwtNoneAlgorithmTemplate),
+        );
 
         // CWE-327 is shared with ECB; register weak-jwt by rule ID only
-        r.register_rule("js-jwt-weak-algorithm",       Box::new(CryptoJwtWeakAlgorithmTemplate));
-        r.register_rule("py-jwt-weak-algorithm",       Box::new(CryptoJwtWeakAlgorithmTemplate));
-        r.register_rule("jwt-weak-algorithm",          Box::new(CryptoJwtWeakAlgorithmTemplate));
+        r.register_rule(
+            "js-jwt-weak-algorithm",
+            Box::new(CryptoJwtWeakAlgorithmTemplate),
+        );
+        r.register_rule(
+            "py-jwt-weak-algorithm",
+            Box::new(CryptoJwtWeakAlgorithmTemplate),
+        );
+        r.register_rule(
+            "jwt-weak-algorithm",
+            Box::new(CryptoJwtWeakAlgorithmTemplate),
+        );
 
         r.register_cwe("760", Box::new(CryptoHardcodedSaltTemplate)); // Hardcoded salt
-        r.register_rule("py-bcrypt-hardcoded-salt",    Box::new(CryptoHardcodedSaltTemplate));
-        r.register_rule("crypto-hardcoded-salt",       Box::new(CryptoHardcodedSaltTemplate));
+        r.register_rule(
+            "py-bcrypt-hardcoded-salt",
+            Box::new(CryptoHardcodedSaltTemplate),
+        );
+        r.register_rule(
+            "crypto-hardcoded-salt",
+            Box::new(CryptoHardcodedSaltTemplate),
+        );
 
         r
     }
@@ -391,7 +498,11 @@ impl PatchTemplate for DomDocumentWriteTemplate {
         // Extract the argument between document.write( ... )
         let arg = extract_call_arg(line, "document.write")?;
         let indent = get_indent(line);
-        let semicolon = if line.trim_end().ends_with(';') { ";" } else { "" };
+        let semicolon = if line.trim_end().ends_with(';') {
+            ";"
+        } else {
+            ""
+        };
 
         Some(format!(
             "{indent}document.body.appendChild(document.createTextNode({arg})){semicolon}"
@@ -436,7 +547,10 @@ impl PatchTemplate for WebCorsWildcardTemplate {
                 "\"Access-Control-Allow-Origin\", os.Getenv(\"ALLOWED_ORIGIN\"))",
             )
             // Raw header string (e.g. in config files or string constants)
-            .replace("Access-Control-Allow-Origin: *", "Access-Control-Allow-Origin: ${ALLOWED_ORIGIN}");
+            .replace(
+                "Access-Control-Allow-Origin: *",
+                "Access-Control-Allow-Origin: ${ALLOWED_ORIGIN}",
+            );
 
         if fixed == line {
             return None;
@@ -528,7 +642,7 @@ impl PatchTemplate for GoDeferCloseTemplate {
 
         // Extract the variable name: first identifier before `,` or `:=`
         let var_name = trimmed
-            .split(|c: char| c == ',' || c == ' ')
+            .split([',', ' '])
             .next()
             .map(|s| s.trim())
             .filter(|s| !s.is_empty() && s.chars().all(|c| c.is_alphanumeric() || c == '_'))?;
@@ -613,7 +727,7 @@ impl PatchTemplate for CryptoEcbModeTemplate {
             // Java JCE: "AES/ECB/PKCS5Padding" → "AES/GCM/NoPadding"
             .replace("AES/ECB/PKCS5Padding", "AES/GCM/NoPadding")
             .replace("AES/ECB/PKCS7Padding", "AES/GCM/NoPadding")
-            .replace("AES/ECB/NoPadding",    "AES/GCM/NoPadding")
+            .replace("AES/ECB/NoPadding", "AES/GCM/NoPadding")
             // Node.js crypto: any "aes-NNN-ecb" → "aes-256-gcm"
             .replace("aes-128-ecb", "aes-256-gcm")
             .replace("aes-192-ecb", "aes-256-gcm")
@@ -825,7 +939,11 @@ impl PatchTemplate for WebCookieInsecureTemplate {
         }
 
         // Find the closing paren of the cookie call and inject options before it
-        let call = if line.contains("res.cookie(") { "res.cookie(" } else { ".cookie(" };
+        let call = if line.contains("res.cookie(") {
+            "res.cookie("
+        } else {
+            ".cookie("
+        };
         let start = line.find(call)?;
         let after_fn = &line[start + call.len()..];
         let close = find_matching_paren(after_fn)?;
@@ -885,7 +1003,11 @@ impl PatchTemplate for WebExpressXPoweredByTemplate {
             .filter(|s| !s.is_empty())?;
 
         let indent = get_indent(line);
-        let semicolon = if line.trim_end().ends_with(';') { ";" } else { "" };
+        let semicolon = if line.trim_end().ends_with(';') {
+            ";"
+        } else {
+            ""
+        };
 
         // Return original line + injected disable call on next line
         Some(format!(
@@ -968,11 +1090,15 @@ impl PatchTemplate for InjectEvalTemplate {
     fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
         match lang {
             Language::JavaScript | Language::TypeScript => {
-                if !line.contains("eval(") { return None; }
+                if !line.contains("eval(") {
+                    return None;
+                }
                 Some(line.replace("eval(", "JSON.parse("))
             }
             Language::Python => {
-                if !line.contains("eval(") { return None; }
+                if !line.contains("eval(") {
+                    return None;
+                }
                 Some(line.replace("eval(", "ast.literal_eval("))
             }
             _ => None,
@@ -1157,7 +1283,9 @@ impl PatchTemplate for ReactDangerouslySetInnerHtmlTemplate {
             return None;
         }
         let fixed = wrap_html_value(line)?;
-        if fixed == line { return None; }
+        if fixed == line {
+            return None;
+        }
         Some(fixed)
     }
 }
@@ -1182,15 +1310,21 @@ fn find_value_end(s: &str) -> Option<usize> {
     let mut in_str: Option<char> = None;
     for (i, ch) in s.char_indices() {
         if let Some(q) = in_str {
-            if ch == q { in_str = None; }
+            if ch == q {
+                in_str = None;
+            }
             continue;
         }
         match ch {
             '"' | '\'' | '`' => in_str = Some(ch),
             '(' | '[' | '{' => depth += 1,
-            ')' | ']' => { if depth > 0 { depth -= 1; } }
+            ')' | ']' if depth > 0 => {
+                depth = depth.saturating_sub(1);
+            }
             '}' => {
-                if depth == 0 { return Some(i); }
+                if depth == 0 {
+                    return Some(i);
+                }
                 depth -= 1;
             }
             ',' if depth == 0 => return Some(i),
@@ -1347,8 +1481,8 @@ fn replace_low_iteration_count(line: &str, replacement: u64) -> Option<String> {
     while i < bytes.len() {
         if bytes[i].is_ascii_digit() {
             // Make sure this isn't part of a larger identifier (preceded by letter/_)
-            let preceded_by_ident = i > 0
-                && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
+            let preceded_by_ident =
+                i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
             if preceded_by_ident {
                 // Skip past this digit run
                 while i < bytes.len() && bytes[i].is_ascii_digit() {
@@ -1373,12 +1507,7 @@ fn replace_low_iteration_count(line: &str, replacement: u64) -> Option<String> {
                 // Only replace values that look like iteration counts:
                 // > 100 (avoids key lengths like 32/64) and < 100,000 (unsafe)
                 if n > 100 && n < 100_000 {
-                    let fixed = format!(
-                        "{}{}{}",
-                        &line[..start],
-                        replacement,
-                        &line[i..]
-                    );
+                    let fixed = format!("{}{}{}", &line[..start], replacement, &line[i..]);
                     return Some(fixed);
                 }
             }
@@ -1412,7 +1541,8 @@ impl PatchTemplate for CryptoRsaKeyTooShortTemplate {
 
         let lower = line.to_lowercase();
         // Must be an RSA key generation context
-        if !lower.contains("rsa") && !lower.contains("moduluslength") && !lower.contains("key_size") {
+        if !lower.contains("rsa") && !lower.contains("moduluslength") && !lower.contains("key_size")
+        {
             return None;
         }
 
@@ -1427,21 +1557,27 @@ fn replace_rsa_key_size(line: &str, replacement: u32) -> Option<String> {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i].is_ascii_digit() {
-            let preceded_by_ident = i > 0
-                && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
+            let preceded_by_ident =
+                i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
             if preceded_by_ident {
-                while i < bytes.len() && bytes[i].is_ascii_digit() { i += 1; }
+                while i < bytes.len() && bytes[i].is_ascii_digit() {
+                    i += 1;
+                }
                 continue;
             }
             let start = i;
-            while i < bytes.len() && bytes[i].is_ascii_digit() { i += 1; }
+            while i < bytes.len() && bytes[i].is_ascii_digit() {
+                i += 1;
+            }
             let followed_by_ident = i < bytes.len()
                 && (bytes[i].is_ascii_alphabetic() || bytes[i] == b'_' || bytes[i] == b'.');
-            if followed_by_ident { continue; }
+            if followed_by_ident {
+                continue;
+            }
 
             let num_str = &line[start..i];
             if let Ok(n) = num_str.parse::<u32>() {
-                if n >= 512 && n < 2048 {
+                if (512..2048).contains(&n) {
                     return Some(format!("{}{}{}", &line[..start], replacement, &line[i..]));
                 }
             }
@@ -1500,19 +1636,20 @@ impl PatchTemplate for CryptoHardcodedAesKeyTemplate {
                     // The first arg is the key — check for string/bytes literal
                     let trimmed = after.trim_start();
                     // Handle b'...' or b"..." byte literals
-                    let (literal_end, is_bytes) = if trimmed.starts_with("b'") || trimmed.starts_with("b\"") {
-                        let quote = trimmed.chars().nth(1)?;
-                        let inner = &trimmed[2..];
-                        let end = inner.find(quote)? + 3; // b + quote + content + quote
-                        (end, true)
-                    } else if trimmed.starts_with('\'') || trimmed.starts_with('"') {
-                        let quote = trimmed.chars().next()?;
-                        let inner = &trimmed[1..];
-                        let end = inner.find(quote)? + 2;
-                        (end, false)
-                    } else {
-                        return None;
-                    };
+                    let (literal_end, is_bytes) =
+                        if trimmed.starts_with("b'") || trimmed.starts_with("b\"") {
+                            let quote = trimmed.chars().nth(1)?;
+                            let inner = &trimmed[2..];
+                            let end = inner.find(quote)? + 3; // b + quote + content + quote
+                            (end, true)
+                        } else if trimmed.starts_with('\'') || trimmed.starts_with('"') {
+                            let quote = trimmed.chars().next()?;
+                            let inner = &trimmed[1..];
+                            let end = inner.find(quote)? + 2;
+                            (end, false)
+                        } else {
+                            return None;
+                        };
                     let offset = after.len() - trimmed.len();
                     let before = &line[..pos + "AES.new(".len() + offset];
                     let rest = &trimmed[literal_end..];
@@ -1557,7 +1694,10 @@ impl PatchTemplate for CryptoInsecureRandomSeedTemplate {
         let arg = rest[..close].trim();
 
         // Accept integer literals (possibly negative)
-        let is_int_literal = arg.trim_start_matches('-').chars().all(|c| c.is_ascii_digit())
+        let is_int_literal = arg
+            .trim_start_matches('-')
+            .chars()
+            .all(|c| c.is_ascii_digit())
             && !arg.is_empty();
 
         if !is_int_literal {
@@ -1602,16 +1742,18 @@ impl PatchTemplate for CryptoMd5PasswordHashTemplate {
                 }
                 // Replace the md5(...) call with bcrypt.hash(...)
                 // Extract the argument
-                let call = if line.contains("md5.hex(") { "md5.hex(" } else { "md5(" };
+                let call = if line.contains("md5.hex(") {
+                    "md5.hex("
+                } else {
+                    "md5("
+                };
                 if let Some(pos) = line.find(call) {
                     let after = &line[pos + call.len()..];
                     if let Some(close) = find_matching_paren(after) {
                         let arg = &after[..close];
                         let before = &line[..pos];
                         let rest = &after[close + 1..];
-                        return Some(format!(
-                            "{before}await bcrypt.hash({arg}, 12){rest}"
-                        ));
+                        return Some(format!("{before}await bcrypt.hash({arg}, 12){rest}"));
                     }
                 }
                 None
@@ -1637,7 +1779,11 @@ impl PatchTemplate for CryptoMd5PasswordHashTemplate {
                 if !line.contains("md5.Sum(") && !line.contains("md5.New(") {
                     return None;
                 }
-                let call = if line.contains("md5.Sum(") { "md5.Sum(" } else { "md5.New(" };
+                let call = if line.contains("md5.Sum(") {
+                    "md5.Sum("
+                } else {
+                    "md5.New("
+                };
                 if let Some(pos) = line.find(call) {
                     let after = &line[pos + call.len()..];
                     if let Some(close) = find_matching_paren(after) {
@@ -1726,11 +1872,11 @@ impl PatchTemplate for CryptoJwtWeakAlgorithmTemplate {
 
         // Weak algorithms to replace
         let weak = [
-            ("'HS1'",  "'HS256'"),
+            ("'HS1'", "'HS256'"),
             ("\"HS1\"", "\"HS256\""),
-            ("'RS1'",  "'RS256'"),
+            ("'RS1'", "'RS256'"),
             ("\"RS1\"", "\"RS256\""),
-            ("'HS0'",  "'HS256'"),
+            ("'HS0'", "'HS256'"),
             ("\"HS0\"", "\"HS256\""),
         ];
 
@@ -1805,10 +1951,18 @@ impl PatchTemplate for CryptoHardcodedSaltTemplate {
 mod tests {
     use super::*;
 
-    fn js() -> Language { Language::JavaScript }
-    fn ts() -> Language { Language::TypeScript }
-    fn py() -> Language { Language::Python }
-    fn go() -> Language { Language::Go }
+    fn js() -> Language {
+        Language::JavaScript
+    }
+    fn ts() -> Language {
+        Language::TypeScript
+    }
+    fn py() -> Language {
+        Language::Python
+    }
+    fn go() -> Language {
+        Language::Go
+    }
 
     // ── Registry ──────────────────────────────────────────────────────────────
 
@@ -1858,7 +2012,9 @@ mod tests {
     #[test]
     fn test_weak_hash_no_match() {
         let t = CryptoWeakHashTemplate;
-        assert!(t.generate_patch("    let x = sha256(data);", js()).is_none());
+        assert!(t
+            .generate_patch("    let x = sha256(data);", js())
+            .is_none());
     }
 
     // ── CryptoMathRandomTemplate ──────────────────────────────────────────────
@@ -1944,7 +2100,9 @@ mod tests {
     #[test]
     fn test_cors_no_match() {
         let t = WebCorsWildcardTemplate;
-        assert!(t.generate_patch("    res.setHeader(\"Content-Type\", \"*\");", js()).is_none());
+        assert!(t
+            .generate_patch("    res.setHeader(\"Content-Type\", \"*\");", js())
+            .is_none());
     }
 
     // ── PyUnsafeDeserializeTemplate ───────────────────────────────────────────
@@ -2062,7 +2220,9 @@ mod tests {
     #[test]
     fn test_ecb_no_match() {
         let t = CryptoEcbModeTemplate;
-        assert!(t.generate_patch("    const x = 'aes-256-gcm';", js()).is_none());
+        assert!(t
+            .generate_patch("    const x = 'aes-256-gcm';", js())
+            .is_none());
     }
 
     // ── CryptoHardcodedJwtTemplate ────────────────────────────────────────────
@@ -2096,7 +2256,9 @@ mod tests {
     #[test]
     fn test_jwt_no_match() {
         let t = CryptoHardcodedJwtTemplate;
-        assert!(t.generate_patch("    const x = jwt.verify(token, pubKey);", js()).is_none());
+        assert!(t
+            .generate_patch("    const x = jwt.verify(token, pubKey);", js())
+            .is_none());
     }
 
     // ── AuthMissingSaltTemplate ───────────────────────────────────────────────
@@ -2121,7 +2283,9 @@ mod tests {
     fn test_bcrypt_already_has_rounds() {
         let t = AuthMissingSaltTemplate;
         // Already has salt rounds — should not modify
-        assert!(t.generate_patch("    bcrypt.hash(password, 10);", js()).is_none());
+        assert!(t
+            .generate_patch("    bcrypt.hash(password, 10);", js())
+            .is_none());
     }
 
     #[test]
@@ -2153,7 +2317,9 @@ mod tests {
     fn test_postmessage_no_wildcard() {
         let t = DomPostMessageWildcardTemplate;
         // Already has a specific origin
-        assert!(t.generate_patch("    window.postMessage(data, 'https://example.com');", js()).is_none());
+        assert!(t
+            .generate_patch("    window.postMessage(data, 'https://example.com');", js())
+            .is_none());
     }
 
     // ── WebCookieInsecureTemplate ─────────────────────────────────────────────
@@ -2204,7 +2370,9 @@ mod tests {
     #[test]
     fn test_express_no_match() {
         let t = WebExpressXPoweredByTemplate;
-        assert!(t.generate_patch("    const router = express.Router();", js()).is_none());
+        assert!(t
+            .generate_patch("    const router = express.Router();", js())
+            .is_none());
     }
 
     // ── PyRequestsVerifyFalseTemplate ─────────────────────────────────────────
@@ -2231,13 +2399,17 @@ mod tests {
     fn test_requests_verify_true_untouched() {
         let t = PyRequestsVerifyFalseTemplate;
         // verify=True is the default — no match
-        assert!(t.generate_patch("    resp = requests.get(url, verify=True)", py()).is_none());
+        assert!(t
+            .generate_patch("    resp = requests.get(url, verify=True)", py())
+            .is_none());
     }
 
     #[test]
     fn test_requests_verify_wrong_lang() {
         let t = PyRequestsVerifyFalseTemplate;
-        assert!(t.generate_patch("requests.get(url, verify=False)", js()).is_none());
+        assert!(t
+            .generate_patch("requests.get(url, verify=False)", js())
+            .is_none());
     }
 }
 
@@ -2245,10 +2417,18 @@ mod tests {
 mod injection_tests {
     use super::*;
 
-    fn js() -> Language { Language::JavaScript }
-    fn ts() -> Language { Language::TypeScript }
-    fn py() -> Language { Language::Python }
-    fn go() -> Language { Language::Go }
+    fn js() -> Language {
+        Language::JavaScript
+    }
+    fn ts() -> Language {
+        Language::TypeScript
+    }
+    fn py() -> Language {
+        Language::Python
+    }
+    fn go() -> Language {
+        Language::Go
+    }
 
     // ── InjectEvalTemplate ────────────────────────────────────────────────────
 
@@ -2305,13 +2485,17 @@ mod injection_tests {
     fn test_exec_dot_exec_not_replaced() {
         let t = InjectOsExecTemplate;
         // regex.exec() must NOT be replaced
-        assert!(t.generate_patch("    const m = pattern.exec(input);", js()).is_none());
+        assert!(t
+            .generate_patch("    const m = pattern.exec(input);", js())
+            .is_none());
     }
 
     #[test]
     fn test_exec_already_execfile_not_replaced() {
         let t = InjectOsExecTemplate;
-        assert!(t.generate_patch("    execFile(cmd, args, cb);", js()).is_none());
+        assert!(t
+            .generate_patch("    execFile(cmd, args, cb);", js())
+            .is_none());
     }
 
     #[test]
@@ -2350,13 +2534,17 @@ mod injection_tests {
     #[test]
     fn test_nosql_not_a_query() {
         let t = InjectNoSqlTypeCastTemplate;
-        assert!(t.generate_patch("    const x = req.query.id;", js()).is_none());
+        assert!(t
+            .generate_patch("    const x = req.query.id;", js())
+            .is_none());
     }
 
     #[test]
     fn test_nosql_wrong_lang() {
         let t = InjectNoSqlTypeCastTemplate;
-        assert!(t.generate_patch("User.find({ _id: req.query.id })", py()).is_none());
+        assert!(t
+            .generate_patch("User.find({ _id: req.query.id })", py())
+            .is_none());
     }
 
     // ── ReactDangerouslySetInnerHtmlTemplate ──────────────────────────────────
@@ -2380,13 +2568,17 @@ mod injection_tests {
     #[test]
     fn test_react_dangerous_no_match() {
         let t = ReactDangerouslySetInnerHtmlTemplate;
-        assert!(t.generate_patch("    <div className=\"foo\" />", js()).is_none());
+        assert!(t
+            .generate_patch("    <div className=\"foo\" />", js())
+            .is_none());
     }
 
     #[test]
     fn test_react_dangerous_wrong_lang() {
         let t = ReactDangerouslySetInnerHtmlTemplate;
-        assert!(t.generate_patch("dangerouslySetInnerHTML={{ __html: x }}", py()).is_none());
+        assert!(t
+            .generate_patch("dangerouslySetInnerHTML={{ __html: x }}", py())
+            .is_none());
     }
 
     // ── IacDockerRootUserTemplate ─────────────────────────────────────────────
@@ -2438,7 +2630,10 @@ mod injection_tests {
     fn test_registry_eval_injection_registered() {
         let reg = TemplateRegistry::default();
         assert!(reg.lookup("js-eval-injection", None).is_some());
-        assert_eq!(reg.lookup("js-eval-injection", None).unwrap().name(), "InjectEval");
+        assert_eq!(
+            reg.lookup("js-eval-injection", None).unwrap().name(),
+            "InjectEval"
+        );
     }
 
     #[test]
@@ -2462,7 +2657,9 @@ mod injection_tests {
     #[test]
     fn test_registry_react_xss_registered() {
         let reg = TemplateRegistry::default();
-        assert!(reg.lookup("react-dangerously-set-innerhtml", None).is_some());
+        assert!(reg
+            .lookup("react-dangerously-set-innerhtml", None)
+            .is_some());
     }
 }
 
@@ -2472,10 +2669,18 @@ mod injection_tests {
 mod sprint1_tests {
     use super::*;
 
-    fn js() -> Language { Language::JavaScript }
-    fn ts() -> Language { Language::TypeScript }
-    fn py() -> Language { Language::Python }
-    fn go() -> Language { Language::Go }
+    fn js() -> Language {
+        Language::JavaScript
+    }
+    fn ts() -> Language {
+        Language::TypeScript
+    }
+    fn py() -> Language {
+        Language::Python
+    }
+    fn go() -> Language {
+        Language::Go
+    }
 
     // ── CryptoPbkdf2LowIterationsTemplate ─────────────────────────────────────
 
@@ -2494,7 +2699,9 @@ mod sprint1_tests {
         let line = "    key = hashlib.pbkdf2_hmac('sha256', pwd, salt, 10000)";
         let result = t.generate_patch(line, py()).unwrap();
         assert!(result.contains("310000"));
-        assert!(!result.contains("10000,") && !result.contains("10000)") || result.contains("310000"));
+        assert!(
+            !result.contains("10000,") && !result.contains("10000)") || result.contains("310000")
+        );
     }
 
     #[test]
@@ -2508,7 +2715,9 @@ mod sprint1_tests {
     #[test]
     fn test_pbkdf2_no_match() {
         let t = CryptoPbkdf2LowIterationsTemplate;
-        assert!(t.generate_patch("    const x = sha256(data);", js()).is_none());
+        assert!(t
+            .generate_patch("    const x = sha256(data);", js())
+            .is_none());
     }
 
     #[test]
@@ -2562,7 +2771,8 @@ mod sprint1_tests {
     #[test]
     fn test_aes_hardcoded_key_node() {
         let t = CryptoHardcodedAesKeyTemplate;
-        let line = "    const cipher = crypto.createCipheriv('aes-256-gcm', 'mysecretkey12345', iv);";
+        let line =
+            "    const cipher = crypto.createCipheriv('aes-256-gcm', 'mysecretkey12345', iv);";
         let result = t.generate_patch(line, js()).unwrap();
         assert!(result.contains("process.env.AES_KEY"));
         assert!(!result.contains("'mysecretkey12345'"));
@@ -2580,13 +2790,17 @@ mod sprint1_tests {
     #[test]
     fn test_aes_no_match_no_aes() {
         let t = CryptoHardcodedAesKeyTemplate;
-        assert!(t.generate_patch("    const x = encrypt(key, data);", js()).is_none());
+        assert!(t
+            .generate_patch("    const x = encrypt(key, data);", js())
+            .is_none());
     }
 
     #[test]
     fn test_aes_wrong_lang() {
         let t = CryptoHardcodedAesKeyTemplate;
-        assert!(t.generate_patch("AES.new(b'key', AES.MODE_GCM)", go()).is_none());
+        assert!(t
+            .generate_patch("AES.new(b'key', AES.MODE_GCM)", go())
+            .is_none());
     }
 
     // ── CryptoInsecureRandomSeedTemplate ──────────────────────────────────────
@@ -2661,7 +2875,9 @@ mod sprint1_tests {
     #[test]
     fn test_md5_no_match() {
         let t = CryptoMd5PasswordHashTemplate;
-        assert!(t.generate_patch("    const x = sha256(data);", js()).is_none());
+        assert!(t
+            .generate_patch("    const x = sha256(data);", js())
+            .is_none());
     }
 
     // ── CryptoJwtNoneAlgorithmTemplate ────────────────────────────────────────
@@ -2734,7 +2950,12 @@ mod sprint1_tests {
     #[test]
     fn test_jwt_weak_hs256_not_replaced() {
         let t = CryptoJwtWeakAlgorithmTemplate;
-        assert!(t.generate_patch("    jwt.sign(payload, secret, { algorithm: 'HS256' });", js()).is_none());
+        assert!(t
+            .generate_patch(
+                "    jwt.sign(payload, secret, { algorithm: 'HS256' });",
+                js()
+            )
+            .is_none());
     }
 
     #[test]
@@ -2766,13 +2987,17 @@ mod sprint1_tests {
     fn test_hardcoded_salt_gensalt_not_replaced() {
         let t = CryptoHardcodedSaltTemplate;
         // Already using gensalt — no match
-        assert!(t.generate_patch("    bcrypt.hashpw(pwd, bcrypt.gensalt(12))", py()).is_none());
+        assert!(t
+            .generate_patch("    bcrypt.hashpw(pwd, bcrypt.gensalt(12))", py())
+            .is_none());
     }
 
     #[test]
     fn test_hardcoded_salt_wrong_lang() {
         let t = CryptoHardcodedSaltTemplate;
-        assert!(t.generate_patch("bcrypt.hashpw(pwd, b'salt')", js()).is_none());
+        assert!(t
+            .generate_patch("bcrypt.hashpw(pwd, b'salt')", js())
+            .is_none());
     }
 
     // ── Registry integration ──────────────────────────────────────────────────
@@ -2790,7 +3015,10 @@ mod sprint1_tests {
     fn test_registry_rsa_by_rule_id() {
         let reg = TemplateRegistry::default();
         assert!(reg.lookup("js-rsa-key-too-short", None).is_some());
-        assert_eq!(reg.lookup("js-rsa-key-too-short", None).unwrap().name(), "CryptoRsaKeyTooShort");
+        assert_eq!(
+            reg.lookup("js-rsa-key-too-short", None).unwrap().name(),
+            "CryptoRsaKeyTooShort"
+        );
     }
 
     #[test]

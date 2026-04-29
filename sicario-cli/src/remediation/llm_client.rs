@@ -419,7 +419,10 @@ mod tests {
     #[test]
     fn test_build_user_prompt_with_extra_context() {
         let ctx = make_context();
-        let prompt = build_user_prompt(&ctx, Some("Previous attempt had a syntax error: missing semicolon"));
+        let prompt = build_user_prompt(
+            &ctx,
+            Some("Previous attempt had a syntax error: missing semicolon"),
+        );
         assert!(prompt.contains("syntax error"));
     }
 
@@ -434,14 +437,20 @@ mod tests {
     fn test_extract_patch_missing_open_tag() {
         let response = "cursor.execute(query, (user_id,))";
         assert!(extract_patch(response).is_err());
-        assert!(extract_patch(response).unwrap_err().to_string().contains("<sicario_patch>"));
+        assert!(extract_patch(response)
+            .unwrap_err()
+            .to_string()
+            .contains("<sicario_patch>"));
     }
 
     #[test]
     fn test_extract_patch_missing_close_tag() {
         let response = "<sicario_patch>cursor.execute(query, (user_id,))";
         assert!(extract_patch(response).is_err());
-        assert!(extract_patch(response).unwrap_err().to_string().contains("</sicario_patch>"));
+        assert!(extract_patch(response)
+            .unwrap_err()
+            .to_string()
+            .contains("</sicario_patch>"));
     }
 
     #[test]

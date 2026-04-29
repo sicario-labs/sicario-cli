@@ -2,7 +2,7 @@
 
 > **Status legend:** `[ ]` = not started · `[-]` = in progress · `[x]` = shipped
 >
-> **Already shipped (27):** `CryptoWeakHash`, `CryptoMathRandom`, `CryptoEcbMode`,
+> **Already shipped (39):** `CryptoWeakHash`, `CryptoMathRandom`, `CryptoEcbMode`,
 > `CryptoHardcodedJwt`, `AuthMissingSalt`, `DomInnerHTML`, `DomDocumentWrite`,
 > `DomPostMessageWildcard`, `WebCorsWildcard`, `WebCookieInsecure`,
 > `WebExpressXPoweredBy`, `PyUnsafeDeserialize`, `PyRequestsVerifyFalse`,
@@ -10,7 +10,11 @@
 > `ReactDangerouslySetInnerHTML`, `IacDockerRootUser`,
 > `CryptoPbkdf2LowIterations`, `CryptoRsaKeyTooShort`, `CryptoHardcodedAesKey`,
 > `CryptoInsecureRandomSeed`, `CryptoMd5PasswordHash`, `CryptoJwtNoneAlgorithm`,
-> `CryptoJwtWeakAlgorithm`, `CryptoHardcodedSalt`
+> `CryptoJwtWeakAlgorithm`, `CryptoHardcodedSalt`,
+> `AuthSessionNoHttpOnly`, `AuthSessionNoSecureFlag`, `AuthSessionFixation`,
+> `AuthPasswordInLog`, `AuthBasicAuthOverHttp`, `AuthJwtNoExpiry`,
+> `InjectChildProcessShellTrue`, `InjectPythonSubprocessShell`, `InjectSsti`,
+> `InjectLdap`, `InjectXpath`
 
 ---
 
@@ -52,27 +56,27 @@
 
 ## Domain 2 — Authentication & Session Management
 
-- [ ] **`AuthSessionNoHttpOnlyTemplate`** | **CWE-1004** | **Lang:** `JS/TS` (Express)
+- [x] **`AuthSessionNoHttpOnlyTemplate`** | **CWE-1004** | **Lang:** `JS/TS` (Express)
   - **Trigger:** `express-session` or `cookie-session` initialised without `httpOnly: true` in the cookie options object
   - **Fix Pattern:** Inject `httpOnly: true` into the cookie options object literal
 
-- [ ] **`AuthSessionNoSecureFlagTemplate`** | **CWE-614** | **Lang:** `JS/TS` (Express)
+- [x] **`AuthSessionNoSecureFlagTemplate`** | **CWE-614** | **Lang:** `JS/TS` (Express)
   - **Trigger:** `express-session` cookie options missing `secure: true`
   - **Fix Pattern:** Inject `secure: process.env.NODE_ENV === 'production'` into the cookie options
 
-- [ ] **`AuthSessionFixationTemplate`** | **CWE-384** | **Lang:** `JS/TS` (Express)
+- [x] **`AuthSessionFixationTemplate`** | **CWE-384** | **Lang:** `JS/TS` (Express)
   - **Trigger:** `req.session.userId = ...` assignment without a preceding `req.session.regenerate(...)` call on the same logical path
   - **Fix Pattern:** Prepend `req.session.regenerate(() => {` and close with `});` wrapping the assignment
 
-- [ ] **`AuthPasswordInLogTemplate`** | **CWE-532** | **Lang:** `JS/TS, Python`
+- [x] **`AuthPasswordInLogTemplate`** | **CWE-532** | **Lang:** `JS/TS, Python`
   - **Trigger:** `console.log` / `logger.info` / `print` call where the argument string or variable name contains `password`, `passwd`, `secret`, or `token`
   - **Fix Pattern:** Replace the entire log call with a comment: `// SICARIO FIX: removed logging of sensitive value`
 
-- [ ] **`AuthBasicAuthOverHttpTemplate`** | **CWE-523** | **Lang:** `JS/TS`
+- [x] **`AuthBasicAuthOverHttpTemplate`** | **CWE-523** | **Lang:** `JS/TS`
   - **Trigger:** `Authorization: 'Basic '` header construction combined with an `http://` URL (not `https://`)
   - **Fix Pattern:** Replace `http://` with `https://` in the URL string literal
 
-- [ ] **`AuthJwtNoExpiryTemplate`** | **CWE-613** | **Lang:** `JS/TS, Python`
+- [x] **`AuthJwtNoExpiryTemplate`** | **CWE-613** | **Lang:** `JS/TS, Python`
   - **Trigger:** `jwt.sign(payload, secret)` call with no options object, or options object missing `expiresIn`
   - **Fix Pattern:** Inject `, { expiresIn: '1h' }` as the third argument (JS) or `expiry=datetime.utcnow() + timedelta(hours=1)` in the payload (Python)
 
@@ -88,23 +92,23 @@
   - **Trigger:** Template literal (backtick) used as the first argument to `.query(` or `.execute(`
   - **Fix Pattern:** Convert to parameterized query: extract interpolated variables into a second array argument, replace `${var}` with `$1`, `$2`, etc.
 
-- [ ] **`InjectChildProcessShellTrueTemplate`** | **CWE-78** | **Lang:** `JS/TS`
+- [x] **`InjectChildProcessShellTrueTemplate`** | **CWE-78** | **Lang:** `JS/TS`
   - **Trigger:** `spawn(cmd, args, { shell: true })` or `execFile(cmd, args, { shell: true })`
   - **Fix Pattern:** Remove the `shell: true` property from the options object
 
-- [ ] **`InjectPythonSubprocessShellTemplate`** | **CWE-78** | **Lang:** `Python`
+- [x] **`InjectPythonSubprocessShellTemplate`** | **CWE-78** | **Lang:** `Python`
   - **Trigger:** `subprocess.run(cmd, shell=True)` or `subprocess.call(cmd, shell=True)` where `cmd` is not a string literal
   - **Fix Pattern:** Replace `shell=True` with `shell=False` and wrap `cmd` in `shlex.split(cmd)` if it's a string
 
-- [ ] **`InjectSstiTemplate`** | **CWE-94** | **Lang:** `Python` (Jinja2/Flask)
+- [x] **`InjectSstiTemplate`** | **CWE-94** | **Lang:** `Python` (Jinja2/Flask)
   - **Trigger:** `render_template_string(user_input)` — direct user input passed to template renderer
   - **Fix Pattern:** Replace with `render_template_string(escape(user_input))` using `markupsafe.escape`
 
-- [ ] **`InjectLdapTemplate`** | **CWE-90** | **Lang:** `JS/TS, Python`
+- [x] **`InjectLdapTemplate`** | **CWE-90** | **Lang:** `JS/TS, Python`
   - **Trigger:** LDAP filter string built with `+` concatenation containing `req.body.*` or user-controlled variable
   - **Fix Pattern:** Wrap the user variable with an LDAP escape helper: `ldap.escape(userInput)` (JS) or `ldap3.utils.conv.escape_filter_chars(user_input)` (Python)
 
-- [ ] **`InjectXpathTemplate`** | **CWE-643** | **Lang:** `JS/TS, Python`
+- [x] **`InjectXpathTemplate`** | **CWE-643** | **Lang:** `JS/TS, Python`
   - **Trigger:** XPath query string built with `+` concatenation or f-string containing user input
   - **Fix Pattern:** Replace with a parameterized XPath call using `xpath.select(expr, doc, { variables: { param: userInput } })` (JS)
 

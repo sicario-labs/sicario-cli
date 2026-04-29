@@ -252,8 +252,7 @@ impl Default for TemplateRegistry {
         r.register_rule("dockerfile-root-user", Box::new(IacDockerRootUserTemplate));
         r.register_rule("iac-docker-root", Box::new(IacDockerRootUserTemplate));
 
-        // ── Sprint 1: Cryptography & Secrets ─────────────────────────────────
-        r.register_cwe("916", Box::new(CryptoPbkdf2LowIterationsTemplate)); // Weak KDF iterations
+        // ── Sprint 1: Cryptography & Secrets ─────────────────────────────────        r.register_cwe("916", Box::new(CryptoPbkdf2LowIterationsTemplate)); // Weak KDF iterations
         r.register_rule(
             "js-pbkdf2-low-iterations",
             Box::new(CryptoPbkdf2LowIterationsTemplate),
@@ -360,6 +359,116 @@ impl Default for TemplateRegistry {
             "crypto-hardcoded-salt",
             Box::new(CryptoHardcodedSaltTemplate),
         );
+
+        // ── Sprint 2: Auth & Session ──────────────────────────────────────────
+        r.register_cwe("1004", Box::new(AuthSessionNoHttpOnlyTemplate));
+        r.register_rule("express-session-no-httponly",  Box::new(AuthSessionNoHttpOnlyTemplate));
+        r.register_rule("js-session-cookie-httponly",   Box::new(AuthSessionNoHttpOnlyTemplate));
+
+        r.register_cwe("614",  Box::new(AuthSessionNoSecureFlagTemplate));
+        r.register_rule("express-session-no-secure",    Box::new(AuthSessionNoSecureFlagTemplate));
+        r.register_rule("js-session-cookie-secure",     Box::new(AuthSessionNoSecureFlagTemplate));
+
+        r.register_cwe("384",  Box::new(AuthSessionFixationTemplate));
+        r.register_rule("js-session-fixation",          Box::new(AuthSessionFixationTemplate));
+        r.register_rule("express-session-fixation",     Box::new(AuthSessionFixationTemplate));
+
+        r.register_cwe("532",  Box::new(AuthPasswordInLogTemplate));
+        r.register_rule("js-password-in-log",           Box::new(AuthPasswordInLogTemplate));
+        r.register_rule("py-password-in-log",           Box::new(AuthPasswordInLogTemplate));
+        r.register_rule("log-sensitive-data",           Box::new(AuthPasswordInLogTemplate));
+
+        r.register_cwe("523",  Box::new(AuthBasicAuthOverHttpTemplate));
+        r.register_rule("js-basic-auth-over-http",      Box::new(AuthBasicAuthOverHttpTemplate));
+
+        r.register_cwe("613",  Box::new(AuthJwtNoExpiryTemplate));
+        r.register_rule("js-jwt-no-expiry",             Box::new(AuthJwtNoExpiryTemplate));
+        r.register_rule("py-jwt-no-expiry",             Box::new(AuthJwtNoExpiryTemplate));
+        r.register_rule("jwt-missing-expiry",           Box::new(AuthJwtNoExpiryTemplate));
+
+        // ── Sprint 2: Injection (continued) ──────────────────────────────────
+        r.register_rule("js-child-process-shell-true",  Box::new(InjectChildProcessShellTrueTemplate));
+        r.register_rule("node-spawn-shell-true",        Box::new(InjectChildProcessShellTrueTemplate));
+
+        r.register_rule("py-subprocess-shell-true",     Box::new(InjectPythonSubprocessShellTemplate));
+        r.register_rule("python-shell-injection",       Box::new(InjectPythonSubprocessShellTemplate));
+
+        r.register_rule("py-ssti-render-template",      Box::new(InjectSstiTemplate));
+        r.register_rule("flask-ssti",                   Box::new(InjectSstiTemplate));
+
+        r.register_cwe("90",   Box::new(InjectLdapTemplate));
+        r.register_rule("js-ldap-injection",            Box::new(InjectLdapTemplate));
+        r.register_rule("py-ldap-injection",            Box::new(InjectLdapTemplate));
+
+        r.register_cwe("643",  Box::new(InjectXpathTemplate));
+        r.register_rule("js-xpath-injection",           Box::new(InjectXpathTemplate));
+        r.register_rule("py-xpath-injection",           Box::new(InjectXpathTemplate));
+
+        // ── Sprint 3: Web Headers ─────────────────────────────────────────────
+        r.register_rule("express-helmet-missing",       Box::new(WebHelmetMissingTemplate));
+        r.register_rule("js-helmet-missing",            Box::new(WebHelmetMissingTemplate));
+
+        r.register_rule("express-csp-missing",          Box::new(WebCspMissingTemplate));
+        r.register_rule("js-csp-missing",               Box::new(WebCspMissingTemplate));
+
+        r.register_cwe("319",  Box::new(WebHstsDisabledTemplate));
+        r.register_rule("express-hsts-disabled",        Box::new(WebHstsDisabledTemplate));
+        r.register_rule("js-hsts-disabled",             Box::new(WebHstsDisabledTemplate));
+
+        r.register_cwe("942",  Box::new(WebCorsCredentialsWildcardTemplate));
+        r.register_rule("js-cors-credentials-wildcard", Box::new(WebCorsCredentialsWildcardTemplate));
+
+        r.register_rule("express-referrer-policy",      Box::new(WebReferrerPolicyMissingTemplate));
+        r.register_rule("js-referrer-policy-missing",   Box::new(WebReferrerPolicyMissingTemplate));
+
+        r.register_cwe("1021", Box::new(WebClickjackingTemplate));
+        r.register_rule("express-frameguard-disabled",  Box::new(WebClickjackingTemplate));
+        r.register_rule("js-clickjacking",              Box::new(WebClickjackingTemplate));
+
+        r.register_cwe("525",  Box::new(WebCacheControlMissingTemplate));
+        r.register_rule("express-no-cache-control",     Box::new(WebCacheControlMissingTemplate));
+        r.register_rule("js-cache-control-missing",     Box::new(WebCacheControlMissingTemplate));
+
+        // ── Sprint 3: Input Validation ────────────────────────────────────────
+        r.register_cwe("1321", Box::new(PrototypePollutionMergeTemplate));
+        r.register_rule("js-prototype-pollution-merge", Box::new(PrototypePollutionMergeTemplate));
+
+        r.register_rule("js-prototype-pollution-set",   Box::new(PrototypePollutionSetTemplate));
+
+        r.register_cwe("1333", Box::new(InputRegexDosTemplate));
+        r.register_rule("js-redos",                     Box::new(InputRegexDosTemplate));
+        r.register_rule("js-regex-dos",                 Box::new(InputRegexDosTemplate));
+
+        r.register_cwe("755",  Box::new(InputJsonParseNoTryCatchTemplate));
+        r.register_rule("js-json-parse-no-try-catch",   Box::new(InputJsonParseNoTryCatchTemplate));
+
+        r.register_cwe("22",   Box::new(InputPathTraversalTemplate));
+        r.register_rule("js-path-traversal",            Box::new(InputPathTraversalTemplate));
+        r.register_rule("node-path-traversal",          Box::new(InputPathTraversalTemplate));
+
+        r.register_cwe("20",   Box::new(InputReqBodyNoValidationTemplate));
+        r.register_rule("js-req-body-no-validation",    Box::new(InputReqBodyNoValidationTemplate));
+        r.register_rule("express-no-input-validation",  Box::new(InputReqBodyNoValidationTemplate));
+
+        // ── Sprint 3: File & Resource ─────────────────────────────────────────
+        r.register_cwe("434",  Box::new(FileUploadNoMimeCheckTemplate));
+        r.register_rule("js-multer-no-mime-check",      Box::new(FileUploadNoMimeCheckTemplate));
+        r.register_rule("express-file-upload-unsafe",   Box::new(FileUploadNoMimeCheckTemplate));
+
+        r.register_cwe("377",  Box::new(FileTempFileInsecureTemplate));
+        r.register_rule("py-tempfile-mktemp",           Box::new(FileTempFileInsecureTemplate));
+
+        r.register_cwe("732",  Box::new(FilePermissionsWorldWritableTemplate));
+        r.register_rule("py-world-writable-file",       Box::new(FilePermissionsWorldWritableTemplate));
+        r.register_rule("py-chmod-world-writable",      Box::new(FilePermissionsWorldWritableTemplate));
+
+        r.register_cwe("390",  Box::new(GoFileCloseErrorIgnoredTemplate));
+        r.register_rule("go-close-error-ignored",       Box::new(GoFileCloseErrorIgnoredTemplate));
+        r.register_rule("go-defer-close-unchecked",     Box::new(GoFileCloseErrorIgnoredTemplate));
+
+        r.register_cwe("400",  Box::new(FileReadSyncTemplate));
+        r.register_rule("js-readfilesync-user-input",   Box::new(FileReadSyncTemplate));
+        r.register_rule("node-sync-file-read",          Box::new(FileReadSyncTemplate));
 
         r
     }
@@ -3039,3 +3148,1504 @@ mod sprint1_tests {
         assert!(reg.lookup("py-random-seed-fixed", None).is_some());
     }
 }
+
+// ── Sprint 2: Auth & Session + Injection (12 templates) ──────────────────────
+
+// ── Domain 2: Authentication & Session Management ────────────────────────────
+
+// ── 28. AuthSessionNoHttpOnlyTemplate (CWE-1004) ─────────────────────────────
+
+/// Injects `httpOnly: true` into express-session / cookie-session cookie options.
+///
+/// `app.use(session({ cookie: { secure: true } }))` → adds `httpOnly: true`
+/// Only fires when `httpOnly` is absent from the cookie options object.
+pub struct AuthSessionNoHttpOnlyTemplate;
+
+impl PatchTemplate for AuthSessionNoHttpOnlyTemplate {
+    fn name(&self) -> &'static str { "AuthSessionNoHttpOnly" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        match lang { Language::JavaScript | Language::TypeScript => {} _ => return None }
+        // Must be a session/cookie config line
+        let lower = line.to_lowercase();
+        if !lower.contains("session") && !lower.contains("cookie") { return None; }
+        // Already has httpOnly — leave it
+        if lower.contains("httponly") { return None; }
+        // Must contain a cookie options object opening
+        if !line.contains("cookie:") && !line.contains("cookie :") { return None; }
+        // Inject httpOnly: true into the cookie object
+        let fixed = inject_into_object(line, "cookie:", "httpOnly: true")?;
+        if fixed == line { return None; }
+        Some(fixed)
+    }
+}
+
+// ── 29. AuthSessionNoSecureFlagTemplate (CWE-614) ────────────────────────────
+
+/// Injects `secure: process.env.NODE_ENV === 'production'` into session cookie options.
+pub struct AuthSessionNoSecureFlagTemplate;
+
+impl PatchTemplate for AuthSessionNoSecureFlagTemplate {
+    fn name(&self) -> &'static str { "AuthSessionNoSecureFlag" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        match lang { Language::JavaScript | Language::TypeScript => {} _ => return None }
+        let lower = line.to_lowercase();
+        if !lower.contains("session") && !lower.contains("cookie") { return None; }
+        if lower.contains("secure:") { return None; }
+        if !line.contains("cookie:") && !line.contains("cookie :") { return None; }
+        let fixed = inject_into_object(line, "cookie:", "secure: process.env.NODE_ENV === 'production'")?;
+        if fixed == line { return None; }
+        Some(fixed)
+    }
+}
+
+// ── 30. AuthSessionFixationTemplate (CWE-384) ────────────────────────────────
+
+/// Prepends `req.session.regenerate(() => {` before a session assignment.
+///
+/// `req.session.userId = user.id;`
+/// → `req.session.regenerate(() => {\n    req.session.userId = user.id;\n});`
+pub struct AuthSessionFixationTemplate;
+
+impl PatchTemplate for AuthSessionFixationTemplate {
+    fn name(&self) -> &'static str { "AuthSessionFixation" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        match lang { Language::JavaScript | Language::TypeScript => {} _ => return None }
+        // Must be a req.session.X = ... assignment (not .regenerate itself)
+        if !line.contains("req.session.") { return None; }
+        if line.contains(".regenerate") || line.contains(".destroy") || line.contains(".save") {
+            return None;
+        }
+        // Must be an assignment
+        let trimmed = line.trim();
+        if !trimmed.contains(" = ") && !trimmed.contains(" =\t") { return None; }
+
+        let indent = get_indent(line);
+        let semicolon = if line.trim_end().ends_with(';') { ";" } else { "" };
+        Some(format!(
+            "{indent}req.session.regenerate(() => {{\n{line}\n{indent}}}){}",
+            semicolon
+        ))
+    }
+}
+
+// ── 31. AuthPasswordInLogTemplate (CWE-532) ──────────────────────────────────
+
+/// Replaces log calls that expose sensitive values with a comment.
+///
+/// Fires when the log argument contains `password`, `passwd`, `secret`, or `token`.
+pub struct AuthPasswordInLogTemplate;
+
+impl PatchTemplate for AuthPasswordInLogTemplate {
+    fn name(&self) -> &'static str { "AuthPasswordInLog" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        let lower = line.to_lowercase();
+        // Must be a log call
+        let is_log = lower.contains("console.log") || lower.contains("console.error")
+            || lower.contains("console.warn") || lower.contains("console.info")
+            || lower.contains("logger.info") || lower.contains("logger.debug")
+            || lower.contains("logger.warn") || lower.contains("logger.error")
+            || lower.contains("print(") || lower.contains("logging.");
+        if !is_log { return None; }
+        // Must reference a sensitive name
+        let is_sensitive = lower.contains("password") || lower.contains("passwd")
+            || lower.contains("secret") || lower.contains("token")
+            || lower.contains("api_key") || lower.contains("apikey");
+        if !is_sensitive { return None; }
+
+        let indent = get_indent(line);
+        let comment = match lang {
+            Language::Python => format!("{indent}# SICARIO FIX: removed logging of sensitive value"),
+            _ => format!("{indent}// SICARIO FIX: removed logging of sensitive value"),
+        };
+        Some(comment)
+    }
+}
+
+// ── 32. AuthBasicAuthOverHttpTemplate (CWE-523) ───────────────────────────────
+
+/// Replaces `http://` with `https://` when used with Basic auth headers.
+pub struct AuthBasicAuthOverHttpTemplate;
+
+impl PatchTemplate for AuthBasicAuthOverHttpTemplate {
+    fn name(&self) -> &'static str { "AuthBasicAuthOverHttp" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        match lang { Language::JavaScript | Language::TypeScript => {} _ => return None }
+        let lower = line.to_lowercase();
+        if !lower.contains("basic ") && !lower.contains("authorization") { return None; }
+        if !line.contains("http://") { return None; }
+        Some(line.replace("http://", "https://"))
+    }
+}
+
+// ── 33. AuthJwtNoExpiryTemplate (CWE-613) ────────────────────────────────────
+
+/// Injects `{ expiresIn: '1h' }` into `jwt.sign()` calls missing an expiry.
+///
+/// JS: `jwt.sign(payload, secret)` → `jwt.sign(payload, secret, { expiresIn: '1h' })`
+/// Python: adds `exp` field comment (multi-line fix exceeds trimmer budget, so
+/// we inject a comment on the same line instead).
+pub struct AuthJwtNoExpiryTemplate;
+
+impl PatchTemplate for AuthJwtNoExpiryTemplate {
+    fn name(&self) -> &'static str { "AuthJwtNoExpiry" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        let lower = line.to_lowercase();
+        if !lower.contains("jwt.sign") && !lower.contains("jwt.encode") { return None; }
+        // Already has expiry
+        if lower.contains("expiresin") || lower.contains("expires_in")
+            || lower.contains("exp:") || lower.contains("expiry") { return None; }
+
+        match lang {
+            Language::JavaScript | Language::TypeScript => {
+                // jwt.sign(payload, secret) → jwt.sign(payload, secret, { expiresIn: '1h' })
+                if let Some(pos) = line.find("jwt.sign(") {
+                    let after = &line[pos + "jwt.sign(".len()..];
+                    if let Some(close) = find_matching_paren(after) {
+                        let args = &after[..close];
+                        // Count top-level commas — if < 2, no options object yet
+                        let comma_count = count_top_level_commas(args);
+                        if comma_count < 2 {
+                            let before = &line[..pos + "jwt.sign(".len()];
+                            let rest = &after[close..]; // starts with ')'
+                            return Some(format!("{before}{args}, {{ expiresIn: '1h' }}{rest}"));
+                        }
+                    }
+                }
+                None
+            }
+            Language::Python => {
+                // Add a comment nudge — full payload injection is multi-line
+                let indent = get_indent(line);
+                Some(format!("{line}\n{indent}# SICARIO FIX: add exp=datetime.utcnow()+timedelta(hours=1) to payload"))
+            }
+            _ => None,
+        }
+    }
+}
+
+// ── Domain 3: Injection (continued) ──────────────────────────────────────────
+
+// ── 34. InjectChildProcessShellTrueTemplate (CWE-78) ─────────────────────────
+
+/// Removes `shell: true` from Node.js child_process spawn/execFile options.
+pub struct InjectChildProcessShellTrueTemplate;
+
+impl PatchTemplate for InjectChildProcessShellTrueTemplate {
+    fn name(&self) -> &'static str { "InjectChildProcessShellTrue" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        match lang { Language::JavaScript | Language::TypeScript => {} _ => return None }
+        if !line.contains("shell: true") && !line.contains("shell:true") { return None; }
+        // Only fire on spawn/execFile/exec calls
+        let lower = line.to_lowercase();
+        if !lower.contains("spawn") && !lower.contains("execfile") && !lower.contains("exec(") {
+            return None;
+        }
+        let fixed = line
+            .replace(", shell: true", "")
+            .replace(",shell: true", "")
+            .replace(", shell:true", "")
+            .replace(",shell:true", "")
+            .replace("{ shell: true }", "{}")
+            .replace("{ shell: true, ", "{ ")
+            .replace("{ shell:true }", "{}")
+            .replace("{ shell:true, ", "{ ");
+        if fixed == line { return None; }
+        Some(fixed)
+    }
+}
+
+// ── 35. InjectPythonSubprocessShellTemplate (CWE-78) ─────────────────────────
+
+/// Replaces `shell=True` with `shell=False` in Python subprocess calls.
+pub struct InjectPythonSubprocessShellTemplate;
+
+impl PatchTemplate for InjectPythonSubprocessShellTemplate {
+    fn name(&self) -> &'static str { "InjectPythonSubprocessShell" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        if lang != Language::Python { return None; }
+        if !line.contains("shell=True") && !line.contains("shell = True") { return None; }
+        let lower = line.to_lowercase();
+        if !lower.contains("subprocess.") { return None; }
+        let fixed = line
+            .replace("shell=True", "shell=False")
+            .replace("shell = True", "shell = False");
+        if fixed == line { return None; }
+        Some(fixed)
+    }
+}
+
+// ── 36. InjectSstiTemplate (CWE-94) ──────────────────────────────────────────
+
+/// Wraps `render_template_string(user_input)` with `escape()`.
+pub struct InjectSstiTemplate;
+
+impl PatchTemplate for InjectSstiTemplate {
+    fn name(&self) -> &'static str { "InjectSsti" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        if lang != Language::Python { return None; }
+        if !line.contains("render_template_string(") { return None; }
+        // Extract the argument and wrap it
+        if let Some(pos) = line.find("render_template_string(") {
+            let after = &line[pos + "render_template_string(".len()..];
+            if let Some(close) = find_matching_paren(after) {
+                let arg = &after[..close];
+                let before = &line[..pos + "render_template_string(".len()];
+                let rest = &after[close..];
+                // Don't double-wrap
+                if arg.trim_start().starts_with("escape(") { return None; }
+                return Some(format!("{before}escape({arg}){rest}"));
+            }
+        }
+        None
+    }
+}
+
+// ── 37. InjectLdapTemplate (CWE-90) ──────────────────────────────────────────
+
+/// Wraps user-controlled variables in LDAP filter strings with an escape helper.
+pub struct InjectLdapTemplate;
+
+impl PatchTemplate for InjectLdapTemplate {
+    fn name(&self) -> &'static str { "InjectLdap" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        let lower = line.to_lowercase();
+        if !lower.contains("ldap") { return None; }
+        // Must contain user input concatenation
+        if !line.contains("req.body.") && !line.contains("req.query.")
+            && !line.contains("req.params.") && !line.contains("user_input")
+            && !line.contains("userInput") { return None; }
+
+        match lang {
+            Language::JavaScript | Language::TypeScript => {
+                // wrap_nosql_input handles full `req.body.field` / `req.query.field` identifiers
+                let fixed = wrap_nosql_input(line, "req.body.");
+                let fixed = wrap_nosql_input(&fixed, "req.query.");
+                let fixed = wrap_nosql_input(&fixed, "req.params.");
+                // Replace the String() wrapper with ldap.escape()
+                let fixed = fixed
+                    .replace("String(req.body.", "ldap.escape(req.body.")
+                    .replace("String(req.query.", "ldap.escape(req.query.")
+                    .replace("String(req.params.", "ldap.escape(req.params.");
+                // Also handle bare userInput
+                let fixed = if fixed.contains("userInput") && !fixed.contains("ldap.escape(userInput)") {
+                    fixed.replace("userInput", "ldap.escape(userInput)")
+                } else { fixed };
+                if fixed == line { return None; }
+                Some(fixed)
+            }
+            Language::Python => {
+                let fixed = if line.contains("user_input") && !line.contains("escape_filter_chars(user_input)") {
+                    line.replace("user_input", "ldap3.utils.conv.escape_filter_chars(user_input)")
+                } else { line.to_string() };
+                if fixed == line { return None; }
+                Some(fixed)
+            }
+            _ => None,
+        }
+    }
+}
+
+// ── 38. InjectXpathTemplate (CWE-643) ────────────────────────────────────────
+
+/// Replaces user-controlled XPath string concatenation with a comment nudge.
+///
+/// Full parameterized XPath rewrite is context-dependent (varies by library),
+/// so we insert a targeted comment on the vulnerable line.
+pub struct InjectXpathTemplate;
+
+impl PatchTemplate for InjectXpathTemplate {
+    fn name(&self) -> &'static str { "InjectXpath" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        let lower = line.to_lowercase();
+        if !lower.contains("xpath") { return None; }
+        // Must contain user input
+        if !line.contains("req.body.") && !line.contains("req.query.")
+            && !line.contains("user_input") && !line.contains("userInput") { return None; }
+        // Must be a string concatenation or f-string
+        if !line.contains(" + ") && !line.contains("f\"") && !line.contains("f'")
+            && !line.contains('`') { return None; }
+
+        let indent = get_indent(line);
+        let comment = match lang {
+            Language::Python => format!("{indent}# SICARIO FIX: use parameterized XPath — avoid string concatenation with user input"),
+            _ => format!("{indent}// SICARIO FIX: use parameterized XPath — avoid string concatenation with user input"),
+        };
+        Some(format!("{comment}\n{line}"))
+    }
+}
+
+// ── Sprint 2 shared helpers ───────────────────────────────────────────────────
+
+/// Inject a key-value pair into the first object literal after `marker` in `line`.
+///
+/// e.g. `inject_into_object("cookie: { secure: true }", "cookie:", "httpOnly: true")`
+/// → `"cookie: { httpOnly: true, secure: true }"`
+fn inject_into_object(line: &str, marker: &str, kv: &str) -> Option<String> {
+    let pos = line.find(marker)?;
+    let after_marker = &line[pos + marker.len()..];
+    // Find the opening brace
+    let brace_offset = after_marker.find('{')?;
+    let after_brace = &after_marker[brace_offset + 1..];
+    let insert_pos = pos + marker.len() + brace_offset + 1;
+    // Insert after the opening brace, before any existing content
+    let trimmed_after = after_brace.trim_start();
+    let space = if trimmed_after.starts_with('}') { "" } else { " " };
+    let sep = if trimmed_after.starts_with('}') { "" } else { ", " };
+    Some(format!(
+        "{}{{ {kv}{sep}{}",
+        &line[..insert_pos - 1], // everything up to and including the brace position
+        &line[insert_pos..]      // everything after the opening brace
+    ))
+}
+
+/// Count the number of top-level commas in a string (not inside nested parens/brackets/braces).
+fn count_top_level_commas(s: &str) -> usize {
+    let mut depth = 0usize;
+    let mut count = 0usize;
+    let mut in_str: Option<char> = None;
+    for ch in s.chars() {
+        if let Some(q) = in_str {
+            if ch == q { in_str = None; }
+            continue;
+        }
+        match ch {
+            '"' | '\'' | '`' => in_str = Some(ch),
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => { if depth > 0 { depth -= 1; } }
+            ',' if depth == 0 => count += 1,
+            _ => {}
+        }
+    }
+    count
+}
+
+/// Wrap occurrences of `target` (that are not already wrapped) with `fn_name(target)`.
+fn wrap_with_fn(line: &str, target: &str, fn_name: &str) -> String {
+    let already_wrapped = format!("{fn_name}({target}");
+    if line.contains(&already_wrapped) {
+        return line.to_string();
+    }
+    line.replace(target, &format!("{fn_name}({target})"))
+}
+
+// ── Sprint 2 tests ────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod sprint2_tests {
+    use super::*;
+
+    fn js() -> Language { Language::JavaScript }
+    fn py() -> Language { Language::Python }
+    fn go() -> Language { Language::Go }
+
+    // ── AuthSessionNoHttpOnlyTemplate ─────────────────────────────────────────
+
+    #[test]
+    fn test_session_httponly_injected() {
+        let t = AuthSessionNoHttpOnlyTemplate;
+        let line = "    app.use(session({ cookie: { secure: true } }));";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("httpOnly: true"));
+    }
+
+    #[test]
+    fn test_session_httponly_already_present() {
+        let t = AuthSessionNoHttpOnlyTemplate;
+        assert!(t.generate_patch("    cookie: { httpOnly: true, secure: true }", js()).is_none());
+    }
+
+    #[test]
+    fn test_session_httponly_wrong_lang() {
+        let t = AuthSessionNoHttpOnlyTemplate;
+        assert!(t.generate_patch("cookie: { secure: true }", py()).is_none());
+    }
+
+    // ── AuthSessionNoSecureFlagTemplate ───────────────────────────────────────
+
+    #[test]
+    fn test_session_secure_injected() {
+        let t = AuthSessionNoSecureFlagTemplate;
+        let line = "    app.use(session({ cookie: { httpOnly: true } }));";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("secure:"));
+        assert!(result.contains("NODE_ENV"));
+    }
+
+    #[test]
+    fn test_session_secure_already_present() {
+        let t = AuthSessionNoSecureFlagTemplate;
+        assert!(t.generate_patch("    cookie: { secure: true }", js()).is_none());
+    }
+
+    // ── AuthSessionFixationTemplate ───────────────────────────────────────────
+
+    #[test]
+    fn test_session_fixation_wrapped() {
+        let t = AuthSessionFixationTemplate;
+        let line = "    req.session.userId = user.id;";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("req.session.regenerate"));
+        assert!(result.contains("req.session.userId = user.id"));
+    }
+
+    #[test]
+    fn test_session_fixation_regenerate_not_wrapped() {
+        let t = AuthSessionFixationTemplate;
+        assert!(t.generate_patch("    req.session.regenerate(() => {", js()).is_none());
+    }
+
+    #[test]
+    fn test_session_fixation_wrong_lang() {
+        let t = AuthSessionFixationTemplate;
+        assert!(t.generate_patch("    req.session.userId = id;", py()).is_none());
+    }
+
+    // ── AuthPasswordInLogTemplate ─────────────────────────────────────────────
+
+    #[test]
+    fn test_password_in_log_js() {
+        let t = AuthPasswordInLogTemplate;
+        let line = "    console.log('password:', password);";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("// SICARIO FIX"));
+        assert!(!result.contains("console.log"));
+    }
+
+    #[test]
+    fn test_password_in_log_python() {
+        let t = AuthPasswordInLogTemplate;
+        let line = "    print(f'token: {token}')";
+        let result = t.generate_patch(line, py()).unwrap();
+        assert!(result.contains("# SICARIO FIX"));
+    }
+
+    #[test]
+    fn test_password_in_log_no_sensitive() {
+        let t = AuthPasswordInLogTemplate;
+        assert!(t.generate_patch("    console.log('user logged in');", js()).is_none());
+    }
+
+    // ── AuthBasicAuthOverHttpTemplate ─────────────────────────────────────────
+
+    #[test]
+    fn test_basic_auth_http_replaced() {
+        let t = AuthBasicAuthOverHttpTemplate;
+        let line = "    const url = 'http://api.example.com'; // Authorization: 'Basic abc'";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("https://"));
+        assert!(!result.contains("http://"));
+    }
+
+    #[test]
+    fn test_basic_auth_already_https() {
+        let t = AuthBasicAuthOverHttpTemplate;
+        assert!(t.generate_patch("    fetch('https://api.example.com', { headers: { Authorization: 'Basic abc' } })", js()).is_none());
+    }
+
+    // ── AuthJwtNoExpiryTemplate ───────────────────────────────────────────────
+
+    #[test]
+    fn test_jwt_no_expiry_js_two_args() {
+        let t = AuthJwtNoExpiryTemplate;
+        let line = "    const token = jwt.sign(payload, secret);";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("expiresIn: '1h'"));
+    }
+
+    #[test]
+    fn test_jwt_no_expiry_already_has_expiry() {
+        let t = AuthJwtNoExpiryTemplate;
+        assert!(t.generate_patch("    jwt.sign(payload, secret, { expiresIn: '2h' });", js()).is_none());
+    }
+
+    #[test]
+    fn test_jwt_no_expiry_python_comment() {
+        let t = AuthJwtNoExpiryTemplate;
+        let line = "    token = jwt.encode(payload, secret, algorithm='HS256')";
+        let result = t.generate_patch(line, py()).unwrap();
+        assert!(result.contains("# SICARIO FIX"));
+        assert!(result.contains("timedelta"));
+    }
+
+    // ── InjectChildProcessShellTrueTemplate ───────────────────────────────────
+
+    #[test]
+    fn test_shell_true_removed_spawn() {
+        let t = InjectChildProcessShellTrueTemplate;
+        let line = "    const proc = spawn(cmd, args, { shell: true });";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(!result.contains("shell: true"));
+    }
+
+    #[test]
+    fn test_shell_true_removed_execfile() {
+        let t = InjectChildProcessShellTrueTemplate;
+        let line = "    execFile(cmd, args, { shell: true }, cb);";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(!result.contains("shell: true"));
+    }
+
+    #[test]
+    fn test_shell_true_no_match() {
+        let t = InjectChildProcessShellTrueTemplate;
+        assert!(t.generate_patch("    const x = { shell: true };", js()).is_none());
+    }
+
+    #[test]
+    fn test_shell_true_wrong_lang() {
+        let t = InjectChildProcessShellTrueTemplate;
+        assert!(t.generate_patch("spawn(cmd, { shell: true })", py()).is_none());
+    }
+
+    // ── InjectPythonSubprocessShellTemplate ───────────────────────────────────
+
+    #[test]
+    fn test_subprocess_shell_true_replaced() {
+        let t = InjectPythonSubprocessShellTemplate;
+        let line = "    subprocess.run(cmd, shell=True)";
+        let result = t.generate_patch(line, py()).unwrap();
+        assert!(result.contains("shell=False"));
+        assert!(!result.contains("shell=True"));
+    }
+
+    #[test]
+    fn test_subprocess_shell_false_untouched() {
+        let t = InjectPythonSubprocessShellTemplate;
+        assert!(t.generate_patch("    subprocess.run(cmd, shell=False)", py()).is_none());
+    }
+
+    #[test]
+    fn test_subprocess_shell_wrong_lang() {
+        let t = InjectPythonSubprocessShellTemplate;
+        assert!(t.generate_patch("subprocess.run(cmd, shell=True)", js()).is_none());
+    }
+
+    // ── InjectSstiTemplate ────────────────────────────────────────────────────
+
+    #[test]
+    fn test_ssti_wrapped() {
+        let t = InjectSstiTemplate;
+        let line = "    return render_template_string(user_input)";
+        let result = t.generate_patch(line, py()).unwrap();
+        assert!(result.contains("escape(user_input)"));
+        assert!(!result.contains("render_template_string(user_input)"));
+    }
+
+    #[test]
+    fn test_ssti_already_escaped() {
+        let t = InjectSstiTemplate;
+        assert!(t.generate_patch("    render_template_string(escape(user_input))", py()).is_none());
+    }
+
+    #[test]
+    fn test_ssti_wrong_lang() {
+        let t = InjectSstiTemplate;
+        assert!(t.generate_patch("render_template_string(x)", js()).is_none());
+    }
+
+    // ── InjectLdapTemplate ────────────────────────────────────────────────────
+
+    #[test]
+    fn test_ldap_js_wrapped() {
+        let t = InjectLdapTemplate;
+        let line = "    const filter = '(uid=' + req.body.username + ')';  // ldap query";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("ldap.escape(req.body.username)"));
+    }
+
+    #[test]
+    fn test_ldap_python_wrapped() {
+        let t = InjectLdapTemplate;
+        let line = "    ldap_filter = f'(uid={user_input})'  # ldap search";
+        let result = t.generate_patch(line, py()).unwrap();
+        assert!(result.contains("escape_filter_chars(user_input)"));
+    }
+
+    #[test]
+    fn test_ldap_no_user_input() {
+        let t = InjectLdapTemplate;
+        assert!(t.generate_patch("    ldap_filter = '(uid=admin)'", py()).is_none());
+    }
+
+    // ── InjectXpathTemplate ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_xpath_comment_injected() {
+        let t = InjectXpathTemplate;
+        let line = "    const expr = '//user[@id=' + req.query.id + ']';  // xpath";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("// SICARIO FIX"));
+        assert!(result.contains("parameterized XPath"));
+        // Original line preserved
+        assert!(result.contains("req.query.id"));
+    }
+
+    #[test]
+    fn test_xpath_no_user_input() {
+        let t = InjectXpathTemplate;
+        assert!(t.generate_patch("    const expr = '//user[@id=1]';  // xpath", js()).is_none());
+    }
+
+    // ── Registry integration ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_registry_session_fixation_by_cwe() {
+        let reg = TemplateRegistry::default();
+        assert!(reg.lookup("unknown", Some("CWE-384")).is_some());
+    }
+
+    #[test]
+    fn test_registry_jwt_no_expiry_by_rule() {
+        let reg = TemplateRegistry::default();
+        assert!(reg.lookup("js-jwt-no-expiry", None).is_some());
+    }
+
+    #[test]
+    fn test_registry_subprocess_shell_by_rule() {
+        let reg = TemplateRegistry::default();
+        assert!(reg.lookup("py-subprocess-shell-true", None).is_some());
+    }
+
+    #[test]
+    fn test_registry_ldap_by_cwe() {
+        let reg = TemplateRegistry::default();
+        assert!(reg.lookup("unknown", Some("CWE-90")).is_some());
+    }
+
+    #[test]
+    fn test_registry_xpath_by_cwe() {
+        let reg = TemplateRegistry::default();
+        assert!(reg.lookup("unknown", Some("CWE-643")).is_some());
+    }
+}
+
+// ── Sprint 3: Web Headers + Input Validation + File Handling (18 templates) ──
+
+// ── Domain 4: Web Security Headers & CORS ────────────────────────────────────
+
+// ── 40. WebHelmetMissingTemplate (CWE-693) ───────────────────────────────────
+
+/// Injects `app.use(require('helmet')());` after `const app = express()`.
+/// Only fires when `helmet` is not already present on the same line.
+pub struct WebHelmetMissingTemplate;
+
+impl PatchTemplate for WebHelmetMissingTemplate {
+    fn name(&self) -> &'static str { "WebHelmetMissing" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        match lang { Language::JavaScript | Language::TypeScript => {} _ => return None }
+        let trimmed = line.trim();
+        if !trimmed.contains("express()") { return None; }
+        if line.contains("helmet") { return None; }
+        // Extract app variable name
+        let app_var = trimmed
+            .trim_start_matches("const ").trim_start_matches("let ").trim_start_matches("var ")
+            .split(|c: char| c == '=' || c.is_whitespace()).next()
+            .map(str::trim).filter(|s| !s.is_empty())?;
+        let indent = get_indent(line);
+        let semi = if line.trim_end().ends_with(';') { ";" } else { "" };
+        Some(format!("{line}\n{indent}{app_var}.use(require('helmet')()){semi}"))
+    }
+}
+
+// ── 41. WebCspMissingTemplate (CWE-693) ──────────────────────────────────────
+
+/// Replaces bare `helmet()` with a version that includes a CSP directive.
+pub struct WebCspMissingTemplate;
+
+impl PatchTemplate for WebCspMissingTemplate {
+    fn name(&self) -> &'static str { "WebCspMissing" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        match lang { Language::JavaScript | Language::TypeScript => {} _ => return None }
+        if !line.contains("helmet()") { return None; }
+        if line.contains("contentSecurityPolicy") { return None; }
+        Some(line.replace(
+            "helmet()",
+            "helmet({ contentSecurityPolicy: { directives: { defaultSrc: [\"'self'\"] } } })",
+        ))
+    }
+}
+
+// ── 42. WebHstsDisabledTemplate (CWE-319) ────────────────────────────────────
+
+/// Replaces `hsts: false` or `hsts: { maxAge: 0 }` with a secure HSTS config.
+pub struct WebHstsDisabledTemplate;
+
+impl PatchTemplate for WebHstsDisabledTemplate {
+    fn name(&self) -> &'static str { "WebHstsDisabled" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        match lang { Language::JavaScript | Language::TypeScript => {} _ => return None }
+        let lower = line.to_lowercase();
+        if !lower.contains("hsts") { return None; }
+        if !lower.contains("false") && !lower.contains("maxage: 0") && !lower.contains("maxage:0") {
+            return None;
+        }
+        let fixed = line
+            .replace("hsts: false", "hsts: { maxAge: 31536000, includeSubDomains: true }")
+            .replace("hsts:false", "hsts: { maxAge: 31536000, includeSubDomains: true }")
+            .replace("maxAge: 0", "maxAge: 31536000, includeSubDomains: true")
+            .replace("maxAge:0", "maxAge: 31536000, includeSubDomains: true");
+        if fixed == line { return None; }
+        Some(fixed)
+    }
+}
+
+// ── 43. WebCorsCredentialsWildcardTemplate (CWE-942) ─────────────────────────
+
+/// Replaces `origin: '*'` when `credentials: true` is also present.
+pub struct WebCorsCredentialsWildcardTemplate;
+
+impl PatchTemplate for WebCorsCredentialsWildcardTemplate {
+    fn name(&self) -> &'static str { "WebCorsCredentialsWildcard" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        match lang { Language::JavaScript | Language::TypeScript => {} _ => return None }
+        let lower = line.to_lowercase();
+        if !lower.contains("credentials") { return None; }
+        if !line.contains("origin: '*'") && !line.contains("origin:\"*\"")
+            && !line.contains("origin: \"*\"") { return None; }
+        let fixed = line
+            .replace("origin: '*'", "origin: process.env.ALLOWED_ORIGIN")
+            .replace("origin: \"*\"", "origin: process.env.ALLOWED_ORIGIN")
+            .replace("origin:\"*\"", "origin: process.env.ALLOWED_ORIGIN");
+        if fixed == line { return None; }
+        Some(fixed)
+    }
+}
+
+// ── 44. WebReferrerPolicyMissingTemplate (CWE-200) ───────────────────────────
+
+/// Injects `referrerPolicy` into a `helmet({...})` call that lacks it.
+pub struct WebReferrerPolicyMissingTemplate;
+
+impl PatchTemplate for WebReferrerPolicyMissingTemplate {
+    fn name(&self) -> &'static str { "WebReferrerPolicyMissing" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        match lang { Language::JavaScript | Language::TypeScript => {} _ => return None }
+        if !line.contains("helmet(") { return None; }
+        if line.contains("referrerPolicy") { return None; }
+        // helmet() with no args → add options
+        if line.contains("helmet()") {
+            return Some(line.replace(
+                "helmet()",
+                "helmet({ referrerPolicy: { policy: 'strict-origin-when-cross-origin' } })",
+            ));
+        }
+        // helmet({ existing }) → inject referrerPolicy
+        if let Some(pos) = line.find("helmet({") {
+            let after = &line[pos + "helmet({".len()..];
+            let before = &line[..pos + "helmet({".len()];
+            return Some(format!(
+                "{before} referrerPolicy: {{ policy: 'strict-origin-when-cross-origin' }}, {after}"
+            ));
+        }
+        None
+    }
+}
+
+// ── 45. WebClickjackingTemplate (CWE-1021) ───────────────────────────────────
+
+/// Replaces `frameguard: false` or `X-Frame-Options: ALLOWALL` with deny.
+pub struct WebClickjackingTemplate;
+
+impl PatchTemplate for WebClickjackingTemplate {
+    fn name(&self) -> &'static str { "WebClickjacking" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        match lang { Language::JavaScript | Language::TypeScript => {} _ => return None }
+        let lower = line.to_lowercase();
+        if !lower.contains("frameguard") && !lower.contains("x-frame-options") { return None; }
+        let fixed = line
+            .replace("frameguard: false", "frameguard: { action: 'deny' }")
+            .replace("frameguard:false", "frameguard: { action: 'deny' }")
+            .replace("X-Frame-Options: ALLOWALL", "X-Frame-Options: DENY")
+            .replace("X-Frame-Options: SAMEORIGIN", "X-Frame-Options: DENY");
+        if fixed == line { return None; }
+        Some(fixed)
+    }
+}
+
+// ── 46. WebCacheControlMissingTemplate (CWE-525) ─────────────────────────────
+
+/// Injects `res.setHeader('Cache-Control', 'no-store');` before `res.json(` / `res.send(`.
+pub struct WebCacheControlMissingTemplate;
+
+impl PatchTemplate for WebCacheControlMissingTemplate {
+    fn name(&self) -> &'static str { "WebCacheControlMissing" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        match lang { Language::JavaScript | Language::TypeScript => {} _ => return None }
+        if !line.contains("res.json(") && !line.contains("res.send(")
+            && !line.contains("res.render(") { return None; }
+        if line.contains("Cache-Control") { return None; }
+        let indent = get_indent(line);
+        Some(format!("{indent}res.setHeader('Cache-Control', 'no-store');\n{line}"))
+    }
+}
+
+// ── Domain 5: Input Validation & Prototype Pollution ─────────────────────────
+
+// ── 47. PrototypePollutionMergeTemplate (CWE-1321) ───────────────────────────
+
+/// Replaces `Object.assign(target, userInput)` with a prototype-safe merge.
+pub struct PrototypePollutionMergeTemplate;
+
+impl PatchTemplate for PrototypePollutionMergeTemplate {
+    fn name(&self) -> &'static str { "PrototypePollutionMerge" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        match lang { Language::JavaScript | Language::TypeScript => {} _ => return None }
+        if !line.contains("Object.assign(") && !line.contains("_.merge(") { return None; }
+        // Must involve req.body or req.query
+        if !line.contains("req.body") && !line.contains("req.query") { return None; }
+        let fixed = if line.contains("Object.assign(") {
+            // Object.assign(target, src) → Object.assign(Object.create(null), target, JSON.parse(JSON.stringify(src)))
+            // Simple heuristic: wrap the second argument
+            if let Some(pos) = line.find("Object.assign(") {
+                let after = &line[pos + "Object.assign(".len()..];
+                if let Some(comma) = find_top_level_comma(after) {
+                    let first_arg = &after[..comma];
+                    let rest_after_comma = after[comma + 1..].trim_start();
+                    if let Some(close) = find_matching_paren(rest_after_comma) {
+                        let second_arg = &rest_after_comma[..close];
+                        let tail = &rest_after_comma[close + 1..];
+                        let before = &line[..pos];
+                        return Some(format!(
+                            "{before}Object.assign(Object.create(null), {first_arg}, JSON.parse(JSON.stringify({second_arg}))){tail}"
+                        ));
+                    }
+                }
+            }
+            line.to_string()
+        } else {
+            // _.merge(target, src) → same pattern
+            line.replace("_.merge(", "Object.assign(Object.create(null), ")
+        };
+        if fixed == line { return None; }
+        Some(fixed)
+    }
+}
+
+// ── 48. PrototypePollutionSetTemplate (CWE-1321) ─────────────────────────────
+
+/// Prepends a key validation guard before `obj[req.body.key] = ...`.
+pub struct PrototypePollutionSetTemplate;
+
+impl PatchTemplate for PrototypePollutionSetTemplate {
+    fn name(&self) -> &'static str { "PrototypePollutionSet" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        match lang { Language::JavaScript | Language::TypeScript => {} _ => return None }
+        // Dynamic property assignment from user input
+        if !line.contains("req.body.key") && !line.contains("req.query.key")
+            && !line.contains("req.params.key") { return None; }
+        if !line.contains("] =") && !line.contains("]=") { return None; }
+        let indent = get_indent(line);
+        let key_src = if line.contains("req.body.key") { "req.body.key" }
+            else if line.contains("req.query.key") { "req.query.key" }
+            else { "req.params.key" };
+        Some(format!(
+            "{indent}if (['__proto__', 'constructor', 'prototype'].includes({key_src})) throw new Error('Invalid key');\n{line}"
+        ))
+    }
+}
+
+// ── 49. InputRegexDosTemplate (CWE-1333) ─────────────────────────────────────
+
+/// Prepends a length guard before `new RegExp(userInput)`.
+pub struct InputRegexDosTemplate;
+
+impl PatchTemplate for InputRegexDosTemplate {
+    fn name(&self) -> &'static str { "InputRegexDos" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        match lang { Language::JavaScript | Language::TypeScript => {} _ => return None }
+        if !line.contains("new RegExp(") { return None; }
+        // Must use user-controlled input
+        if !line.contains("req.") && !line.contains("userInput") && !line.contains("input") {
+            return None;
+        }
+        let indent = get_indent(line);
+        Some(format!(
+            "{indent}if (userInput.length > 100) throw new Error('Input too long');\n{line}"
+        ))
+    }
+}
+
+// ── 50. InputJsonParseNoTryCatchTemplate (CWE-755) ───────────────────────────
+
+/// Wraps `JSON.parse(userInput)` in a try/catch when not already wrapped.
+pub struct InputJsonParseNoTryCatchTemplate;
+
+impl PatchTemplate for InputJsonParseNoTryCatchTemplate {
+    fn name(&self) -> &'static str { "InputJsonParseNoTryCatch" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        match lang { Language::JavaScript | Language::TypeScript => {} _ => return None }
+        if !line.contains("JSON.parse(") { return None; }
+        // Don't fire if already inside a try block (heuristic: line starts with try)
+        if line.trim_start().starts_with("try") { return None; }
+        // Extract the variable being assigned to, if any
+        let indent = get_indent(line);
+        let trimmed = line.trim();
+        // Check for assignment: `const x = JSON.parse(...)` or `let x = JSON.parse(...)`
+        let (decl, var_name) = if trimmed.starts_with("const ") || trimmed.starts_with("let ")
+            || trimmed.starts_with("var ") {
+            let after_kw = trimmed.trim_start_matches("const ").trim_start_matches("let ")
+                .trim_start_matches("var ");
+            let var = after_kw.split(|c: char| c == '=' || c.is_whitespace()).next()
+                .map(str::trim).unwrap_or("parsed");
+            let kw = if trimmed.starts_with("const ") { "const" }
+                else if trimmed.starts_with("let ") { "let" } else { "var" };
+            (kw, var.to_string())
+        } else {
+            ("let", "parsed".to_string())
+        };
+        Some(format!(
+            "{indent}{decl} {var_name};\n\
+             {indent}try {{\n\
+             {indent}    {var_name} = {trimmed}\n\
+             {indent}}} catch (e) {{\n\
+             {indent}    return res.status(400).json({{ error: 'Invalid JSON' }});\n\
+             {indent}}}"
+        ))
+    }
+}
+
+// ── 51. InputPathTraversalTemplate (CWE-22) ──────────────────────────────────
+
+/// Wraps `path.join(baseDir, userInput)` with a startsWith guard.
+pub struct InputPathTraversalTemplate;
+
+impl PatchTemplate for InputPathTraversalTemplate {
+    fn name(&self) -> &'static str { "InputPathTraversal" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        match lang { Language::JavaScript | Language::TypeScript => {} _ => return None }
+        if !line.contains("path.join(") && !line.contains("path.resolve(") { return None; }
+        if !line.contains("req.") && !line.contains("userInput") && !line.contains("filename") {
+            return None;
+        }
+        if line.contains("startsWith") { return None; }
+        let indent = get_indent(line);
+        Some(format!(
+            "{line}\n{indent}if (!resolvedPath.startsWith(path.resolve(baseDir))) throw new Error('Path traversal blocked');"
+        ))
+    }
+}
+
+// ── 52. InputReqBodyNoValidationTemplate (CWE-20) ────────────────────────────
+
+/// Injects a validation comment above the first `req.body.*` access.
+pub struct InputReqBodyNoValidationTemplate;
+
+impl PatchTemplate for InputReqBodyNoValidationTemplate {
+    fn name(&self) -> &'static str { "InputReqBodyNoValidation" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        match lang { Language::JavaScript | Language::TypeScript => {} _ => return None }
+        if !line.contains("req.body.") { return None; }
+        // Don't fire if already has a validation comment nearby
+        if line.contains("SICARIO") || line.contains("validate") || line.contains("schema") {
+            return None;
+        }
+        let indent = get_indent(line);
+        Some(format!(
+            "{indent}// SICARIO: validate req.body with express-validator, joi, or zod before use\n{line}"
+        ))
+    }
+}
+
+// ── Domain 6: File & Resource Handling ───────────────────────────────────────
+
+// ── 53. FileUploadNoMimeCheckTemplate (CWE-434) ───────────────────────────────
+
+/// Injects a `fileFilter` into `multer({ dest: '...' })` calls missing one.
+pub struct FileUploadNoMimeCheckTemplate;
+
+impl PatchTemplate for FileUploadNoMimeCheckTemplate {
+    fn name(&self) -> &'static str { "FileUploadNoMimeCheck" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        match lang { Language::JavaScript | Language::TypeScript => {} _ => return None }
+        if !line.contains("multer(") { return None; }
+        if line.contains("fileFilter") || line.contains("mimetype") { return None; }
+        // Inject fileFilter into the multer options object
+        let fixed = if line.contains("multer({") {
+            if let Some(pos) = line.find("multer({") {
+                let after = &line[pos + "multer({".len()..];
+                let before = &line[..pos + "multer({".len()];
+                format!(
+                    "{before} fileFilter: (req, file, cb) => {{ const allowed = ['image/jpeg', 'image/png']; cb(null, allowed.includes(file.mimetype)); }}, {after}"
+                )
+            } else { line.to_string() }
+        } else {
+            line.to_string()
+        };
+        if fixed == line { return None; }
+        Some(fixed)
+    }
+}
+
+// ── 54. FileTempFileInsecureTemplate (CWE-377) ────────────────────────────────
+
+/// Replaces `tempfile.mktemp()` with `tempfile.mkstemp()`.
+pub struct FileTempFileInsecureTemplate;
+
+impl PatchTemplate for FileTempFileInsecureTemplate {
+    fn name(&self) -> &'static str { "FileTempFileInsecure" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        if lang != Language::Python { return None; }
+        if !line.contains("tempfile.mktemp(") { return None; }
+        Some(line.replace("tempfile.mktemp(", "tempfile.mkstemp("))
+    }
+}
+
+// ── 55. FilePermissionsWorldWritableTemplate (CWE-732) ────────────────────────
+
+/// Replaces `os.chmod(path, 0o777)` / `0o666` with `0o600`.
+pub struct FilePermissionsWorldWritableTemplate;
+
+impl PatchTemplate for FilePermissionsWorldWritableTemplate {
+    fn name(&self) -> &'static str { "FilePermissionsWorldWritable" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        if lang != Language::Python { return None; }
+        if !line.contains("os.chmod(") { return None; }
+        if !line.contains("0o777") && !line.contains("0o666") && !line.contains("0o775")
+            && !line.contains("0o755") { return None; }
+        let fixed = line
+            .replace("0o777", "0o600")
+            .replace("0o666", "0o600")
+            .replace("0o775", "0o640")
+            .replace("0o755", "0o640");
+        if fixed == line { return None; }
+        Some(fixed)
+    }
+}
+
+// ── 56. GoFileCloseErrorIgnoredTemplate (CWE-390) ────────────────────────────
+
+/// Replaces bare `defer f.Close()` with an error-checking wrapper.
+pub struct GoFileCloseErrorIgnoredTemplate;
+
+impl PatchTemplate for GoFileCloseErrorIgnoredTemplate {
+    fn name(&self) -> &'static str { "GoFileCloseErrorIgnored" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        if lang != Language::Go { return None; }
+        let trimmed = line.trim();
+        // Must be a bare `defer X.Close()` — not already wrapped in a func
+        if !trimmed.starts_with("defer ") || !trimmed.contains(".Close()") { return None; }
+        if trimmed.contains("func()") || trimmed.contains("func (") { return None; }
+        // Extract the variable: `defer f.Close()` → `f`
+        let after_defer = trimmed.trim_start_matches("defer ").trim();
+        let var_name = after_defer.split('.').next()?.trim();
+        if var_name.is_empty() { return None; }
+        let indent = get_indent(line);
+        Some(format!(
+            "{indent}defer func() {{ if err := {var_name}.Close(); err != nil {{ log.Printf(\"close error: %v\", err) }} }}()"
+        ))
+    }
+}
+
+// ── 57. FileReadSyncTemplate (CWE-400) ────────────────────────────────────────
+
+/// Replaces `fs.readFileSync(userInput)` with async + validation comment.
+pub struct FileReadSyncTemplate;
+
+impl PatchTemplate for FileReadSyncTemplate {
+    fn name(&self) -> &'static str { "FileReadSync" }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        match lang { Language::JavaScript | Language::TypeScript => {} _ => return None }
+        if !line.contains("fs.readFileSync(") { return None; }
+        // Only fire when the argument looks user-controlled
+        if !line.contains("req.") && !line.contains("userInput") && !line.contains("filename")
+            && !line.contains("filePath") { return None; }
+        let fixed = line.replace("fs.readFileSync(", "await fs.promises.readFile(");
+        if fixed == line { return None; }
+        let indent = get_indent(line);
+        Some(format!(
+            "{indent}// SICARIO FIX: validate path before reading — see InputPathTraversalTemplate\n{fixed}"
+        ))
+    }
+}
+
+// ── Sprint 3 tests ────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod sprint3_tests {
+    use super::*;
+
+    fn js() -> Language { Language::JavaScript }
+    fn py() -> Language { Language::Python }
+    fn go() -> Language { Language::Go }
+
+    // ── WebHelmetMissingTemplate ──────────────────────────────────────────────
+
+    #[test]
+    fn test_helmet_injected() {
+        let t = WebHelmetMissingTemplate;
+        let line = "const app = express();";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("app.use(require('helmet')())"));
+        assert!(result.contains("express()"));
+    }
+
+    #[test]
+    fn test_helmet_already_present() {
+        let t = WebHelmetMissingTemplate;
+        assert!(t.generate_patch("const app = express(); app.use(helmet());", js()).is_none());
+    }
+
+    #[test]
+    fn test_helmet_no_express() {
+        let t = WebHelmetMissingTemplate;
+        assert!(t.generate_patch("const router = express.Router();", js()).is_none());
+    }
+
+    // ── WebCspMissingTemplate ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_csp_injected() {
+        let t = WebCspMissingTemplate;
+        let line = "    app.use(helmet());";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("contentSecurityPolicy"));
+        assert!(result.contains("defaultSrc"));
+    }
+
+    #[test]
+    fn test_csp_already_present() {
+        let t = WebCspMissingTemplate;
+        assert!(t.generate_patch("    app.use(helmet({ contentSecurityPolicy: {} }));", js()).is_none());
+    }
+
+    // ── WebHstsDisabledTemplate ───────────────────────────────────────────────
+
+    #[test]
+    fn test_hsts_false_replaced() {
+        let t = WebHstsDisabledTemplate;
+        let line = "    app.use(helmet({ hsts: false }));";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("maxAge: 31536000"));
+        assert!(!result.contains("hsts: false"));
+    }
+
+    #[test]
+    fn test_hsts_max_age_zero_replaced() {
+        let t = WebHstsDisabledTemplate;
+        let line = "    hsts: { maxAge: 0 }";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("31536000"));
+    }
+
+    // ── WebCorsCredentialsWildcardTemplate ────────────────────────────────────
+
+    #[test]
+    fn test_cors_credentials_wildcard_replaced() {
+        let t = WebCorsCredentialsWildcardTemplate;
+        let line = "    cors({ origin: '*', credentials: true })";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("process.env.ALLOWED_ORIGIN"));
+        assert!(!result.contains("'*'"));
+    }
+
+    #[test]
+    fn test_cors_no_credentials_not_fired() {
+        let t = WebCorsCredentialsWildcardTemplate;
+        // No credentials: true — don't fire
+        assert!(t.generate_patch("    cors({ origin: '*' })", js()).is_none());
+    }
+
+    // ── WebReferrerPolicyMissingTemplate ──────────────────────────────────────
+
+    #[test]
+    fn test_referrer_policy_injected_bare_helmet() {
+        let t = WebReferrerPolicyMissingTemplate;
+        let line = "    app.use(helmet());";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("referrerPolicy"));
+        assert!(result.contains("strict-origin-when-cross-origin"));
+    }
+
+    #[test]
+    fn test_referrer_policy_already_present() {
+        let t = WebReferrerPolicyMissingTemplate;
+        assert!(t.generate_patch("    helmet({ referrerPolicy: { policy: 'no-referrer' } })", js()).is_none());
+    }
+
+    // ── WebClickjackingTemplate ───────────────────────────────────────────────
+
+    #[test]
+    fn test_frameguard_false_replaced() {
+        let t = WebClickjackingTemplate;
+        let line = "    helmet({ frameguard: false })";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("action: 'deny'"));
+        assert!(!result.contains("frameguard: false"));
+    }
+
+    // ── WebCacheControlMissingTemplate ────────────────────────────────────────
+
+    #[test]
+    fn test_cache_control_injected() {
+        let t = WebCacheControlMissingTemplate;
+        let line = "    res.json({ user });";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("Cache-Control"));
+        assert!(result.contains("no-store"));
+        assert!(result.contains("res.json("));
+    }
+
+    #[test]
+    fn test_cache_control_already_set() {
+        let t = WebCacheControlMissingTemplate;
+        assert!(t.generate_patch("    res.setHeader('Cache-Control', 'no-store'); res.json(data);", js()).is_none());
+    }
+
+    // ── PrototypePollutionMergeTemplate ───────────────────────────────────────
+
+    #[test]
+    fn test_prototype_pollution_merge_wrapped() {
+        let t = PrototypePollutionMergeTemplate;
+        let line = "    Object.assign(config, req.body);";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("Object.create(null)"));
+        assert!(result.contains("JSON.parse(JSON.stringify("));
+    }
+
+    #[test]
+    fn test_prototype_pollution_no_user_input() {
+        let t = PrototypePollutionMergeTemplate;
+        assert!(t.generate_patch("    Object.assign(a, b);", js()).is_none());
+    }
+
+    // ── PrototypePollutionSetTemplate ─────────────────────────────────────────
+
+    #[test]
+    fn test_prototype_pollution_set_guard() {
+        let t = PrototypePollutionSetTemplate;
+        let line = "    obj[req.body.key] = req.body.value;";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("__proto__"));
+        assert!(result.contains("constructor"));
+        assert!(result.contains("prototype"));
+    }
+
+    #[test]
+    fn test_prototype_pollution_set_no_match() {
+        let t = PrototypePollutionSetTemplate;
+        assert!(t.generate_patch("    obj['name'] = value;", js()).is_none());
+    }
+
+    // ── InputRegexDosTemplate ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_regex_dos_guard_injected() {
+        let t = InputRegexDosTemplate;
+        let line = "    const re = new RegExp(userInput);";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("userInput.length > 100"));
+        assert!(result.contains("new RegExp(userInput)"));
+    }
+
+    #[test]
+    fn test_regex_dos_literal_not_fired() {
+        let t = InputRegexDosTemplate;
+        assert!(t.generate_patch("    const re = new RegExp('^[a-z]+$');", js()).is_none());
+    }
+
+    // ── InputJsonParseNoTryCatchTemplate ──────────────────────────────────────
+
+    #[test]
+    fn test_json_parse_wrapped() {
+        let t = InputJsonParseNoTryCatchTemplate;
+        let line = "    const data = JSON.parse(body);";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("try {"));
+        assert!(result.contains("catch (e)"));
+        assert!(result.contains("400"));
+    }
+
+    #[test]
+    fn test_json_parse_wrong_lang() {
+        let t = InputJsonParseNoTryCatchTemplate;
+        assert!(t.generate_patch("    data = JSON.parse(body)", py()).is_none());
+    }
+
+    // ── InputPathTraversalTemplate ────────────────────────────────────────────
+
+    #[test]
+    fn test_path_traversal_guard_injected() {
+        let t = InputPathTraversalTemplate;
+        let line = "    const filePath = path.join(baseDir, req.params.filename);";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("startsWith"));
+        assert!(result.contains("Path traversal blocked"));
+    }
+
+    #[test]
+    fn test_path_traversal_already_guarded() {
+        let t = InputPathTraversalTemplate;
+        assert!(t.generate_patch("    if (!p.startsWith(base)) throw new Error();", js()).is_none());
+    }
+
+    // ── InputReqBodyNoValidationTemplate ─────────────────────────────────────
+
+    #[test]
+    fn test_req_body_comment_injected() {
+        let t = InputReqBodyNoValidationTemplate;
+        let line = "    const name = req.body.name;";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("// SICARIO:"));
+        assert!(result.contains("req.body.name"));
+    }
+
+    // ── FileUploadNoMimeCheckTemplate ─────────────────────────────────────────
+
+    #[test]
+    fn test_multer_filefilter_injected() {
+        let t = FileUploadNoMimeCheckTemplate;
+        let line = "    const upload = multer({ dest: 'uploads/' });";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("fileFilter"));
+        assert!(result.contains("mimetype"));
+    }
+
+    #[test]
+    fn test_multer_already_has_filter() {
+        let t = FileUploadNoMimeCheckTemplate;
+        assert!(t.generate_patch("    multer({ fileFilter: myFilter })", js()).is_none());
+    }
+
+    // ── FileTempFileInsecureTemplate ──────────────────────────────────────────
+
+    #[test]
+    fn test_mktemp_replaced() {
+        let t = FileTempFileInsecureTemplate;
+        let line = "    tmp = tempfile.mktemp()";
+        let result = t.generate_patch(line, py()).unwrap();
+        assert!(result.contains("tempfile.mkstemp()"));
+        assert!(!result.contains("tempfile.mktemp()"));
+    }
+
+    #[test]
+    fn test_mktemp_wrong_lang() {
+        let t = FileTempFileInsecureTemplate;
+        assert!(t.generate_patch("tempfile.mktemp()", js()).is_none());
+    }
+
+    // ── FilePermissionsWorldWritableTemplate ──────────────────────────────────
+
+    #[test]
+    fn test_chmod_777_replaced() {
+        let t = FilePermissionsWorldWritableTemplate;
+        let line = "    os.chmod(path, 0o777)";
+        let result = t.generate_patch(line, py()).unwrap();
+        assert!(result.contains("0o600"));
+        assert!(!result.contains("0o777"));
+    }
+
+    #[test]
+    fn test_chmod_600_untouched() {
+        let t = FilePermissionsWorldWritableTemplate;
+        assert!(t.generate_patch("    os.chmod(path, 0o600)", py()).is_none());
+    }
+
+    // ── GoFileCloseErrorIgnoredTemplate ───────────────────────────────────────
+
+    #[test]
+    fn test_go_close_error_wrapped() {
+        let t = GoFileCloseErrorIgnoredTemplate;
+        let line = "\tdefer f.Close()";
+        let result = t.generate_patch(line, go()).unwrap();
+        assert!(result.contains("func()"));
+        assert!(result.contains("f.Close()"));
+        assert!(result.contains("log.Printf"));
+    }
+
+    #[test]
+    fn test_go_close_already_wrapped() {
+        let t = GoFileCloseErrorIgnoredTemplate;
+        assert!(t.generate_patch("\tdefer func() { f.Close() }()", go()).is_none());
+    }
+
+    #[test]
+    fn test_go_close_wrong_lang() {
+        let t = GoFileCloseErrorIgnoredTemplate;
+        assert!(t.generate_patch("\tdefer f.Close()", js()).is_none());
+    }
+
+    // ── FileReadSyncTemplate ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_readfilesync_replaced() {
+        let t = FileReadSyncTemplate;
+        let line = "    const data = fs.readFileSync(req.params.filename);";
+        let result = t.generate_patch(line, js()).unwrap();
+        assert!(result.contains("fs.promises.readFile("));
+        assert!(result.contains("// SICARIO FIX"));
+    }
+
+    #[test]
+    fn test_readfilesync_no_user_input() {
+        let t = FileReadSyncTemplate;
+        assert!(t.generate_patch("    const data = fs.readFileSync('./config.json');", js()).is_none());
+    }
+
+    // ── Registry integration ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_registry_helmet_by_rule() {
+        let reg = TemplateRegistry::default();
+        assert!(reg.lookup("express-helmet-missing", None).is_some());
+    }
+
+    #[test]
+    fn test_registry_hsts_by_cwe() {
+        let reg = TemplateRegistry::default();
+        assert!(reg.lookup("unknown", Some("CWE-319")).is_some());
+    }
+
+    #[test]
+    fn test_registry_prototype_pollution_by_cwe() {
+        let reg = TemplateRegistry::default();
+        assert!(reg.lookup("unknown", Some("CWE-1321")).is_some());
+    }
+
+    #[test]
+    fn test_registry_path_traversal_by_cwe() {
+        let reg = TemplateRegistry::default();
+        assert!(reg.lookup("unknown", Some("CWE-22")).is_some());
+    }
+
+    #[test]
+    fn test_registry_chmod_by_cwe() {
+        let reg = TemplateRegistry::default();
+        assert!(reg.lookup("unknown", Some("CWE-732")).is_some());
+    }
+
+    #[test]
+    fn test_registry_go_close_by_cwe() {
+        let reg = TemplateRegistry::default();
+        assert!(reg.lookup("unknown", Some("CWE-390")).is_some());
+    }
+}
+

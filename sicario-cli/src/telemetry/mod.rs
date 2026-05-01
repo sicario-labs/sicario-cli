@@ -34,8 +34,19 @@ pub fn count_contributors(repo_path: &Path) -> u32 {
             1
         }
         Ok(out) if !out.status.success() => {
-            // Non-zero exit — not a git repo or other git error
-            1
+            // Non-zero exit — check if this is an empty repo (no commits yet)
+            // vs. a directory that is not a git repository at all.
+            // `git log` in an empty repo exits 128 with a message like
+            // "does not have any commits yet", whereas a non-repo exits 128
+            // with "not a git repository".
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            if stderr.contains("does not have any commits") {
+                // Empty repo — 0 contributors, not the fallback
+                0
+            } else {
+                // Not a git repo or other git error — safe default
+                1
+            }
         }
         Ok(out) => {
             let stdout = String::from_utf8_lossy(&out.stdout);

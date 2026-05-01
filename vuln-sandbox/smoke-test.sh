@@ -24,7 +24,7 @@ fi
 echo "Running: sicario scan vuln-sandbox/ --format json"
 SCAN_OUTPUT=$(sicario scan "$REPO_ROOT/vuln-sandbox/" --format json 2>&1)
 
-ACTUAL=$(echo "$SCAN_OUTPUT" | jq '.findings | length' 2>/dev/null || echo "parse_error")
+ACTUAL=$(echo "$SCAN_OUTPUT" | jq 'length' 2>/dev/null || echo "parse_error")
 
 if [ "$ACTUAL" = "parse_error" ]; then
   echo "✗ Smoke test FAILED: could not parse JSON output from sicario"
@@ -40,6 +40,6 @@ else
   echo "✗ Smoke test FAILED: $ACTUAL findings (expected $EXPECTED)"
   echo ""
   echo "Breakdown by severity:"
-  echo "$SCAN_OUTPUT" | jq '.findings | group_by(.severity) | map({severity: .[0].severity, count: length}) | sort_by(.severity)'
+  echo "$SCAN_OUTPUT" | jq 'group_by(.severity) | map({severity: .[0].severity, count: length}) | sort_by(.severity)'
   exit 1
 fi

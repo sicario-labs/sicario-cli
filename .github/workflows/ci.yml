@@ -116,7 +116,7 @@ jobs:
       - name: Run vuln-sandbox smoke test
         run: |
           EXPECTED=79
-          ACTUAL=$(sicario scan vuln-sandbox/ --format json | jq '.findings | length')
+          ACTUAL=$(sicario scan vuln-sandbox/ --format json | jq 'length')
           if [ "$ACTUAL" -eq "$EXPECTED" ]; then
             echo "✓ Smoke test passed: $ACTUAL findings (expected $EXPECTED)"
           else
@@ -124,6 +124,6 @@ jobs:
             echo ""
             echo "Breakdown by severity:"
             sicario scan vuln-sandbox/ --format json \
-              | jq '.findings | group_by(.severity) | map({severity: .[0].severity, count: length}) | sort_by(.severity)'
+              | jq 'group_by(.severity) | map({severity: .[0].severity, count: length}) | sort_by(.severity)'
             exit 1
           fi

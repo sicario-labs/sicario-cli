@@ -227,11 +227,14 @@ impl SastEngine {
             queries.insert(language, query);
         }
 
-        // Store compiled rule
+        // Store compiled rule — replace any existing rule with the same ID
+        // so that user-provided rules take precedence over built-ins on conflict.
         let compiled_rule = CompiledRule {
             rule: rule.clone(),
             queries,
         };
+        // Remove the old entry from self.rules if one exists with the same ID
+        self.rules.retain(|r| r.id != rule.id);
         self.compiled_queries.insert(rule.id.clone(), compiled_rule);
         self.rules.push(rule);
 
@@ -384,7 +387,7 @@ impl SastEngine {
 
         // Collect all vulnerabilities from successful scans
         let mut all_vulnerabilities = Vec::new();
-        for (file_path, result) in files_to_scan.iter().zip(results.into_iter()) {
+        for (file_path, result) in files_to_scan.iter().zip(results) {
             match result {
                 Ok(mut vulns) => all_vulnerabilities.append(&mut vulns),
                 Err(e) => {

@@ -45,6 +45,15 @@ Rules live in `sicario-cli/rules/<language>/` as YAML files. Drop a file in and 
 4. Validate: `cargo run -- rules validate`
 5. Test: `cargo run -- rules test`
 
+To verify your rule fires correctly against a real vulnerable file, use the **vulnerability sandbox**:
+
+```bash
+# Add a vulnerable test file to vuln-sandbox/ and scan it
+sicario scan vuln-sandbox/node/cwe-89/
+```
+
+See [`vuln-sandbox/README.md`](vuln-sandbox/README.md) for the full sandbox structure.
+
 ## Working on the Convex backend
 
 The cloud backend lives in `convex/convex/`. The frontend (`sicario-frontend/`) consumes these functions.

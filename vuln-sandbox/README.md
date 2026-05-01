@@ -1,97 +1,107 @@
-# Target Practice — Sicario Vulnerability Sandbox
+# Sicario Vulnerability Sandbox
 
 > **⚠️ WARNING: These files are intentionally vulnerable. Never deploy this code.**
 
-A deliberately vulnerable monorepo for testing Sicario. Safe to scan. Never deploy.
+A deliberately vulnerable codebase for testing and demonstrating [Sicario](https://usesicario.xyz) — the Rust-native security scanner. Safe to scan. Never deploy.
+
+---
+
+## Try it now
+
+If you want to see Sicario in action before scanning your own code, this sandbox is the fastest way to do it.
+
+**1. Install Sicario**
+
+```bash
+# macOS / Linux
+curl -fsSL https://usesicario.xyz/install.sh | sh
+
+# Windows (PowerShell)
+irm https://usesicario.xyz/install.ps1 | iex
+
+# Homebrew
+brew install sicario-labs/sicario-cli/sicario
+```
+
+**2. Clone this repo and scan the sandbox**
+
+```bash
+git clone https://github.com/sicario-labs/sicario-cli.git
+sicario scan sicario-cli/vuln-sandbox/
+```
+
+That's it. You'll see compiler-style diagnostics for 79 real vulnerability patterns across Node.js, Python, and React/TypeScript — no configuration, no API key, no cloud account required.
 
 ---
 
 ## Purpose
 
-This sandbox gives you a safe, isolated target to verify Sicario's detection capabilities without touching your own codebase. Every file contains exactly one exploitable pattern that maps to a supported Sicario AST rule — no false positives, no extra noise.
+This sandbox gives you a safe, isolated target to verify Sicario's detection capabilities without touching your own codebase. Every file contains exactly one exploitable pattern that maps to a supported Sicario rule — no false positives, no extra noise.
 
 Use it to:
-- Confirm Sicario's sub-50ms scan speed on your machine
-- Verify the zero-exfiltration guarantee (no code leaves your machine)
-- Validate that rule IDs and severities match expected output
-- Run regression checks after updating Sicario or custom rules
+
+- Confirm Sicario works correctly on your machine before scanning production code
+- Explore what findings look like across different severity levels (Critical → Low)
+- Validate rule IDs and severities against the manifest
+- Test custom rules against known-vulnerable patterns
+- Run regression checks after updating Sicario or writing new rules
 
 ---
 
-## Directory Structure
+## Directory structure
 
 ```
 vuln-sandbox/
 ├── README.md          ← you are here
-├── MANIFEST.md        ← regression test manifest (file → CWE → rule ID → expected severity)
-├── node/
-│   ├── cwe-89/        ← SQL Injection
-│   │   └── sql-injection.js
-│   ├── cwe-22/        ← Path Traversal
-│   │   └── path-traversal.js
-│   ├── cwe-78/        ← OS Command Injection
-│   │   └── command-injection.js
-│   └── ...            ← one subdirectory per CWE
-├── python/
-│   ├── cwe-89/
-│   │   └── sql-injection.py
-│   ├── cwe-22/
-│   │   └── path-traversal.py
+├── MANIFEST.md        ← full file → CWE → rule ID → severity mapping
+├── node/              ← Node.js / JavaScript (40 files)
+│   ├── cwe-89/        SQL Injection
+│   ├── cwe-78/        OS Command Injection
+│   ├── cwe-79/        Cross-Site Scripting
+│   ├── cwe-22/        Path Traversal
+│   ├── cwe-95/        eval() Injection
+│   └── ...            one subdirectory per CWE
+├── python/            ← Python (29 files)
+│   ├── cwe-89/        SQL Injection
+│   ├── cwe-78/        Command Injection
+│   ├── cwe-94/        Server-Side Template Injection
 │   └── ...
-└── react/
-    ├── cwe-79/        ← Cross-Site Scripting (XSS)
-    │   └── xss.tsx
-    ├── cwe-95/        ← eval injection
-    │   └── eval-injection.tsx
+└── react/             ← React / TypeScript (10 files)
+    ├── cwe-79/        XSS (dangerouslySetInnerHTML, href-javascript)
+    ├── cwe-95/        eval() Injection
     └── ...
 ```
 
-Each subdirectory is named `cwe-<ID>/` and contains a single file named after the Sicario rule ID (e.g. `sql-injection.js`). This 1:1 mapping makes it trivial to trace a finding back to its source pattern.
+Each subdirectory is named `cwe-<ID>/` and contains a single file with one vulnerability pattern. This 1:1 mapping makes it easy to trace any finding back to its source.
 
 ---
 
-## How to Use
-
-Scan the entire sandbox:
+## Scanning options
 
 ```bash
+# Scan everything
 sicario scan vuln-sandbox/
-```
 
-Scan a specific language subdirectory:
-
-```bash
+# Scan a specific language
 sicario scan vuln-sandbox/node/
 sicario scan vuln-sandbox/python/
 sicario scan vuln-sandbox/react/
-```
 
-Scan a single CWE category:
-
-```bash
+# Scan a single CWE category
 sicario scan vuln-sandbox/node/cwe-89/
-```
 
-Expected output: **one finding per file**, matching the rule ID and severity listed in `MANIFEST.md`.
+# JSON output
+sicario scan vuln-sandbox/ --format json
 
----
-
-## Regression Test Manifest
-
-`MANIFEST.md` lists every file in this sandbox alongside its CWE, Sicario rule ID, and expected severity. It doubles as a regression test manifest — if `sicario scan vuln-sandbox/` produces a different finding count or a mismatched rule ID, something has changed in the rule engine.
-
-CI smoke test (run from repo root):
-
-```bash
-sicario scan vuln-sandbox/ --format json | jq '.findings | length'
-# Should equal the total file count listed in MANIFEST.md
+# SARIF output for GitHub Code Scanning
+sicario scan vuln-sandbox/ --format sarif --sarif-output results.sarif
 ```
 
 ---
 
-## Excluding from Production Scans
+## Excluding from production scans
 
-If you clone this repo and publish findings to the Sicario dashboard, add the following to your `.sicarioignore` to prevent sandbox findings from polluting your real results:
+If you clone this repo and run Sicario against your own code, add the following to your `.sicarioignore` to prevent sandbox findings from appearing in your results:
 
 ```
 vuln-sandbox/
@@ -101,12 +111,26 @@ This entry is already present in the root `.sicarioignore` of this repository.
 
 ---
 
-## Security Notice
+## Regression test manifest
 
-These files exist solely as scan targets. They contain real vulnerability patterns and **must never be**:
+[`MANIFEST.md`](MANIFEST.md) lists every file alongside its CWE, Sicario rule ID, and expected severity. It doubles as a CI regression manifest — if the finding count or a rule ID changes, something has changed in the rule engine.
+
+---
+
+## Security notice
+
+These files contain real vulnerability patterns and **must never be**:
 
 - Deployed to any server or cloud environment
 - Imported or required by production code
 - Used as templates for application development
 
 If you are contributing new vulnerable files, follow the one-pattern-per-file rule and update `MANIFEST.md` accordingly.
+
+---
+
+## Learn more
+
+- [usesicario.xyz](https://usesicario.xyz) — product website
+- [Documentation](https://usesicario.xyz/docs) — full CLI reference and guides
+- [GitHub](https://github.com/sicario-labs/sicario-cli) — source code

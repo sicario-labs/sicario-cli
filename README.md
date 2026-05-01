@@ -317,6 +317,25 @@ The binary lands at `target/release/sicario`.
 
 ---
 
+## Try it on real vulnerable code
+
+The repo ships a **vulnerability sandbox** — 79 intentionally vulnerable files across Node.js, Python, and React/TypeScript, one pattern per file, covering 60+ CWEs.
+
+```bash
+git clone https://github.com/sicario-labs/sicario-cli.git
+sicario scan sicario-cli/vuln-sandbox/
+```
+
+No setup required beyond having Sicario installed. Use it to:
+
+- Verify detection works on your machine before scanning your own code
+- Explore what Sicario's output looks like across different severity levels
+- Test custom rules against known-vulnerable patterns
+
+See [`vuln-sandbox/README.md`](vuln-sandbox/README.md) for the full directory structure and [`vuln-sandbox/MANIFEST.md`](vuln-sandbox/MANIFEST.md) for the complete file → CWE → rule ID mapping.
+
+---
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). All contributions are welcome — new rules, bug fixes, documentation improvements, and language support.

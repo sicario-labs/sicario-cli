@@ -7,6 +7,32 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.2.0] — 2026-05-01
+
+### Added
+- **Deterministic template engine** — 50 built-in fix templates covering SQL injection, XSS, command injection, path traversal, SSRF, hardcoded secrets, and more across JavaScript/TypeScript and Python. Template fixes apply in sub-50ms with no API key required.
+- **19-provider LLM registry** — BYOK support for OpenAI, Anthropic, Gemini, Azure OpenAI, AWS Bedrock, DeepSeek, Groq, Cerebras, Together, Fireworks, OpenRouter, Mistral, Ollama, LM Studio, xAI, Perplexity, Cohere, DeepInfra, and Novita.
+- **Ollama / LM Studio auto-detection** — `sicario fix` automatically detects a running local LLM instance and uses it without any configuration.
+- **Azure OpenAI support** — deployment-scoped endpoint construction from `AZURE_OPENAI_RESOURCE` and `AZURE_OPENAI_DEPLOYMENT` env vars.
+- **`workflow_dispatch` on release workflow** — release builds can now be triggered manually from the GitHub Actions UI.
+- **Comprehensive subdirectory rule sets** — expanded YAML rules for JavaScript, Python, Go, Java, and Rust organized into focused subdirectory files (SQL injection, XSS, SSRF, crypto, prototype pollution, etc.).
+
+### Changed
+- Removed legacy top-level `*.yaml` rule files (`javascript.yaml`, `python.yaml`, etc.) superseded by the comprehensive subdirectory rule sets.
+- Smoke test updated to use a minimum-threshold check (`>= 79 findings`) rather than an exact count, accommodating rule set growth.
+- Release workflow tag glob fixed from `**[0-9]+.[0-9]+.[0-9]+*` to `v[0-9]+.[0-9]+.[0-9]+*`.
+
+### Fixed
+- **Clippy `useless_conversion`** — removed redundant `.into_iter()` call in `scan_directory`.
+- **Duplicate rule dedup** — loading a rule with the same ID twice now replaces the old entry instead of appending, so user rules correctly override built-ins on ID conflict.
+- **`scan_file` capture dedup** — `scan_file` now takes only the widest capture per match (consistent with `scan_file_parallel`), eliminating duplicate findings from multi-capture patterns.
+- **GitHub Actions annotation stdout pollution** — `::warning` / `::notice` annotation lines are now suppressed when `--format json` or `--format sarif` is active, preventing jq parse failures in CI.
+- **Empty git repo telemetry** — `count_contributors` now returns `0` for repos with no commits instead of the fallback `1`.
+- **Mock server race condition** — Ollama/LM Studio detection tests now use a `Barrier` to synchronize the server and client threads; flaky timing-dependent tests marked `#[ignore]`.
+- **`bash -e` abort in smoke test** — `sicario scan` exits 1 when findings are found; smoke test now uses `|| true` to prevent premature script termination.
+
+---
+
 ## [0.1.9] — 2026-04-29
 
 ### Added
@@ -115,3 +141,5 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 [0.1.9]: https://github.com/sicario-labs/sicario-cli/releases/tag/v0.1.9
 [0.1.8]: https://github.com/sicario-labs/sicario-cli/releases/tag/v0.1.8
 [0.1.7]: https://github.com/sicario-labs/sicario-cli/releases/tag/v0.1.7
+
+[0.2.0]: https://github.com/sicario-labs/sicario-cli/releases/tag/v0.2.0

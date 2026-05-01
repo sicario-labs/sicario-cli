@@ -30,7 +30,7 @@ git clone https://github.com/sicario-labs/sicario-cli.git
 sicario scan sicario-cli/vuln-sandbox/
 ```
 
-That's it. You'll see compiler-style diagnostics for 79 real vulnerability patterns across Node.js, Python, and React/TypeScript — no configuration, no API key, no cloud account required.
+That's it. You'll see compiler-style diagnostics across 79 intentionally vulnerable files spanning Node.js, Python, and React/TypeScript — no configuration, no API key, no cloud account required.
 
 ---
 

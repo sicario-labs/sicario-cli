@@ -20,7 +20,8 @@ if ! command -v jq &>/dev/null; then
 fi
 
 echo "Running: sicario scan vuln-sandbox/ --format json"
-SCAN_OUTPUT=$(sicario scan "$REPO_ROOT/vuln-sandbox/" --format json 2>&1)
+# Use || true so set -e doesn't abort when sicario exits 1 (findings found)
+SCAN_OUTPUT=$(sicario scan "$REPO_ROOT/vuln-sandbox/" --format json 2>/dev/null || true)
 
 ACTUAL=$(echo "$SCAN_OUTPUT" | jq 'length' 2>/dev/null || echo "parse_error")
 

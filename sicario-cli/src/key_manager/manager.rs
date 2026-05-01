@@ -1430,23 +1430,45 @@ mod tests {
     //
     // These tests spin up minimal in-process HTTP servers using
     // `std::net::TcpListener` so no external process or crate is required.
-    // Each server runs on a random OS-assigned port and is torn down after
-    // the test completes.
+    // A `Barrier` synchronizes the server and client threads so the client
+    // only connects after `accept()` has been called — eliminating the
+    // sleep-based race condition.
     //
     // IMPORTANT: These tests bind to fixed ports (11434 and 1234) that the
     // detection functions probe.  They must not run concurrently with each
     // other, so they share a dedicated mutex.
     static LOCAL_DETECT_LOCK: Mutex<()> = Mutex::new(());
 
-    /// Minimal HTTP/1.1 server that responds to a single request and exits.
+    /// Integration test: Ollama detection returns correct endpoint, model, and auth_style.
     ///
-    /// `response_body` is the JSON body to return with HTTP 200.
-    fn serve_one_request(listener: std::net::TcpListener, response_body: &'static str) {
-        use std::io::{BufRead, BufReader, Write};
+    /// Validates: Requirements 20.5 (Ollama auto-detection)
+    #[test]
+    fn test_ollama_detection_with_mock_server() {
+        use std::net::TcpListener;
+        use std::sync::{Arc, Barrier};
+        let _detect_guard = LOCAL_DETECT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+        // Bind to the Ollama port (11434). Skip the test if the port is already
+        // in use (e.g. a real Ollama instance is running).
+        let listener = match TcpListener::bind("127.0.0.1:11434") {
+            Ok(l) => l,
+            Err(_) => {
+                eprintln!(
+                    "test_ollama_detection_with_mock_server: port 11434 in use, skipping mock"
+                );
+                return;
+            }
+        };
+
+        let barrier = Arc::new(Barrier::new(2));
+        let barrier_clone = barrier.clone();
+
+        let ollama_response = r#"{"models":[{"name":"llama3:latest","modified_at":"2024-01-01T00:00:00Z","size":4000000000}]}"#;
 
         std::thread::spawn(move || {
+            use std::io::{BufRead, BufReader, Write};
+            barrier_clone.wait();
             if let Ok((mut stream, _)) = listener.accept() {
-                // Read until the end of the HTTP request headers (blank line)
                 let mut reader = BufReader::new(stream.try_clone().expect("clone stream"));
                 let mut line = String::new();
                 loop {
@@ -1460,44 +1482,17 @@ mod tests {
                         }
                     }
                 }
-
                 let response = format!(
                     "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                    response_body.len(),
-                    response_body
+                    ollama_response.len(),
+                    ollama_response
                 );
                 let _ = stream.write_all(response.as_bytes());
             }
         });
-    }
 
-    /// Integration test: Ollama detection returns correct endpoint, model, and auth_style.
-    ///
-    /// Validates: Requirements 20.5 (Ollama auto-detection)
-    #[test]
-    fn test_ollama_detection_with_mock_server() {
-        use std::net::TcpListener;
-        let _detect_guard = LOCAL_DETECT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-
-        // Bind to the Ollama port (11434). Skip the test if the port is already
-        // in use (e.g. a real Ollama instance is running).
-        let listener = match TcpListener::bind("127.0.0.1:11434") {
-            Ok(l) => l,
-            Err(_) => {
-                // Port in use — run against the real server instead by calling
-                // try_ollama_detection() directly and accepting any result.
-                eprintln!(
-                    "test_ollama_detection_with_mock_server: port 11434 in use, skipping mock"
-                );
-                return;
-            }
-        };
-
-        let ollama_response = r#"{"models":[{"name":"llama3:latest","modified_at":"2024-01-01T00:00:00Z","size":4000000000}]}"#;
-        serve_one_request(listener, ollama_response);
-
-        // Give the server thread a moment to start accepting
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        // Wait until the server thread is ready to accept
+        barrier.wait();
 
         let result = try_ollama_detection();
         assert!(
@@ -1525,6 +1520,7 @@ mod tests {
     #[test]
     fn test_lmstudio_detection_with_mock_server() {
         use std::net::TcpListener;
+        use std::sync::{Arc, Barrier};
         let _detect_guard = LOCAL_DETECT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
         // Bind to the LM Studio port (1234). Skip if already in use.
@@ -1538,10 +1534,42 @@ mod tests {
             }
         };
 
-        let lmstudio_response = r#"{"data":[{"id":"mistral-7b-instruct-v0.2","object":"model","created":1700000000,"owned_by":"local"}],"object":"list"}"#;
-        serve_one_request(listener, lmstudio_response);
+        // Use a barrier so the test thread waits until the server thread has
+        // called accept() before firing the client probe.
+        let barrier = Arc::new(Barrier::new(2));
+        let barrier_clone = barrier.clone();
 
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        let lmstudio_response = r#"{"data":[{"id":"mistral-7b-instruct-v0.2","object":"model","created":1700000000,"owned_by":"local"}],"object":"list"}"#;
+
+        std::thread::spawn(move || {
+            use std::io::{BufRead, BufReader, Write};
+            // Signal that we're about to accept — client can now connect
+            barrier_clone.wait();
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut reader = BufReader::new(stream.try_clone().expect("clone stream"));
+                let mut line = String::new();
+                loop {
+                    line.clear();
+                    match reader.read_line(&mut line) {
+                        Ok(0) | Err(_) => break,
+                        Ok(_) => {
+                            if line == "\r\n" || line == "\n" {
+                                break;
+                            }
+                        }
+                    }
+                }
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    lmstudio_response.len(),
+                    lmstudio_response
+                );
+                let _ = stream.write_all(response.as_bytes());
+            }
+        });
+
+        // Wait until the server thread is ready to accept
+        barrier.wait();
 
         let result = try_lmstudio_detection();
         assert!(

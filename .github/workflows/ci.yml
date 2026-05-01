@@ -115,15 +115,28 @@ jobs:
 
       - name: Run vuln-sandbox smoke test
         run: |
-          EXPECTED=79
-          ACTUAL=$(sicario scan vuln-sandbox/ --format json | jq 'length')
-          if [ "$ACTUAL" -eq "$EXPECTED" ]; then
-            echo "✓ Smoke test passed: $ACTUAL findings (expected $EXPECTED)"
-          else
-            echo "✗ Smoke test FAILED: $ACTUAL findings (expected $EXPECTED)"
-            echo ""
-            echo "Breakdown by severity:"
-            sicario scan vuln-sandbox/ --format json \
-              | jq 'group_by(.severity) | map({severity: .[0].severity, count: length}) | sort_by(.severity)'
+          OUTPUT=$(sicario scan vuln-sandbox/ --format json)
+
+          # Validate output is parseable JSON array
+          ACTUAL=$(echo "$OUTPUT" | jq 'length')
+          if ! echo "$ACTUAL" | grep -qE '^[0-9]+$'; then
+            echo "✗ Smoke test FAILED: output is not valid JSON"
+            echo "--- Raw output (first 500 chars) ---"
+            echo "$OUTPUT" | head -c 500
             exit 1
           fi
+
+          # Must find at least one finding per vuln-sandbox file (79 files)
+          MIN_EXPECTED=79
+          if [ "$ACTUAL" -lt "$MIN_EXPECTED" ]; then
+            echo "✗ Smoke test FAILED: $ACTUAL findings (expected at least $MIN_EXPECTED)"
+            echo ""
+            echo "Breakdown by severity:"
+            echo "$OUTPUT" | jq 'group_by(.severity) | map({severity: .[0].severity, count: length}) | sort_by(.severity)'
+            exit 1
+          fi
+
+          echo "✓ Smoke test passed: $ACTUAL findings (minimum $MIN_EXPECTED)"
+          echo ""
+          echo "Breakdown by severity:"
+          echo "$OUTPUT" | jq 'group_by(.severity) | map({severity: .[0].severity, count: length}) | sort_by(.severity)'

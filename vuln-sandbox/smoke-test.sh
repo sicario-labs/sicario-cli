@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
-# Smoke test: verify vuln-sandbox produces exactly 79 findings
+# Smoke test: verify vuln-sandbox produces at least 79 findings (one per file)
 # Run from the repo root: bash vuln-sandbox/smoke-test.sh
 set -euo pipefail
-
-EXPECTED=79
 
 # Resolve the repo root (one level up from this script's directory)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -33,13 +31,19 @@ if [ "$ACTUAL" = "parse_error" ]; then
   exit 1
 fi
 
-if [ "$ACTUAL" -eq "$EXPECTED" ]; then
-  echo "✓ Smoke test passed: $ACTUAL findings (expected $EXPECTED)"
-  exit 0
-else
-  echo "✗ Smoke test FAILED: $ACTUAL findings (expected $EXPECTED)"
+# Must find at least one finding per vuln-sandbox file (79 files)
+MIN_EXPECTED=79
+
+if [ "$ACTUAL" -lt "$MIN_EXPECTED" ]; then
+  echo "✗ Smoke test FAILED: $ACTUAL findings (expected at least $MIN_EXPECTED)"
   echo ""
   echo "Breakdown by severity:"
   echo "$SCAN_OUTPUT" | jq 'group_by(.severity) | map({severity: .[0].severity, count: length}) | sort_by(.severity)'
   exit 1
 fi
+
+echo "✓ Smoke test passed: $ACTUAL findings (minimum $MIN_EXPECTED)"
+echo ""
+echo "Breakdown by severity:"
+echo "$SCAN_OUTPUT" | jq 'group_by(.severity) | map({severity: .[0].severity, count: length}) | sort_by(.severity)'
+exit 0

@@ -414,7 +414,7 @@ fn try_ollama_detection() -> Option<ResolvedKey> {
         .build()
         .ok()?;
 
-    let resp = client.get("http://localhost:11434/api/tags").send().ok()?;
+    let resp = client.get("http://127.0.0.1:11434/api/tags").send().ok()?;
 
     if !resp.status().is_success() {
         return None;
@@ -436,7 +436,7 @@ fn try_ollama_detection() -> Option<ResolvedKey> {
     Some(ResolvedKey {
         key: "ollama".to_string(),
         source: KeySource::OllamaAutoDetect,
-        resolved_endpoint_override: Some("http://localhost:11434/v1/chat/completions".to_string()),
+        resolved_endpoint_override: Some("http://127.0.0.1:11434/v1/chat/completions".to_string()),
         auth_style: Some(super::provider_registry::AuthStyle::None),
         model_override: Some(model_name),
     })
@@ -451,7 +451,7 @@ fn try_lmstudio_detection() -> Option<ResolvedKey> {
         .build()
         .ok()?;
 
-    let resp = client.get("http://localhost:1234/v1/models").send().ok()?;
+    let resp = client.get("http://127.0.0.1:1234/v1/models").send().ok()?;
 
     if !resp.status().is_success() {
         return None;
@@ -473,7 +473,7 @@ fn try_lmstudio_detection() -> Option<ResolvedKey> {
     Some(ResolvedKey {
         key: "lmstudio".to_string(),
         source: KeySource::LmStudioAutoDetect,
-        resolved_endpoint_override: Some("http://localhost:1234/v1/chat/completions".to_string()),
+        resolved_endpoint_override: Some("http://127.0.0.1:1234/v1/chat/completions".to_string()),
         auth_style: Some(super::provider_registry::AuthStyle::None),
         model_override: Some(model_id),
     })
@@ -1510,7 +1510,7 @@ mod tests {
         assert_eq!(resolved.model_override.as_deref(), Some("llama3:latest"));
         assert_eq!(
             resolved.resolved_endpoint_override.as_deref(),
-            Some("http://localhost:11434/v1/chat/completions")
+            Some("http://127.0.0.1:11434/v1/chat/completions")
         );
         assert_eq!(
             resolved.auth_style,
@@ -1557,7 +1557,7 @@ mod tests {
         );
         assert_eq!(
             resolved.resolved_endpoint_override.as_deref(),
-            Some("http://localhost:1234/v1/chat/completions")
+            Some("http://127.0.0.1:1234/v1/chat/completions")
         );
         assert_eq!(
             resolved.auth_style,

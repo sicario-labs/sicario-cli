@@ -33,7 +33,6 @@ info() { printf "    %s\n" "$*"; }
 warn() { printf "${YELLOW}warn${RESET} %s\n" "$*" >&2; }
 die()  { printf "${RED}error${RESET} %s\n" "$*" >&2; exit 1; }
 
-# Download a URL to a local file.  Tries curl first, then wget.
 download() {
   local url="$1"
   local dest="$2"
@@ -148,6 +147,7 @@ choose_install_dir() {
 
 install_binary() {
   local asset_name="sicario-${PLATFORM}${ARCHIVE_EXT}"
+  local expected_bin_name="sicario-${PLATFORM}${BINARY_EXT}"
   local download_url="https://github.com/$GITHUB_REPO/releases/download/${VERSION}/${asset_name}"
   
   local tmp_dir
@@ -174,17 +174,22 @@ install_binary() {
     unzip -q "$tmp_archive" -d "$tmp_dir"
   fi
 
-  local extracted_bin="${tmp_dir}/sicario${BINARY_EXT}"
-  local dest="${INSTALL_DIR}/sicario${BINARY_EXT}"
-
-  # Fallback to search inside the dir if not at root
+  # Look for the exact file name (e.g. sicario-linux-amd64) or fallback to anything starting with sicario
+  local extracted_bin="${tmp_dir}/${expected_bin_name}"
+  
   if [ ! -f "$extracted_bin" ]; then
-    extracted_bin=$(find "$tmp_dir" -type f -name "sicario${BINARY_EXT}" | head -n 1)
+    extracted_bin=$(find "$tmp_dir" -type f -name "$expected_bin_name" | head -n 1)
+  fi
+
+  if [ -z "$extracted_bin" ] || [ ! -f "$extracted_bin" ]; then
+    extracted_bin=$(find "$tmp_dir" -type f -name "sicario*" | head -n 1)
     if [ -z "$extracted_bin" ]; then
       rm -rf "$tmp_dir"
       die "Could not find sicario executable inside the extracted archive."
     fi
   fi
+
+  local dest="${INSTALL_DIR}/sicario${BINARY_EXT}"
 
   say "Installing to $dest ..."
 

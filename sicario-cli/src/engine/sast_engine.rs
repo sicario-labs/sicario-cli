@@ -317,8 +317,7 @@ impl SastEngine {
         let mut vulnerabilities = Vec::new();
         // Dedup key: (rule_id, line) — one finding per rule per line, same as
         // scan_file_parallel.
-        let mut seen: std::collections::HashSet<(String, usize)> =
-            std::collections::HashSet::new();
+        let mut seen: std::collections::HashSet<(String, usize)> = std::collections::HashSet::new();
 
         // Apply all rules that target this language
         for compiled_rule in self.compiled_queries.values() {

@@ -249,11 +249,14 @@ mod tests {
     fn test_set_global_config_value_rejects_unknown_key() {
         // We can't write to the real home dir in tests, but we can verify
         // that unknown keys are rejected before any I/O happens.
-        // Use a temp dir trick: set HOME to a temp dir.
+        // Set both HOME and USERPROFILE so dirs_home() resolves to the temp dir
+        // on both Unix and Windows.
         let tmp = tempfile::tempdir().unwrap();
         let original_home = std::env::var("HOME").ok();
+        let original_userprofile = std::env::var("USERPROFILE").ok();
 
         std::env::set_var("HOME", tmp.path());
+        std::env::set_var("USERPROFILE", tmp.path());
         let result = set_global_config_value("UNKNOWN_KEY", "value");
         assert!(result.is_err());
         assert!(result
@@ -261,10 +264,14 @@ mod tests {
             .to_string()
             .contains("Unknown config key"));
 
-        // Restore HOME
+        // Restore HOME / USERPROFILE
         match original_home {
             Some(h) => std::env::set_var("HOME", h),
             None => std::env::remove_var("HOME"),
+        }
+        match original_userprofile {
+            Some(p) => std::env::set_var("USERPROFILE", p),
+            None => std::env::remove_var("USERPROFILE"),
         }
     }
 
@@ -272,17 +279,25 @@ mod tests {
     fn test_set_and_load_global_config() {
         let tmp = tempfile::tempdir().unwrap();
         let original_home = std::env::var("HOME").ok();
+        let original_userprofile = std::env::var("USERPROFILE").ok();
 
+        // Set both HOME and USERPROFILE so dirs_home() resolves to the temp dir
+        // on both Unix and Windows.
         std::env::set_var("HOME", tmp.path());
+        std::env::set_var("USERPROFILE", tmp.path());
 
         set_global_config_value("ANTHROPIC_API_KEY", "sk-ant-test123").unwrap();
         let loaded = load_global_config().unwrap();
         assert_eq!(loaded.anthropic_api_key.as_deref(), Some("sk-ant-test123"));
 
-        // Restore HOME
+        // Restore HOME / USERPROFILE
         match original_home {
             Some(h) => std::env::set_var("HOME", h),
             None => std::env::remove_var("HOME"),
+        }
+        match original_userprofile {
+            Some(p) => std::env::set_var("USERPROFILE", p),
+            None => std::env::remove_var("USERPROFILE"),
         }
     }
 

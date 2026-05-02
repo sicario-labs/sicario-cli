@@ -1,21 +1,55 @@
 import GitHub from "@auth/core/providers/github";
 import { Password } from "@convex-dev/auth/providers/Password";
+import { Email } from "@convex-dev/auth/providers/Email";
 import { convexAuth } from "@convex-dev/auth/server";
+import { sendPasswordResetEmail, sendWelcomeEmail } from "./emails";
+
+// ── Password reset OTP provider ───────────────────────────────────────────────
+// Sends a 6-digit OTP via Resend. Wired into Password({ reset: ... }) so
+// flow: "reset" triggers the email and flow: "reset-verification" validates it.
+
+const ResendOTP = Email({
+  id: "resend-otp",
+  apiKey: process.env.RESEND_API_KEY,
+  async sendVerificationRequest({ identifier: email, token }) {
+    await sendPasswordResetEmail(email, token);
+  },
+});
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
-  providers: [GitHub, Password],
+  providers: [
+    GitHub,
+    Password({
+      reset: ResendOTP,
+      profile(params) {
+        return {
+          email: params.email as string,
+          name: params.name as string | undefined,
+        };
+      },
+    }),
+  ],
   callbacks: {
-    async afterUserCreatedOrUpdated(ctx, { userId }) {
-      // Look up the user record to get their email
+    async afterUserCreatedOrUpdated(ctx, { userId, existingUserId }) {
       const user = await ctx.db.get(userId);
       if (!user) return;
 
-      const email = (user as any).email;
+      const email = (user as any).email as string | undefined;
       if (!email) return;
 
+      // ── Welcome email (new users only) ──────────────────────────────────
+      if (!existingUserId) {
+        try {
+          await sendWelcomeEmail(email, (user as any).name ?? undefined);
+        } catch (err) {
+          // Non-fatal — log but don't block account creation
+          console.error("Failed to send welcome email:", err);
+        }
+      }
+
+      // ── Redeem pending invitations ───────────────────────────────────────
       const normalizedEmail = email.toLowerCase();
 
-      // Query pending invitations matching this email
       const pendingInvitations = await (ctx.db
         .query("pendingInvitations") as any)
         .withIndex("by_email", (q: any) => q.eq("email", normalizedEmail))
@@ -23,17 +57,11 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
 
       if (pendingInvitations.length === 0) return;
 
-      // Use the document ID string as userId — this matches the format used by
-      // tokenIdentifier.split("|").pop() in all other mutations (organizations.ts,
-      // memberships.ts, etc.), since the last segment of the tokenIdentifier IS
-      // the Convex Auth user document ID.
       const userIdStr = userId.toString();
       const now = new Date().toISOString();
 
-      // Process each invitation independently so one failure doesn't block others
       for (const invitation of pendingInvitations) {
         try {
-          // Check for duplicate membership before inserting
           const alreadyMember = await (ctx.db
             .query("memberships") as any)
             .withIndex("by_userId", (q: any) => q.eq("userId", userIdStr))
@@ -51,7 +79,6 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
           }
           await ctx.db.delete(invitation._id);
         } catch (error) {
-          // Log the error but retain the pending invitation record
           console.error(
             `Failed to process pending invitation ${invitation.invitationId} ` +
               `for email ${normalizedEmail} in org ${invitation.orgId}:`,

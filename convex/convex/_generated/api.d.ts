@@ -14,6 +14,7 @@ import type * as autoFixPRs from "../autoFixPRs.js";
 import type * as billing from "../billing.js";
 import type * as crons from "../crons.js";
 import type * as deviceAuth from "../deviceAuth.js";
+import type * as emails from "../emails.js";
 import type * as findings from "../findings.js";
 import type * as http from "../http.js";
 import type * as invitations from "../invitations.js";
@@ -44,6 +45,7 @@ declare const fullApi: ApiFromModules<{
   billing: typeof billing;
   crons: typeof crons;
   deviceAuth: typeof deviceAuth;
+  emails: typeof emails;
   findings: typeof findings;
   http: typeof http;
   invitations: typeof invitations;

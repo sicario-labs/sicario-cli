@@ -26,6 +26,11 @@ export const getActiveReleases = query({
       id: r._id,
       version: r.version,
       platform: r.platform,
+      // storageId must be included so the /download/latest/:platform handler
+      // can pass a valid string to ctx.storage.get(). Omitting it was the
+      // root cause of the "storage.get requires a string but received undefined"
+      // error (WEB-002).
+      storageId: r.storageId as string,
       checksum: r.checksum,
       fileSize: r.fileSize ?? null,
       createdAt: r.createdAt,

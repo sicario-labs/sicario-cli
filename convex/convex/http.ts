@@ -359,9 +359,35 @@ http.route({
         }
       }
 
-      // 8. Match projectId to existing project in resolved org
-      const orgProjects: any[] = await ctx.runQuery(api.projects.listByOrg, { orgId: orgId! });
-      const matchedProject = orgProjects.find((p: any) => p.id === body.projectId);
+      // 8. Match projectId to existing project in resolved org.
+      //
+      // DASH-001 fix: two-pass lookup to handle both auth paths:
+      //   (a) Project API key auth — identity already carries the resolved
+      //       projectId, so we can look it up directly by its custom string ID
+      //       without relying on orgId being non-null.
+      //   (b) JWT / sic_ token auth — fall back to the org-scoped list query.
+      //
+      // This prevents a 404 when orgId is null (e.g. a project whose orgId was
+      // not persisted) or when the CLI sends the correct projectId but the
+      // org-scoped list returns an empty set due to a stale orgId.
+      let matchedProject: any = null;
+
+      // Pass (a): direct lookup by projectId string (works for all auth types)
+      if (body.projectId) {
+        matchedProject = await ctx.runQuery(api.projects.get, { id: body.projectId });
+        // Verify the resolved project actually belongs to the authenticated org
+        if (matchedProject && orgId && matchedProject.org_id !== orgId) {
+          matchedProject = null; // org mismatch — treat as not found
+        }
+      }
+
+      // Pass (b): org-scoped list fallback (handles edge cases where direct
+      // lookup returns null but the project exists under a different ID format)
+      if (!matchedProject && orgId) {
+        const orgProjects: any[] = await ctx.runQuery(api.projects.listByOrg, { orgId });
+        matchedProject = orgProjects.find((p: any) => p.id === body.projectId) ?? null;
+      }
+
       if (!matchedProject) {
         return new Response(
           JSON.stringify({ error: `Project '${body.projectId}' not found in organization` }),
@@ -1118,7 +1144,82 @@ http.route({
   }),
 });
 
+// ── POST /api/v1/usage — Anonymous usage ping from CLI ───────────────────────
+// No authentication required. Always returns 204, even on errors.
+// Silently ignores unknown events, malformed project_hash, or internal failures.
+http.route({
+  path: "/api/v1/usage",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      let body: any;
+      try {
+        body = await request.json();
+      } catch {
+        // Malformed JSON — silently ignore
+        return new Response(null, { status: 204 });
+      }
+
+      // Silently ignore if event is not "scan_run"
+      if (!body || body.event !== "scan_run") {
+        return new Response(null, { status: 204 });
+      }
+
+      // Validate project_hash: must be exactly 64 hex characters
+      const projectHash: unknown = body.project_hash;
+      if (
+        typeof projectHash !== "string" ||
+        !/^[0-9a-f]{64}$/i.test(projectHash)
+      ) {
+        return new Response(null, { status: 204 });
+      }
+
+      // Normalize environment to "ci" or "local"
+      const rawEnv: unknown = body.environment;
+      const environment: "ci" | "local" =
+        rawEnv === "ci" ? "ci" : "local";
+
+      // Extract cli_version (default to empty string if missing)
+      const cliVersion: string =
+        typeof body.cli_version === "string" ? body.cli_version : "";
+
+      const receivedAt = new Date().toISOString();
+
+      // Call the usagePings.record mutation — swallow any errors
+      try {
+        await ctx.runMutation(api.usagePings.record, {
+          projectHash,
+          environment,
+          cliVersion,
+          receivedAt,
+        });
+      } catch {
+        // Internal error — still return 204
+      }
+    } catch {
+      // Catch-all — always return 204
+    }
+
+    return new Response(null, { status: 204 });
+  }),
+});
+
 // ── OPTIONS preflight for all API routes ────────────────────────────────────
+http.route({
+  path: "/api/v1/usage",
+  method: "OPTIONS",
+  handler: httpAction(async () => {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+    });
+  }),
+});
+
 http.route({
   path: "/api/v1/scans",
   method: "OPTIONS",

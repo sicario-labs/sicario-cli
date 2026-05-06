@@ -80,7 +80,7 @@ impl BehavioralScanner {
             .collect();
 
         // Sort by severity: Critical first, then High, Medium, Low, Info
-        anomalies.sort_by(|a, b| b.severity.cmp(&a.severity));
+        anomalies.sort_by_key(|a| std::cmp::Reverse(a.severity));
 
         Ok(anomalies)
     }

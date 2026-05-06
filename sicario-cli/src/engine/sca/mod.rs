@@ -6,6 +6,7 @@
 
 pub mod ghsa_import;
 pub mod known_vulnerability;
+pub mod license_scanner;
 pub mod manifest_parser;
 pub mod osv_import;
 #[cfg(test)]
@@ -13,5 +14,6 @@ mod sca_property_tests;
 pub mod vuln_db;
 
 pub use known_vulnerability::KnownVulnerability;
+pub use license_scanner::{LicenseFinding, LicenseRisk, LicenseScanner};
 pub use manifest_parser::ManifestParser;
 pub use vuln_db::VulnerabilityDatabaseManager;

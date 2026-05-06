@@ -1,0 +1,72 @@
+# Command Injection Rules for JavaScript/TypeScript
+# Covers: child_process.exec/execSync with user input, spawn with shell:true,
+# eval-based command execution
+#
+# CWE-78: Improper Neutralization of Special Elements used in an OS Command
+# OWASP A03:2021 - Injection
+
+- id: "js-child-process-exec-concat"
+  name: "child_process.exec with String Concatenation"
+  description: "Passing user-controlled input to exec() via string concatenation allows command injection. Use execFile() with an argument array, or validate and sanitize input against a strict allowlist."
+  severity: Critical
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: [(identifier) @fn (member_expression property: (property_identifier) @fn)] (#match? @fn \"^(exec|execSync)$\") arguments: (arguments (binary_expression) @arg)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "exec('ls ' + userInput);"
+      expected: TruePositive
+    - code: "child_process.exec('ping ' + req.body.host);"
+      expected: TruePositive
+    - code: "exec('ls /tmp');"
+      expected: TrueNegative
+
+- id: "js-spawn-shell-true"
+  name: "child_process.spawn with shell:true"
+  description: "Using spawn() with shell:true and user-controlled arguments allows shell metacharacter injection. Remove shell:true and pass arguments as an array, or use execFile() instead."
+  severity: Critical
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: [(identifier) @fn (member_expression property: (property_identifier) @fn)] (#match? @fn \"^spawn$\") arguments: (arguments _ _ (object (pair key: (property_identifier) @key (#eq? @key \"shell\") value: (true) @val)))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "spawn(cmd, args, { shell: true });"
+      expected: TruePositive
+    - code: "spawn('ls', ['-la'], { shell: true });"
+      expected: TruePositive
+    - code: "spawn('ls', ['-la']);"
+      expected: TrueNegative
+
+- id: "js-child-process-template-literal"
+  name: "child_process.exec with Template Literal"
+  description: "Interpolating user input into exec() via template literals allows command injection. Use execFile() with a separate argument array instead."
+  severity: Critical
+  languages:
+    - JavaScript
+    - TypeScript
+  pattern:
+    query: "(call_expression function: [(identifier) @fn (member_expression property: (property_identifier) @fn)] (#match? @fn \"^(exec|execSync)$\") arguments: (arguments (template_string) @arg)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
+  test_cases:
+    - code: "exec(`ping ${req.body.host}`);"
+      expected: TruePositive
+    - code: "execSync(`convert ${filename} output.png`);"
+      expected: TruePositive
+    - code: "exec('ls /tmp');"
+      expected: TrueNegative

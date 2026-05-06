@@ -156,6 +156,12 @@ pub struct ScanArgs {
     #[arg(long)]
     pub dataflow_traces: bool,
 
+    /// Trace taint paths from external input sources to each finding.
+    /// Prints a box-drawing call chain for each finding above the severity threshold.
+    /// Output goes to stderr to avoid contaminating --format json.
+    #[arg(long)]
+    pub trace: bool,
+
     /// Disable colored output
     #[arg(long)]
     pub no_color: bool,
@@ -231,6 +237,45 @@ pub struct ScanArgs {
     /// `[resolved]` event in watch mode. Use this flag to suppress it.
     #[arg(long)]
     pub no_receipt: bool,
+
+    /// Generate and display proof-of-concept exploit payloads for confirmed findings.
+    ///
+    /// For each finding above the severity threshold, a consent prompt is shown
+    /// before any payload is printed. With `--format json`, the consent prompt
+    /// is suppressed and a `poc` field is included in each finding object.
+    ///
+    /// WARNING: Only run against safe, local development environments.
+    #[arg(long)]
+    pub prove: bool,
+
+    /// Scan dependencies for license risk and append a license risk table to output.
+    ///
+    /// Checks npm and PyPI packages against known license risk tiers:
+    ///   HIGH:   GPL-2.0, GPL-3.0, AGPL-3.0, SSPL-1.0, EUPL-1.2
+    ///   MEDIUM: LGPL-2.1, LGPL-3.0, MPL-2.0, CDDL-1.0
+    ///   LOW:    MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD
+    ///
+    /// With `--format json`, a `license_findings` array is included alongside
+    /// `security_findings`. Packages in `.sicario/license-allowlist.txt` are
+    /// reported but do not affect the exit code.
+    #[arg(long)]
+    pub licenses: bool,
+
+    /// Exit with code 1 if any dependency has a license at or above this risk tier.
+    ///
+    /// Valid values: `high` (exit 1 on HIGH-tier only) or `medium` (exit 1 on
+    /// HIGH or MEDIUM tier). Requires `--licenses` to be set.
+    /// Allowlisted packages (`.sicario/license-allowlist.txt`) are excluded.
+    #[arg(long, value_name = "TIER")]
+    pub fail_on_license: Option<String>,
+
+    /// Record suppression patterns for findings that have inline `sicario-ignore` directives.
+    ///
+    /// After the scan, for each suppressed finding, the pattern is recorded in
+    /// `.sicario/learned_suppressions.json`. Once a pattern has been recorded 3+
+    /// times, `--auto-suppress` will automatically exclude matching findings.
+    #[arg(long)]
+    pub learn_suppressions: bool,
 }
 
 impl Default for ScanArgs {
@@ -256,6 +301,7 @@ impl Default for ScanArgs {
             max_chars_per_line: 160,
             staged: false,
             dataflow_traces: false,
+            trace: false,
             no_color: false,
             force_color: false,
             exclude_rule: Vec::new(),
@@ -273,6 +319,10 @@ impl Default for ScanArgs {
             fail_on: None,
             snippet_context: None,
             no_receipt: false,
+            prove: false,
+            licenses: false,
+            fail_on_license: None,
+            learn_suppressions: false,
         }
     }
 }

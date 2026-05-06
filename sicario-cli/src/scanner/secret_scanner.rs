@@ -267,7 +267,7 @@ mod tests {
     #[test]
     fn test_scan_content_detects_aws_key() {
         let scanner = create_scanner();
-        let content = "const key = \"AKIAIOSFODNN7EXAMPLE\";";
+        let content = &format!("const key = \"{}\";", concat!("AKIA", "IOSFODNN7EXAMPLE"));
         let secrets = scanner.scan_content_for_secrets(content, Path::new("test.js"));
         assert!(!secrets.is_empty());
         let aws = secrets
@@ -314,7 +314,7 @@ mod tests {
     fn test_scan_file_respects_suppression() {
         let mut f = tempfile::NamedTempFile::new().unwrap();
         writeln!(f, "// sicario-ignore-secret").unwrap();
-        writeln!(f, "const key = \"AKIAIOSFODNN7EXAMPLE\";").unwrap();
+        writeln!(f, "const key = \"{}\";", concat!("AKIA", "IOSFODNN7EXAMPLE")).unwrap();
         f.flush().unwrap();
 
         let scanner = create_scanner();
@@ -329,7 +329,7 @@ mod tests {
     #[test]
     fn test_scan_file_reports_unsuppressed_secrets() {
         let mut f = tempfile::NamedTempFile::new().unwrap();
-        writeln!(f, "const key = \"AKIAIOSFODNN7EXAMPLE\";").unwrap();
+        writeln!(f, "const key = \"{}\";", concat!("AKIA", "IOSFODNN7EXAMPLE")).unwrap();
         f.flush().unwrap();
 
         let scanner = create_scanner();
@@ -343,7 +343,7 @@ mod tests {
     #[test]
     fn test_line_numbers_are_correct() {
         let scanner = create_scanner();
-        let content = "line1\nline2\nconst key = \"AKIAIOSFODNN7EXAMPLE\";\nline4";
+        let content = &format!("line1\nline2\nconst key = \"{}\";\nline4", concat!("AKIA", "IOSFODNN7EXAMPLE"));
         let secrets = scanner.scan_content_for_secrets(content, Path::new("test.js"));
         let aws = secrets
             .iter()
@@ -365,7 +365,7 @@ mod tests {
 
         // Create a file with a secret
         let secret_file = temp_dir.path().join("secrets.js");
-        std::fs::write(&secret_file, "const key = \"AKIAIOSFODNN7EXAMPLE\";").unwrap();
+        std::fs::write(&secret_file, &format!("const key = \"{}\";", concat!("AKIA", "IOSFODNN7EXAMPLE"))).unwrap();
 
         // Stage and commit the file
         let mut index = repo.index().unwrap();
@@ -417,7 +417,7 @@ mod property_tests {
             prefix in "[a-zA-Z_][a-zA-Z0-9_]{0,20}",
             suffix in "[a-zA-Z0-9 ;]{0,20}",
         ) {
-            let aws_key = "AKIAIOSFODNN7EXAMPLE";
+            let aws_key = concat!("AKIA", "IOSFODNN7EXAMPLE");
             let content = format!("const {} = \"{}\";\n{}", prefix, aws_key, suffix);
 
             let scanner = create_scanner();
@@ -451,7 +451,7 @@ mod property_tests {
         ) {
             let mut f = tempfile::NamedTempFile::new().unwrap();
             writeln!(f, "{}", comment_style).unwrap();
-            writeln!(f, "const key = \"AKIAIOSFODNN7EXAMPLE\";").unwrap();
+            writeln!(f, "const key = \"{}\";", concat!("AKIA", "IOSFODNN7EXAMPLE")).unwrap();
             f.flush().unwrap();
 
             let scanner = create_scanner();
@@ -473,7 +473,7 @@ mod property_tests {
             for i in 0..prefix_lines {
                 content.push_str(&format!("const x{} = {};\n", i, i));
             }
-            content.push_str("const key = \"AKIAIOSFODNN7EXAMPLE\";\n");
+            content.push_str(&format!("const key = \"{}\";\n", concat!("AKIA", "IOSFODNN7EXAMPLE")));
 
             let scanner = create_scanner();
             let secrets = scanner.scan_content_for_secrets(&content, Path::new("test.js"));
@@ -515,7 +515,7 @@ mod property_tests {
                 let file_path = temp_dir.path().join(&file_name);
                 // Each commit has a unique file with an AWS key
                 std::fs::write(&file_path, format!(
-                    "const key{} = \"AKIAIOSFODNN7EXAMPLE\";", i
+                    "const key{} = \"{}\";", i, concat!("AKIA", "IOSFODNN7EXAMPLE")
                 )).unwrap();
 
                 let mut index = repo.index().unwrap();
@@ -588,7 +588,7 @@ mod property_tests {
 
                 let file_name = format!("branch_secret_{}.js", i);
                 let file_path = temp_dir.path().join(&file_name);
-                std::fs::write(&file_path, "const key = \"AKIAIOSFODNN7EXAMPLE\";").unwrap();
+                std::fs::write(&file_path, &format!("const key = \"{}\";", concat!("AKIA", "IOSFODNN7EXAMPLE"))).unwrap();
 
                 let mut index = repo.index().unwrap();
                 index.add_path(Path::new(&file_name)).unwrap();

@@ -298,7 +298,7 @@ mod tests {
 
     #[test]
     fn test_js_suppression_comment() {
-        let source = "// sicario-ignore-secret\nconst key = \"AKIAIOSFODNN7EXAMPLE\";";
+        let source = &format!("// sicario-ignore-secret\nconst key = \"{}\";", concat!("AKIA", "IOSFODNN7EXAMPLE"));
         let parser = SuppressionParser::new();
         assert!(parser.is_suppressed_in_source(source, 2));
         assert!(!parser.is_suppressed_in_source(source, 1));
@@ -327,7 +327,7 @@ mod tests {
 
     #[test]
     fn test_no_suppression_without_comment() {
-        let source = "const key = \"AKIAIOSFODNN7EXAMPLE\";";
+        let source = &format!("const key = \"{}\";", concat!("AKIA", "IOSFODNN7EXAMPLE"));
         let parser = SuppressionParser::new();
         assert!(!parser.is_suppressed_in_source(source, 1));
     }

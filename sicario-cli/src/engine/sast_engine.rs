@@ -79,7 +79,22 @@ impl SastEngine {
                 "Password or secret assigned as a string literal",
                 Severity::High,
                 &[Language::JavaScript, Language::TypeScript],
-                "(variable_declarator name: (identifier) @name (#match? @name \"(password|passwd|secret|api_key|apikey|token)\") value: (string) @val) @decl",
+                // Matches variable declarations: const secret = "...", let jwtSecret = "..."
+                // Also matches object property assignments: { secret_key: "...", jwt: "..." }
+                // Pattern covers: password, passwd, secret, secret_key, api_key, apikey,
+                //                 token, jwt, auth_token, private_key, access_key
+                "(variable_declarator name: (identifier) @name (#match? @name \"(?i)(password|passwd|secret|secret_key|api_key|apikey|token|jwt|auth_token|private_key|access_key)\") value: (string) @val) @decl",
+                Some("CWE-798"),
+                Some(OwaspCategory::A02_CryptographicFailures),
+            ),
+            (
+                "js/hardcoded-secret-property",
+                "Hardcoded Secret in Object Property",
+                "Object property with a sensitive name assigned a hardcoded string literal",
+                Severity::High,
+                &[Language::JavaScript, Language::TypeScript],
+                // Catches: { secret: "hardcoded_secret_key_1234" }, { jwt: "..." }, etc.
+                "(pair key: [(property_identifier) (string)] @key (#match? @key \"(?i)(password|passwd|secret|secret_key|api_key|apikey|token|jwt|auth_token|private_key|access_key)\") value: (string) @val) @pair",
                 Some("CWE-798"),
                 Some(OwaspCategory::A02_CryptographicFailures),
             ),
@@ -120,7 +135,7 @@ impl SastEngine {
                 "Password or secret assigned as a string literal",
                 Severity::High,
                 &[Language::Python],
-                "(assignment left: (identifier) @name (#match? @name \"(password|passwd|secret|api_key|apikey|token)\") right: (string) @val) @assign",
+                "(assignment left: (identifier) @name (#match? @name \"(?i)(password|passwd|secret|secret_key|api_key|apikey|token|jwt|auth_token|private_key|access_key)\") right: (string) @val) @assign",
                 Some("CWE-798"),
                 Some(OwaspCategory::A02_CryptographicFailures),
             ),
@@ -206,8 +221,11 @@ impl SastEngine {
         self.validate_and_compile_rule(rule)
     }
 
-    /// Validate rule syntax and compile tree-sitter query patterns
-    fn validate_and_compile_rule(&mut self, rule: SecurityRule) -> Result<()> {
+    /// Validate rule syntax and compile tree-sitter query patterns.
+    ///
+    /// This method is `pub` so that `RuleCompiler` can validate a generated
+    /// tree-sitter query before persisting the rule.
+    pub fn validate_and_compile_rule(&mut self, rule: SecurityRule) -> Result<()> {
         // Validate rule has required fields
         if rule.id.is_empty() {
             anyhow::bail!("Rule ID cannot be empty");
@@ -485,6 +503,14 @@ impl SastEngine {
         }
 
         Ok(vulnerabilities)
+    }
+
+    /// Get a reference to the internal `ReachabilityAnalyzer`.
+    ///
+    /// Used by `cmd_scan --trace` to call `trace_to_vulnerability` after
+    /// `scan_directory_with_reachability` has built the call graph.
+    pub fn reachability(&self) -> &ReachabilityAnalyzer {
+        &self.reachability
     }
 
     /// Scan dependency manifests in `dir` for known CVEs and return findings.

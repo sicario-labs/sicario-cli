@@ -273,6 +273,29 @@ export default defineSchema({
     timestamp: v.string(),
   }).index("by_orgId_timestamp", ["orgId", "timestamp"]),
 
+  // ── Usage telemetry (anonymous, zero-exfiltration) ───────────────────────
+  usagePings: defineTable({
+    projectHash:  v.string(),
+    environment:  v.union(v.literal("ci"), v.literal("local")),
+    cliVersion:   v.string(),
+    receivedAt:   v.string(),
+  })
+    .index("by_projectHash", ["projectHash"])
+    .index("by_receivedAt", ["receivedAt"]),
+
+  // ── Dynamic terminal notifications ───────────────────────────────────────
+  notifications: defineTable({
+    notificationId: v.string(),
+    message: v.string(),
+    severity: v.union(v.literal("info"), v.literal("warning"), v.literal("critical")),
+    minVersion: v.optional(v.string()),
+    maxVersion: v.optional(v.string()),
+    url: v.optional(v.string()),
+    activeFrom: v.string(),
+    activeTo: v.optional(v.string()),
+    enabled: v.boolean(),
+  }).index("by_enabled_activeFrom", ["enabled", "activeFrom"]),
+
   // ── Release distribution ──────────────────────────────────────────────────
   releases: defineTable({
     version: v.string(),       // e.g. "v0.1.9"

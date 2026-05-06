@@ -180,15 +180,22 @@ function Add-ToUserPath {
   $dirs = $currentPath -split ";" | Where-Object { $_ -ne "" }
 
   if ($dirs -contains $dir) {
-    return  # Already in PATH
+    Write-Info "$dir is already in your user PATH."
+    return
   }
 
   $newPath = ($dirs + $dir) -join ";"
   try {
+    # Permanently write to the User-scope registry key so the PATH persists
+    # across all new terminal sessions (fixes ISSUE-008).
     [System.Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
-    $env:PATH = "$env:PATH;$dir"
-    Write-Info "Added $dir to your user PATH."
-    Write-Info "Restart your terminal (or run: `$env:PATH += ';$dir'`) to use sicario immediately."
+
+    # Also update the current session immediately so the user doesn't need
+    # to restart their terminal to use sicario right away.
+    $env:PATH = $env:PATH + ";" + $dir
+
+    Write-Info "Added $dir to your user PATH (permanent)."
+    Write-Info "sicario is available in this session and all future terminals."
   }
   catch {
     Write-Warn "Could not update PATH automatically: $_"

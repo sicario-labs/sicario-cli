@@ -5,10 +5,14 @@
 //!
 //! Requirements: 9.1, 9.2, 9.3, 9.4, 11.1–11.10
 
+pub mod agent_selector;
 pub mod backup_manager;
 pub mod iteration_guard;
 pub mod llm_client;
+pub mod micro_context;
+pub mod ollama_client;
 pub mod patch;
+pub mod pr_client;
 pub mod progress;
 pub mod receipt;
 pub mod remediation_engine;
@@ -16,6 +20,7 @@ pub mod remediation_property_tests;
 pub mod template_engine;
 pub mod template_registry;
 pub mod templates;
+pub mod ts_verification;
 
 pub use backup_manager::BackupManager;
 pub use llm_client::LlmClient;

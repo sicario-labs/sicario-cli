@@ -45,7 +45,7 @@ pub struct BaselineDelta {
 }
 
 /// Summary of a single baseline for trend reporting.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct BaselineSummary {
     pub timestamp: DateTime<Utc>,
     pub tag: Option<String>,
@@ -69,8 +69,15 @@ pub trait BaselineManagement {
     /// Returns the delta: new, resolved, and unchanged findings.
     fn compare(&self, reference: &str, current_findings: &[Finding]) -> Result<BaselineDelta>;
 
+    /// Compare current findings against the most recent baseline.
+    /// Returns `Err` if no baselines exist.
+    fn compare_latest(&self, current_findings: &[Finding]) -> Result<BaselineDelta>;
+
     /// Summarize finding counts across all saved baselines for trend analysis.
     fn trend(&self) -> Result<Vec<BaselineSummary>>;
+
+    /// Returns true if at least one baseline file exists.
+    fn has_baselines(&self) -> bool;
 }
 
 // ── Implementation ───────────────────────────────────────────────────────────
@@ -254,6 +261,70 @@ impl BaselineManagement for BaselineManager {
             resolved_findings,
             unchanged_findings,
         })
+    }
+
+    fn compare_latest(&self, current_findings: &[Finding]) -> Result<BaselineDelta> {
+        let baselines = self.load_all_baselines()?;
+        let latest = baselines.into_iter().last().ok_or_else(|| {
+            anyhow::anyhow!("No baseline files found. Run `sicario baseline save` first.")
+        })?;
+
+        let old_fingerprints: HashSet<&str> = latest
+            .findings
+            .iter()
+            .map(|f| f.fingerprint.as_str())
+            .collect();
+
+        let current_baseline_findings: Vec<BaselineFinding> = current_findings
+            .iter()
+            .map(Self::to_baseline_finding)
+            .collect();
+
+        let current_fingerprints: HashSet<&str> = current_baseline_findings
+            .iter()
+            .map(|f| f.fingerprint.as_str())
+            .collect();
+
+        let new_findings: Vec<BaselineFinding> = current_baseline_findings
+            .iter()
+            .filter(|f| !old_fingerprints.contains(f.fingerprint.as_str()))
+            .cloned()
+            .collect();
+
+        let resolved_findings: Vec<BaselineFinding> = latest
+            .findings
+            .iter()
+            .filter(|f| !current_fingerprints.contains(f.fingerprint.as_str()))
+            .cloned()
+            .collect();
+
+        let unchanged_findings: Vec<BaselineFinding> = current_baseline_findings
+            .iter()
+            .filter(|f| old_fingerprints.contains(f.fingerprint.as_str()))
+            .cloned()
+            .collect();
+
+        Ok(BaselineDelta {
+            new_findings,
+            resolved_findings,
+            unchanged_findings,
+        })
+    }
+
+    fn has_baselines(&self) -> bool {
+        self.baselines_dir()
+            .ok()
+            .map(|dir| {
+                fs::read_dir(&dir)
+                    .ok()
+                    .map(|entries| {
+                        entries.filter_map(|e| e.ok()).any(|e| {
+                            e.path().extension().and_then(|ext| ext.to_str()) == Some("json")
+                        })
+                    })
+                    .unwrap_or(false)
+            })
+            .unwrap_or(false)
     }
 
     fn trend(&self) -> Result<Vec<BaselineSummary>> {
@@ -565,5 +636,260 @@ mod tests {
         assert_eq!(sanitize_tag("v1.0-beta"), "v1-0-beta");
         assert_eq!(sanitize_tag("release/2024"), "release-2024");
         assert_eq!(sanitize_tag("simple_tag"), "simple_tag");
+    }
+
+    // ── baseline diff --ci tests ──────────────────────────────────────────────
+
+    /// Helper: create a finding with a specific severity.
+    fn make_finding_with_severity(
+        rule_id: &str,
+        file: &str,
+        snippet: &str,
+        severity: Severity,
+    ) -> Finding {
+        let fingerprint = Finding::compute_fingerprint(rule_id, Path::new(file), snippet);
+        Finding {
+            id: Uuid::new_v4(),
+            rule_id: rule_id.to_string(),
+            rule_name: format!("{} rule", rule_id),
+            file_path: PathBuf::from(file),
+            line: 10,
+            column: 5,
+            end_line: None,
+            end_column: None,
+            snippet: snippet.to_string(),
+            severity,
+            confidence_score: 0.85,
+            reachable: true,
+            cloud_exposed: None,
+            cwe_id: None,
+            owasp_category: None,
+            fingerprint,
+            dataflow_trace: None,
+            suppressed: false,
+            suppression_rule: None,
+            suggested_suppression: false,
+        }
+    }
+
+    /// No new findings above threshold → delta.new_findings is empty (exit 0 in CI mode).
+    #[test]
+    fn test_diff_ci_no_new_findings_above_threshold() {
+        let tmp = TempDir::new().unwrap();
+        let mgr = BaselineManager::new(tmp.path());
+
+        let finding_a = make_finding_with_severity("rule-a", "a.rs", "snippet_a", Severity::High);
+        // Save baseline with finding_a
+        mgr.save(&[finding_a.clone()], Some("v1")).unwrap();
+
+        // Current scan: same finding (no new findings)
+        let delta = mgr.compare("v1", &[finding_a.clone()]).unwrap();
+
+        let threshold = Severity::High;
+        let blocking: Vec<_> = delta
+            .new_findings
+            .iter()
+            .filter(|f| f.severity >= threshold)
+            .collect();
+
+        assert!(blocking.is_empty(), "Expected no blocking new findings");
+        assert_eq!(delta.unchanged_findings.len(), 1);
+    }
+
+    /// New High finding → blocking (exit 1) with --ci --threshold high.
+    #[test]
+    fn test_diff_ci_new_high_finding_is_blocking() {
+        let tmp = TempDir::new().unwrap();
+        let mgr = BaselineManager::new(tmp.path());
+
+        let finding_a = make_finding_with_severity("rule-a", "a.rs", "snippet_a", Severity::Medium);
+        mgr.save(&[finding_a.clone()], Some("v1")).unwrap();
+
+        // New High finding introduced
+        let finding_b = make_finding_with_severity("rule-b", "b.rs", "snippet_b", Severity::High);
+        let current = vec![finding_a.clone(), finding_b.clone()];
+
+        let delta = mgr.compare("v1", &current).unwrap();
+
+        let threshold = Severity::High;
+        let blocking: Vec<_> = delta
+            .new_findings
+            .iter()
+            .filter(|f| f.severity >= threshold)
+            .collect();
+
+        assert_eq!(blocking.len(), 1, "Expected one blocking new finding");
+        assert_eq!(blocking[0].rule_id, "rule-b");
+    }
+
+    /// New Medium finding → NOT blocking (exit 0) with --ci --threshold high.
+    #[test]
+    fn test_diff_ci_new_medium_finding_not_blocking_at_high_threshold() {
+        let tmp = TempDir::new().unwrap();
+        let mgr = BaselineManager::new(tmp.path());
+
+        let finding_a = make_finding_with_severity("rule-a", "a.rs", "snippet_a", Severity::Low);
+        mgr.save(&[finding_a.clone()], Some("v1")).unwrap();
+
+        // New Medium finding introduced
+        let finding_b = make_finding_with_severity("rule-b", "b.rs", "snippet_b", Severity::Medium);
+        let current = vec![finding_a.clone(), finding_b.clone()];
+
+        let delta = mgr.compare("v1", &current).unwrap();
+
+        let threshold = Severity::High;
+        let blocking: Vec<_> = delta
+            .new_findings
+            .iter()
+            .filter(|f| f.severity >= threshold)
+            .collect();
+
+        assert!(
+            blocking.is_empty(),
+            "Medium finding should not block at High threshold"
+        );
+        assert_eq!(delta.new_findings.len(), 1, "Should have one new finding");
+    }
+
+    /// No baseline file → has_baselines() returns false (exit 2 in diff handler).
+    #[test]
+    fn test_diff_no_baseline_file_detected() {
+        let tmp = TempDir::new().unwrap();
+        let mgr = BaselineManager::new(tmp.path());
+
+        // No baselines saved — has_baselines should return false
+        assert!(
+            !mgr.has_baselines(),
+            "Expected has_baselines() to return false when no baselines exist"
+        );
+    }
+
+    /// After saving a baseline, has_baselines() returns true.
+    #[test]
+    fn test_diff_has_baselines_after_save() {
+        let tmp = TempDir::new().unwrap();
+        let mgr = BaselineManager::new(tmp.path());
+
+        let finding = make_finding_with_severity("rule-a", "a.rs", "snippet_a", Severity::High);
+        mgr.save(&[finding], None).unwrap();
+
+        assert!(
+            mgr.has_baselines(),
+            "Expected has_baselines() to return true after saving"
+        );
+    }
+
+    /// --tag selects named baseline (compare by tag).
+    #[test]
+    fn test_diff_tag_selects_named_baseline() {
+        let tmp = TempDir::new().unwrap();
+        let mgr = BaselineManager::new(tmp.path());
+
+        let finding_a = make_finding_with_severity("rule-a", "a.rs", "snippet_a", Severity::High);
+        let finding_b = make_finding_with_severity("rule-b", "b.rs", "snippet_b", Severity::Medium);
+
+        // Save two baselines with different tags
+        mgr.save(&[finding_a.clone()], Some("release-1")).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        mgr.save(&[finding_a.clone(), finding_b.clone()], Some("release-2"))
+            .unwrap();
+
+        // Compare against "release-1" tag — finding_b should appear as new
+        let delta = mgr
+            .compare("release-1", &[finding_a.clone(), finding_b.clone()])
+            .unwrap();
+        assert_eq!(delta.new_findings.len(), 1);
+        assert_eq!(delta.new_findings[0].rule_id, "rule-b");
+
+        // Compare against "release-2" tag — no new findings
+        let delta2 = mgr
+            .compare("release-2", &[finding_a.clone(), finding_b.clone()])
+            .unwrap();
+        assert_eq!(delta2.new_findings.len(), 0);
+    }
+
+    /// BaselineDelta JSON round-trip produces equivalent delta.
+    #[test]
+    fn test_baseline_delta_json_round_trip() {
+        let tmp = TempDir::new().unwrap();
+        let mgr = BaselineManager::new(tmp.path());
+
+        let finding_a = make_finding_with_severity("rule-a", "a.rs", "snippet_a", Severity::High);
+        let finding_b = make_finding_with_severity("rule-b", "b.rs", "snippet_b", Severity::Medium);
+        let finding_c = make_finding_with_severity("rule-c", "c.rs", "snippet_c", Severity::Low);
+
+        mgr.save(&[finding_a.clone(), finding_b.clone()], Some("base"))
+            .unwrap();
+
+        // Current: a (unchanged), c (new), b resolved
+        let current = vec![finding_a.clone(), finding_c.clone()];
+        let delta = mgr.compare("base", &current).unwrap();
+
+        // Serialize to JSON and back
+        let json = serde_json::to_string_pretty(&delta).unwrap();
+        let restored: BaselineDelta = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(restored.new_findings.len(), delta.new_findings.len());
+        assert_eq!(
+            restored.resolved_findings.len(),
+            delta.resolved_findings.len()
+        );
+        assert_eq!(
+            restored.unchanged_findings.len(),
+            delta.unchanged_findings.len()
+        );
+
+        // Verify fingerprints match
+        assert_eq!(
+            restored.new_findings[0].fingerprint,
+            delta.new_findings[0].fingerprint
+        );
+        assert_eq!(
+            restored.resolved_findings[0].fingerprint,
+            delta.resolved_findings[0].fingerprint
+        );
+        assert_eq!(
+            restored.unchanged_findings[0].fingerprint,
+            delta.unchanged_findings[0].fingerprint
+        );
+    }
+
+    /// compare_latest uses the most recent baseline when no reference is given.
+    #[test]
+    fn test_compare_latest_uses_most_recent_baseline() {
+        let tmp = TempDir::new().unwrap();
+        let mgr = BaselineManager::new(tmp.path());
+
+        let finding_a = make_finding_with_severity("rule-a", "a.rs", "snippet_a", Severity::High);
+        let finding_b = make_finding_with_severity("rule-b", "b.rs", "snippet_b", Severity::Medium);
+
+        // Save two baselines: first with only A, then with A+B
+        mgr.save(&[finding_a.clone()], Some("first")).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        mgr.save(&[finding_a.clone(), finding_b.clone()], Some("second"))
+            .unwrap();
+
+        // compare_latest should compare against "second" (most recent)
+        // Current scan: only A — so B should appear as resolved
+        let delta = mgr.compare_latest(&[finding_a.clone()]).unwrap();
+        assert_eq!(delta.resolved_findings.len(), 1);
+        assert_eq!(delta.resolved_findings[0].rule_id, "rule-b");
+        assert_eq!(delta.new_findings.len(), 0);
+    }
+
+    /// compare_latest returns Err when no baselines exist.
+    #[test]
+    fn test_compare_latest_no_baselines_returns_err() {
+        let tmp = TempDir::new().unwrap();
+        let mgr = BaselineManager::new(tmp.path());
+
+        let result = mgr.compare_latest(&[]);
+        assert!(result.is_err(), "Expected Err when no baselines exist");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("No baseline files found"),
+            "Error message should mention no baseline files: {}",
+            err_msg
+        );
     }
 }

@@ -3,6 +3,8 @@
 //! Groups vulnerabilities by OWASP Top 10 category, generates compliance
 //! reports in JSON and Markdown formats.
 
+pub mod compliance;
+pub mod mttr;
 #[cfg(test)]
 pub mod owasp_property_tests;
 pub mod owasp_report;
@@ -10,6 +12,12 @@ pub mod owasp_report;
 pub use owasp_report::{
     generate_compliance_report, group_by_owasp, report_to_json, report_to_markdown,
     ComplianceReport, OwaspCategoryReport,
+};
+
+pub use compliance::{
+    generate_compliance_report as generate_enterprise_compliance_report,
+    generate_compliance_report_with_sarif, ComplianceReport as EnterpriseComplianceReport,
+    ComplianceScanSummary, MttrEntry, RemediationEntry, SuppressionEntry,
 };
 
 use anyhow::Result;

@@ -40,6 +40,10 @@ pub struct GlobalConfig {
     /// LLM model name override.
     pub llm_model: Option<String>,
 
+    /// Opt-out of anonymous usage telemetry.
+    /// Set via `sicario config set no_telemetry true` or manually in config.
+    pub no_telemetry: Option<bool>,
+
     /// Extra fields for extensibility (e.g., project_id).
     #[serde(flatten)]
     pub extra: std::collections::HashMap<String, serde_yaml::Value>,
@@ -92,9 +96,19 @@ pub fn set_global_config_value(key: &str, value: &str) -> Result<()> {
         "llm_model" | "LLM_MODEL" => {
             config.llm_model = Some(value.to_string());
         }
+        "no_telemetry" => match value {
+            "true" => config.no_telemetry = Some(true),
+            "false" => config.no_telemetry = Some(false),
+            other => {
+                anyhow::bail!(
+                    "Invalid value '{}' for 'no_telemetry'. Expected 'true' or 'false'.",
+                    other
+                );
+            }
+        },
         other => {
             anyhow::bail!(
-                "Unknown config key '{}'. Valid keys: ANTHROPIC_API_KEY, OPENAI_API_KEY, llm_api_key, llm_endpoint, llm_model",
+                "Unknown config key '{}'. Valid keys: ANTHROPIC_API_KEY, OPENAI_API_KEY, llm_api_key, llm_endpoint, llm_model, no_telemetry",
                 other
             );
         }
@@ -238,6 +252,7 @@ mod tests {
             openai_api_key: None,
             llm_endpoint: Some("https://api.anthropic.com/v1".to_string()),
             llm_model: Some("claude-3-5-sonnet-20241022".to_string()),
+            no_telemetry: Some(true),
             extra: Default::default(),
         };
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -289,6 +304,39 @@ mod tests {
         set_global_config_value("ANTHROPIC_API_KEY", "sk-ant-test123").unwrap();
         let loaded = load_global_config().unwrap();
         assert_eq!(loaded.anthropic_api_key.as_deref(), Some("sk-ant-test123"));
+
+        // Restore HOME / USERPROFILE
+        match original_home {
+            Some(h) => std::env::set_var("HOME", h),
+            None => std::env::remove_var("HOME"),
+        }
+        match original_userprofile {
+            Some(p) => std::env::set_var("USERPROFILE", p),
+            None => std::env::remove_var("USERPROFILE"),
+        }
+    }
+
+    #[test]
+    fn test_set_no_telemetry_true_persists_to_config() {
+        let tmp = tempfile::tempdir().unwrap();
+        let original_home = std::env::var("HOME").ok();
+        let original_userprofile = std::env::var("USERPROFILE").ok();
+
+        std::env::set_var("HOME", tmp.path());
+        std::env::set_var("USERPROFILE", tmp.path());
+
+        set_global_config_value("no_telemetry", "true").unwrap();
+        let loaded = load_global_config().unwrap();
+        assert_eq!(
+            loaded.no_telemetry,
+            Some(true),
+            "no_telemetry should be Some(true) after set_global_config_value(\"no_telemetry\", \"true\")"
+        );
+
+        // Also verify false round-trips correctly
+        set_global_config_value("no_telemetry", "false").unwrap();
+        let loaded2 = load_global_config().unwrap();
+        assert_eq!(loaded2.no_telemetry, Some(false));
 
         // Restore HOME / USERPROFILE
         match original_home {

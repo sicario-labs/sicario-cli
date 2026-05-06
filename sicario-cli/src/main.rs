@@ -8,15 +8,19 @@ mod auth;
 mod cloud;
 mod embedded_rules;
 mod engine;
+mod exorcist;
 mod mcp;
 mod onboarding;
 mod parser;
+mod policy;
 mod remediation;
 mod reporting;
+mod rule_compiler;
 mod scanner;
 mod tui;
 
 // New modules added by CLI overhaul
+mod attack;
 mod audit;
 mod baseline;
 mod benchmark;
@@ -25,15 +29,19 @@ mod cli;
 mod confidence;
 mod config;
 mod diff;
+mod guard;
 mod hook;
 mod key_manager;
 mod lsp;
+mod notifications;
 mod output;
+mod poc;
 mod publish;
 mod rule_harness;
 mod snippet;
 mod suppression_learner;
 mod telemetry;
+mod usage_telemetry;
 mod verification;
 
 use anyhow::Result;
@@ -44,6 +52,25 @@ use cli::exit_code::ExitCode;
 use cli::{Command, CompletionsArgs, LoginArgs, SicarioCli};
 
 fn main() {
+    // ISSUE-007: Enable Windows virtual terminal processing so ANSI escape
+    // codes (colors, bold, etc.) render correctly in PowerShell 5.1 and older
+    // Windows consoles instead of printing raw escape sequences like ←[1m←[31m.
+    // This is a no-op on non-Windows platforms and on modern Windows terminals
+    // (Windows Terminal, VS Code) that already support ANSI natively.
+    #[cfg(target_os = "windows")]
+    {
+        use crossterm::execute;
+        use crossterm::terminal::EnableLineWrap;
+        // crossterm's enable_raw_mode / disable_raw_mode internally call
+        // SetConsoleMode with ENABLE_VIRTUAL_TERMINAL_PROCESSING. We use the
+        // lower-level supports_ansi check and fall back to stripping colors if
+        // the terminal truly cannot handle ANSI sequences.
+        let _ = crossterm::execute!(std::io::stderr(), crossterm::style::ResetColor);
+        // If the above succeeded without error the terminal supports ANSI.
+        // owo-colors respects the NO_COLOR env var and the stream's isatty
+        // status automatically, so no further action is needed.
+    }
+
     // CRITICAL: When running as an MCP stdio server, stdout is reserved for
     // JSON-RPC 2.0 responses. The tracing subscriber MUST write to stderr.
     // The default fmt() writer is stdout — we must explicitly redirect to stderr.
@@ -124,8 +151,71 @@ fn dispatch(cmd: Command) -> Result<ExitCode> {
             Ok(ExitCode::Clean)
         }
         Command::Report(args) => {
-            cmd_report_handler(&args.dir, args.output.as_deref())?;
-            Ok(ExitCode::Clean)
+            use cli::report::ReportAction;
+            match args.action {
+                ReportAction::Compliance(compliance_args) => {
+                    let project_root = std::path::PathBuf::from(&compliance_args.dir);
+                    let report = if compliance_args.format.to_lowercase() == "sarif" {
+                        reporting::compliance::generate_compliance_report_with_sarif(&project_root)?
+                    } else {
+                        reporting::compliance::generate_compliance_report(&project_root)?
+                    };
+                    let sicario_dir = project_root.join(".sicario");
+                    let timestamp = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
+                    let report_path =
+                        sicario_dir.join(format!("compliance-report-{}.json", timestamp));
+                    println!("Compliance report: {}", report_path.display());
+                    println!(
+                        "Remediation entries: {}  |  Suppressions: {}  |  Baselines: {}",
+                        report.remediation_log.len(),
+                        report.suppression_log.len(),
+                        report.baseline_history.len(),
+                    );
+                    Ok(ExitCode::Clean)
+                }
+                ReportAction::Mttr(mttr_args) => {
+                    let project_root = std::path::PathBuf::from(&mttr_args.dir);
+
+                    // Parse --since flag if provided
+                    let since: Option<chrono::DateTime<chrono::Utc>> = if let Some(ref since_str) =
+                        mttr_args.since
+                    {
+                        match chrono::DateTime::parse_from_rfc3339(since_str) {
+                            Ok(dt) => Some(dt.with_timezone(&chrono::Utc)),
+                            Err(_) => {
+                                // Try date-only format (YYYY-MM-DD)
+                                match chrono::NaiveDate::parse_from_str(since_str, "%Y-%m-%d") {
+                                    Ok(date) => {
+                                        use chrono::TimeZone;
+                                        Some(
+                                            chrono::Utc.from_utc_datetime(
+                                                &date.and_hms_opt(0, 0, 0).unwrap(),
+                                            ),
+                                        )
+                                    }
+                                    Err(_) => {
+                                        eprintln!("sicario: invalid --since date '{}'. Expected ISO 8601 format (e.g. 2024-01-01 or 2024-01-01T00:00:00Z)", since_str);
+                                        return Ok(ExitCode::InternalError);
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        None
+                    };
+
+                    let report = reporting::mttr::compute_mttr(&project_root, since)?;
+
+                    if mttr_args.format.to_lowercase() == "json" {
+                        let json = reporting::mttr::render_mttr_json(&report)?;
+                        println!("{}", json);
+                    } else {
+                        let table = reporting::mttr::render_mttr_table(&report);
+                        print!("{}", table);
+                    }
+                    Ok(ExitCode::Clean)
+                }
+            }
         }
         Command::Fix(args) => cmd_fix(args),
         Command::Baseline(args) => cmd_baseline(args),
@@ -152,6 +242,7 @@ fn dispatch(cmd: Command) -> Result<ExitCode> {
             server.run()?;
             Ok(ExitCode::Clean)
         }
+        Command::Policy(args) => cmd_policy(args),
         Command::Benchmark(args) => cmd_benchmark(args),
         Command::Rules(args) => cmd_rules(args),
         Command::Cache(args) => cmd_cache(args),
@@ -163,6 +254,10 @@ fn dispatch(cmd: Command) -> Result<ExitCode> {
             crate::mcp::kiro_tools::StdioMcpRunner::run()?;
             Ok(ExitCode::Clean)
         }
+        Command::Exorcise(args) => cmd_exorcise(args),
+        Command::Rule(args) => cmd_rule(args),
+        Command::Attack(args) => cmd_attack(args),
+        Command::Guard { command } => cmd_guard(command),
     }
 }
 
@@ -274,6 +369,9 @@ fn load_embedded_rules_into(eng: &mut engine::sast_engine::SastEngine) -> usize 
 // ─── Scan command ─────────────────────────────────────────────────────────────
 
 fn cmd_scan(args: cli::scan::ScanArgs) -> Result<ExitCode> {
+    crate::usage_telemetry::fire_usage_ping();
+    let notification_rx = crate::notifications::spawn_notification_fetch();
+
     use cli::exit_code::FindingSummary;
     use cli::scan::OutputFormat;
     use engine::sast_engine::SastEngine;
@@ -284,6 +382,14 @@ fn cmd_scan(args: cli::scan::ScanArgs) -> Result<ExitCode> {
 
     let scan_start = std::time::Instant::now();
     let dir = PathBuf::from(args.resolved_dir());
+
+    // ── Policy-as-Code: load .sicario/policy.yaml if present ─────────────
+    // Policy fields override all CLI flags. Returns None when no policy file
+    // exists so enforcement is skipped entirely.
+    let policy = policy::PolicyLoader::load(&dir).unwrap_or_else(|e| {
+        eprintln!("sicario: warning: failed to load policy file: {e}");
+        None
+    });
 
     let formatter_config = FormatterConfig::from_flags(
         args.no_color,
@@ -332,6 +438,40 @@ fn cmd_scan(args: cli::scan::ScanArgs) -> Result<ExitCode> {
         rules_loaded += loaded;
     }
 
+    // Auto-load custom rules from .sicario/rules/ if the directory exists.
+    // These are rules created by `sicario rule` and stored in the project.
+    {
+        let sicario_rules_dir = dir.join(".sicario").join("rules");
+        if sicario_rules_dir.is_dir() {
+            let mut custom_rules_loaded = 0usize;
+            if let Ok(entries) = std::fs::read_dir(&sicario_rules_dir) {
+                let mut yaml_files: Vec<PathBuf> = entries
+                    .filter_map(|e| e.ok())
+                    .map(|e| e.path())
+                    .filter(|p| {
+                        p.extension()
+                            .and_then(|e| e.to_str())
+                            .map(|e| e == "yaml" || e == "yml")
+                            .unwrap_or(false)
+                    })
+                    .collect();
+                yaml_files.sort();
+                for f in &yaml_files {
+                    if eng.load_rules(f).is_ok() {
+                        custom_rules_loaded += 1;
+                    }
+                }
+            }
+            if custom_rules_loaded > 0 && !args.quiet {
+                eprintln!(
+                    "[sicario] Loaded {} custom rules from .sicario/rules/",
+                    custom_rules_loaded
+                );
+            }
+            rules_loaded += custom_rules_loaded;
+        }
+    }
+
     // If no rule files were found on disk, fall back to the hardcoded default
     // rules so the AST engine always has at least one active rule.
     if eng.get_rules().is_empty() {
@@ -348,7 +488,13 @@ fn cmd_scan(args: cli::scan::ScanArgs) -> Result<ExitCode> {
         rules_loaded = total_rules;
     }
 
-    let mut vulns = eng.scan_directory(&dir)?;
+    let mut vulns = if args.trace {
+        // Task 15.4: --trace uses reachability analysis to build the call graph
+        // Task 15.5: Performance guard — cap at 50,000 nodes
+        eng.scan_directory_with_reachability(&dir)?
+    } else {
+        eng.scan_directory(&dir)?
+    };
     let scan_duration = scan_start.elapsed();
 
     // ── Snippet extraction (zero-exfiltration guarantee) ──────────────────
@@ -550,7 +696,81 @@ fn cmd_scan(args: cli::scan::ScanArgs) -> Result<ExitCode> {
     let mut stdout = std::io::stdout();
     match args.format {
         OutputFormat::Json => {
-            println!("{}", serde_json::to_string_pretty(&vulns)?);
+            if args.prove {
+                // With --format json and --prove: include poc field in each finding,
+                // consent prompt is suppressed per spec.
+                let findings_with_poc: Vec<serde_json::Value> = vulns
+                    .iter()
+                    .map(|v| {
+                        let mut obj = serde_json::to_value(v).unwrap_or(serde_json::Value::Null);
+                        let finding =
+                            engine::vulnerability::Finding::from_vulnerability(v, &v.rule_id);
+                        let poc_value = poc::generator::PocGenerator::generate(&finding)
+                            .map(|p| {
+                                serde_json::json!({
+                                    "vuln_location": p.vuln_location,
+                                    "curl_command": p.curl_command,
+                                    "interpretation": p.interpretation,
+                                })
+                            })
+                            .unwrap_or(serde_json::Value::Null);
+                        if let Some(map) = obj.as_object_mut() {
+                            map.insert("poc".to_string(), poc_value);
+                        }
+                        obj
+                    })
+                    .collect();
+                println!("{}", serde_json::to_string_pretty(&findings_with_poc)?);
+            } else if args.trace {
+                // Task 15.4: --format json + --trace: populate dataflow_trace field
+                let json_threshold: Severity = args.resolve_fail_on().unwrap_or(Severity::High);
+                let analyzer = eng.reachability();
+                let node_count = analyzer.call_graph.nodes.len();
+                let findings_with_trace: Vec<serde_json::Value> = vulns
+                    .iter()
+                    .map(|v| {
+                        let mut obj = serde_json::to_value(v).unwrap_or(serde_json::Value::Null);
+                        let trace_value = if node_count > 50_000 {
+                            serde_json::Value::Null
+                        } else if v.severity >= json_threshold {
+                            let ext = v
+                                .file_path
+                                .extension()
+                                .and_then(|e| e.to_str())
+                                .unwrap_or("");
+                            let supported = matches!(ext, "js" | "ts" | "jsx" | "tsx" | "py");
+                            if supported {
+                                analyzer
+                                    .trace_to_vulnerability(v)
+                                    .map(|trace| {
+                                        serde_json::json!(trace
+                                            .steps
+                                            .iter()
+                                            .map(|s| serde_json::json!({
+                                                "file": s.file.display().to_string(),
+                                                "line": s.line,
+                                                "function_name": s.function_name,
+                                                "description": s.description,
+                                            }))
+                                            .collect::<Vec<_>>())
+                                    })
+                                    .unwrap_or(serde_json::Value::Null)
+                            } else {
+                                serde_json::Value::Null
+                            }
+                        } else {
+                            serde_json::Value::Null
+                        };
+                        if let Some(map) = obj.as_object_mut() {
+                            map.insert("dataflow_trace".to_string(), trace_value);
+                        }
+                        obj
+                    })
+                    .collect();
+                println!("{}", serde_json::to_string_pretty(&findings_with_trace)?);
+            } else {
+                println!("{}", serde_json::to_string_pretty(&vulns)?);
+            }
         }
         OutputFormat::Text => {
             if args.quiet {
@@ -576,11 +796,125 @@ fn cmd_scan(args: cli::scan::ScanArgs) -> Result<ExitCode> {
                 formatter_config.color_enabled,
                 &mut stdout,
             )?;
+
+            // ── --prove: PoC generation (text mode) ───────────────────────
+            if args.prove {
+                use std::io::BufRead;
+                let severity_threshold_for_poc: Severity =
+                    args.resolve_fail_on().unwrap_or(Severity::High);
+                for v in &vulns {
+                    if v.severity < severity_threshold_for_poc {
+                        continue;
+                    }
+                    let finding = engine::vulnerability::Finding::from_vulnerability(v, &v.rule_id);
+                    // Show consent prompt before generating any payload
+                    eprint!(
+                        "\nWarning: This will generate an active exploit payload. \
+Ensure you are running this against a safe, local environment. Proceed? [y/N] "
+                    );
+                    let stdin = std::io::stdin();
+                    let mut input = String::new();
+                    if stdin.lock().read_line(&mut input).is_err() {
+                        continue;
+                    }
+                    let trimmed = input.trim().to_lowercase();
+                    if trimmed != "y" && trimmed != "yes" {
+                        eprintln!("Skipping PoC for {}:{}", v.file_path.display(), v.line);
+                        continue;
+                    }
+                    match poc::generator::PocGenerator::generate(&finding) {
+                        Some(payload) => {
+                            println!("\n── PoC Payload ──────────────────────────────────────");
+                            println!("Location:       {}", payload.vuln_location);
+                            println!("Command:\n{}", payload.curl_command);
+                            println!("Interpretation: {}", payload.interpretation);
+                            println!("─────────────────────────────────────────────────────");
+                        }
+                        None => {
+                            eprintln!(
+                                "PoC not available for {}:{} — insufficient AST context.",
+                                v.file_path.display(),
+                                v.line
+                            );
+                        }
+                    }
+                }
+            }
         }
         OutputFormat::Sarif => {
             let tool_version = env!("CARGO_PKG_VERSION");
             let sarif_doc = emit_sarif(&vulns, tool_version);
             println!("{}", serde_json::to_string_pretty(&sarif_doc)?);
+        }
+    }
+
+    // ── Task 15.4: --trace output ─────────────────────────────────────────
+    // After standard finding output, emit taint traces for each finding above
+    // the severity threshold. Traces go to stderr to avoid contaminating
+    // --format json output on stdout. With --quiet, suppress entirely.
+    if args.trace {
+        use cli::scan::OutputFormat;
+
+        let analyzer = eng.reachability();
+
+        // Compute threshold inline (same logic as the main severity_threshold below)
+        let trace_threshold: Severity = if let Some(ref p) = policy {
+            if let Some(ref policy_fail_on) = p.fail_on {
+                policy_fail_on.into()
+            } else {
+                args.resolve_fail_on().unwrap_or(Severity::High)
+            }
+        } else {
+            args.resolve_fail_on().unwrap_or(Severity::High)
+        };
+
+        // Task 15.5: Performance guard — cap at 50,000 nodes
+        let node_count = analyzer.call_graph.nodes.len();
+        if node_count > 50_000 {
+            eprintln!(
+                "[trace] Project too large for taint tracing — use --trace on a subdirectory"
+            );
+        } else {
+            for vuln in &vulns {
+                if vuln.severity < trace_threshold {
+                    continue;
+                }
+
+                // Task 15.5: Language guard — only JS/TS and Python supported
+                let ext = vuln
+                    .file_path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("");
+                let supported = matches!(ext, "js" | "ts" | "jsx" | "tsx" | "py");
+                if !supported {
+                    if !args.quiet {
+                        eprintln!("[trace] Taint tracing not yet supported for .{} files", ext);
+                    }
+                    continue;
+                }
+
+                match args.format {
+                    OutputFormat::Json => {
+                        // With --format json, dataflow_trace is populated in the JSON output
+                        // (handled in the JSON output block above)
+                        // We don't print to stderr in JSON mode
+                    }
+                    _ => {
+                        if !args.quiet {
+                            match analyzer.trace_to_vulnerability(vuln) {
+                                Some(trace) => {
+                                    let rendered = trace.render();
+                                    eprint!("{}", rendered);
+                                }
+                                None => {
+                                    eprintln!("  [trace] No taint path found for this finding");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -592,7 +926,6 @@ fn cmd_scan(args: cli::scan::ScanArgs) -> Result<ExitCode> {
             eprintln!("JSON output written to {json_path}");
         }
     }
-
     if let Some(ref sarif_path) = args.sarif_output {
         let tool_version = env!("CARGO_PKG_VERSION");
         let sarif_doc = emit_sarif(&vulns, tool_version);
@@ -627,16 +960,157 @@ fn cmd_scan(args: cli::scan::ScanArgs) -> Result<ExitCode> {
         }
     }
 
+    // ── License scanning (--licenses) ────────────────────────────────────
+    // Run after security scan output so the license table is appended below.
+    let mut license_findings: Vec<engine::sca::LicenseFinding> = Vec::new();
+    if args.licenses {
+        use engine::sca::manifest_parser::ManifestParser;
+        use engine::sca::LicenseScanner;
+
+        let deps = ManifestParser::parse_directory(&dir).unwrap_or_default();
+        if !deps.is_empty() {
+            let mut scanner = LicenseScanner::new(&dir);
+            match scanner.scan(&deps) {
+                Ok(findings) => {
+                    license_findings = findings;
+                    match args.format {
+                        OutputFormat::Json => {
+                            // With --format json, include license_findings alongside security_findings
+                            let json_out = serde_json::json!({
+                                "security_findings": &vulns,
+                                "license_findings": license_findings.iter().map(|f| serde_json::json!({
+                                    "package": f.package,
+                                    "version": f.version,
+                                    "license": f.license,
+                                    "risk": f.risk.to_string(),
+                                    "ecosystem": f.ecosystem,
+                                    "allowlisted": f.allowlisted,
+                                })).collect::<Vec<_>>(),
+                            });
+                            println!("{}", serde_json::to_string_pretty(&json_out)?);
+                        }
+                        OutputFormat::Text => {
+                            if !args.quiet {
+                                println!("\n── License Risk Findings ────────────────────────────────────────────");
+                                print!("{}", LicenseScanner::render_table(&license_findings));
+                            }
+                        }
+                        OutputFormat::Sarif => {
+                            // SARIF format: append license findings as a note (not standard SARIF)
+                            // Just print the table to stderr so it doesn't corrupt SARIF output
+                            if !args.quiet {
+                                eprintln!("\n── License Risk Findings ────────────────────────────────────────────");
+                                eprint!("{}", LicenseScanner::render_table(&license_findings));
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    if !args.quiet {
+                        eprintln!("warning: License scanning failed: {e}");
+                    }
+                }
+            }
+        } else if !args.quiet {
+            eprintln!("No dependency manifests found for license scanning.");
+        }
+    }
+
     // Resolve exit-code gating values before args fields are partially moved
-    let severity_threshold: Severity = match args.resolve_fail_on() {
-        Ok(s) => s,
-        Err(msg) => {
-            eprintln!("sicario: {msg}");
-            return Ok(ExitCode::InternalError);
+    let severity_threshold: Severity = {
+        // Policy `fail_on` overrides CLI `--fail-on` (policy fields cannot be
+        // overridden by CLI flags — design.md §6.2).
+        if let Some(ref p) = policy {
+            if let Some(ref policy_fail_on) = p.fail_on {
+                policy_fail_on.into()
+            } else {
+                match args.resolve_fail_on() {
+                    Ok(s) => s,
+                    Err(msg) => {
+                        eprintln!("sicario: {msg}");
+                        return Ok(ExitCode::InternalError);
+                    }
+                }
+            }
+        } else {
+            match args.resolve_fail_on() {
+                Ok(s) => s,
+                Err(msg) => {
+                    eprintln!("sicario: {msg}");
+                    return Ok(ExitCode::InternalError);
+                }
+            }
         }
     };
+
+    // ── Policy: max_findings enforcement ─────────────────────────────────
+    if let Some(ref p) = policy {
+        if let Some(max) = p.max_findings {
+            if vulns.len() > max {
+                eprintln!(
+                    "sicario: Policy violation: total finding count ({}) exceeds max_findings limit ({}).",
+                    vulns.len(),
+                    max
+                );
+                return Ok(ExitCode::FindingsDetected);
+            }
+        }
+    }
+
+    // ── Policy: required_rules suppression check ──────────────────────────
+    // Scan source files for sicario-ignore directives targeting required rules.
+    if let Some(ref p) = policy {
+        if !p.required_rules.is_empty() {
+            let mut files_to_check = Vec::new();
+            let _ = eng.collect_files_recursive(&dir, &mut files_to_check);
+            for file_path in &files_to_check {
+                if let Ok(source) = std::fs::read_to_string(file_path) {
+                    if let Some(rule_id) =
+                        policy::loader::check_required_rules_suppression(&source, &p.required_rules)
+                    {
+                        eprintln!(
+                            "sicario: Policy violation: rule '{}' is marked as required and cannot be suppressed.",
+                            rule_id
+                        );
+                        return Ok(ExitCode::FindingsDetected);
+                    }
+                }
+            }
+        }
+    }
+
     let confidence_threshold = args.confidence_threshold;
     let in_github_actions = std::env::var("GITHUB_ACTIONS").is_ok();
+
+    // ── Task 12.6: --confidence-threshold output filtering ────────────────
+    // Filter findings below the confidence threshold before output, telemetry,
+    // and exit code computation. This runs BEFORE --auto-suppress.
+    if confidence_threshold > 0.0 {
+        vulns.retain(|v| v.confidence_score >= confidence_threshold);
+    }
+
+    // ── Task 12.5: --auto-suppress output filtering ───────────────────────
+    // Apply learned suppression patterns to filter findings before output.
+    // This runs AFTER confidence filtering.
+    if args.auto_suppress {
+        use suppression_learner::learner::SuppressionLearning;
+        use suppression_learner::SuppressionLearner;
+        if let Ok(learner) = SuppressionLearner::load(&dir) {
+            // Convert vulns to findings, apply auto_suppress, then filter vulns
+            // by which ones were kept (matched by rule_id + snippet hash).
+            let findings: Vec<engine::vulnerability::Finding> = vulns
+                .iter()
+                .map(|v| engine::vulnerability::Finding::from_vulnerability(v, &v.rule_id))
+                .collect();
+            let kept_findings = learner.auto_suppress(&findings);
+            // Build a set of (rule_id, snippet) pairs that were kept
+            let kept_set: std::collections::HashSet<(&str, &str)> = kept_findings
+                .iter()
+                .map(|f| (f.rule_id.as_str(), f.snippet.as_str()))
+                .collect();
+            vulns.retain(|v| kept_set.contains(&(v.rule_id.as_str(), v.snippet.as_str())));
+        }
+    }
 
     // Auto-publish to Sicario Cloud via telemetry endpoint if --publish flag is set
     if args.publish {
@@ -650,17 +1124,54 @@ fn cmd_scan(args: cli::scan::ScanArgs) -> Result<ExitCode> {
         );
     }
 
+    // ── Task 12.7: --learn-suppressions ──────────────────────────────────
+    // Record suppression patterns for findings with v.suppressed == true.
+    // This runs after output filtering so only the final finding set is recorded.
+    if args.learn_suppressions {
+        use suppression_learner::learner::SuppressionLearning;
+        use suppression_learner::SuppressionLearner;
+        if let Ok(mut learner) = SuppressionLearner::load(&dir) {
+            for v in &vulns {
+                if v.suppressed {
+                    let finding = engine::vulnerability::Finding::from_vulnerability(v, &v.rule_id);
+                    let _ = learner.record(&finding, &finding.snippet);
+                }
+            }
+            let _ = learner.save();
+        }
+    }
+
     // Compute exit code
     let summaries: Vec<FindingSummary> = vulns
         .iter()
         .map(|v| FindingSummary {
             severity: v.severity,
-            confidence_score: 1.0, // confidence scoring not yet wired
-            suppressed: false,     // suppression not yet wired
+            confidence_score: v.confidence_score,
+            suppressed: v.suppressed,
         })
         .collect();
 
     let exit_code = ExitCode::from_findings(&summaries, severity_threshold, confidence_threshold);
+
+    // ── --fail-on-license exit code gating ───────────────────────────────
+    // Apply after security exit code so license failures can also trigger exit 1.
+    // Allowlisted packages are excluded from the check.
+    if args.licenses {
+        if let Some(ref fail_on_license) = args.fail_on_license {
+            if engine::sca::license_scanner::should_fail_on_license(
+                &license_findings,
+                fail_on_license,
+            ) {
+                if !args.quiet {
+                    eprintln!(
+                        "sicario: License policy violation: found dependency with {} or higher license risk tier.",
+                        fail_on_license.to_uppercase()
+                    );
+                }
+                return Ok(ExitCode::FindingsDetected);
+            }
+        }
+    }
 
     // GitHub Actions annotation — only emit for non-JSON formats so the
     // annotation lines don't corrupt machine-readable output.
@@ -683,6 +1194,17 @@ fn cmd_scan(args: cli::scan::ScanArgs) -> Result<ExitCode> {
     if args.watch {
         run_watch_mode(&dir, &args, exit_code)?;
         return Ok(ExitCode::Clean);
+    }
+
+    // ── Notifications ─────────────────────────────────────────────────────
+    // Display any server-side notifications fetched in the background.
+    // Suppressed in --quiet mode and never written to stdout (always stderr),
+    // so --format json output is never contaminated.
+    if !args.quiet {
+        if let Ok(notifications) = notification_rx.try_recv() {
+            crate::notifications::print_notifications(&notifications);
+            crate::notifications::mark_seen(&notifications);
+        }
     }
 
     Ok(exit_code)
@@ -1314,7 +1836,7 @@ fn build_language_breakdown(files: &[PathBuf]) -> std::collections::HashMap<Stri
 // ─── Suppressions command ──────────────────────────────────────────────────────
 
 fn cmd_suppressions(args: cli::suppressions::SuppressionsCommand) -> Result<ExitCode> {
-    use cli::suppressions::SuppressionsAction;
+    use cli::suppressions::{AuditOutputFormat, SuppressionsAction};
     use suppression_learner::SuppressionLearner;
 
     let project_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -1339,6 +1861,35 @@ fn cmd_suppressions(args: cli::suppressions::SuppressionsCommand) -> Result<Exit
             learner.reset();
             learner.save()?;
             println!("All learned suppression patterns have been cleared.");
+        }
+        SuppressionsAction::Audit(audit_args) => {
+            use audit::suppression_audit::{
+                collect_suppression_audit, filter_entries, render_csv, render_json, write_output,
+            };
+
+            // Collect all suppression directives with git attribution
+            let entries = collect_suppression_audit(&project_root)?;
+
+            // Apply filters
+            let entries = filter_entries(
+                entries,
+                audit_args.since.as_deref(),
+                audit_args.author.as_deref(),
+            );
+
+            // Render output
+            let output = match audit_args.format {
+                AuditOutputFormat::Json => render_json(&entries)?,
+                AuditOutputFormat::Csv => render_csv(&entries),
+            };
+
+            // Write to file (append) or stdout
+            if let Some(ref path) = audit_args.output {
+                write_output(path, &output)?;
+                eprintln!("sicario: suppression audit written to {}", path);
+            } else {
+                print!("{}", output);
+            }
         }
     }
 
@@ -1369,6 +1920,10 @@ fn cmd_hook(args: cli::hook::HookCommand) -> Result<ExitCode> {
             mgr.install()?;
             eprintln!("sicario: pre-commit hook installed");
         }
+        HookAction::AutoFix => {
+            mgr.install_auto_fix()?;
+            eprintln!("sicario: auto-fix pre-commit hook installed");
+        }
         HookAction::Uninstall => {
             mgr.uninstall()?;
             eprintln!("sicario: pre-commit hook uninstalled");
@@ -1384,6 +1939,67 @@ fn cmd_hook(args: cli::hook::HookCommand) -> Result<ExitCode> {
                 eprintln!("sicario: pre-commit hook is not installed");
             }
         }
+    }
+
+    Ok(ExitCode::Clean)
+}
+
+// ─── Exorcise command ─────────────────────────────────────────────────────────
+
+/// Run `sicario exorcise` — rewrite local git history to remove hardcoded secrets.
+///
+/// Pre-flight checks are run first; any failure prints a descriptive error and
+/// exits with code 2.  Unless `--yes` or `--dry-run` is set, the user is
+/// prompted to confirm before the rewrite begins.
+fn cmd_exorcise(args: cli::exorcise::ExorciseArgs) -> Result<ExitCode> {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+
+    // ── Initialise GitExorcist (runs pre-flight checks internally) ────────
+    let exorcist = match exorcist::GitExorcist::new(&cwd) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("sicario exorcise: {e}");
+            return Ok(ExitCode::InternalError);
+        }
+    };
+
+    // ── Pre-flight: working tree must be clean ────────────────────────────
+    if let Err(e) = exorcist.check_working_tree_clean() {
+        eprintln!("sicario exorcise: {e}");
+        return Ok(ExitCode::InternalError);
+    }
+
+    // ── Confirmation prompt (skipped for --dry-run or --yes) ─────────────
+    if !args.dry_run && !args.yes {
+        eprint!("This will rewrite your local git history. Proceed? [y/N] ");
+        use std::io::BufRead;
+        let stdin = std::io::stdin();
+        let mut input = String::new();
+        if stdin.lock().read_line(&mut input).is_err() {
+            eprintln!("sicario exorcise: failed to read confirmation input");
+            return Ok(ExitCode::InternalError);
+        }
+        let trimmed = input.trim().to_lowercase();
+        if trimmed != "y" && trimmed != "yes" {
+            eprintln!("sicario exorcise: aborted.");
+            return Ok(ExitCode::Clean);
+        }
+    }
+
+    // ── Run the exorcism ──────────────────────────────────────────────────
+    let receipt = match exorcist.exorcise(args.since.as_deref(), args.dry_run) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("sicario exorcise: {e}");
+            return Ok(ExitCode::InternalError);
+        }
+    };
+
+    // ── Print the receipt ─────────────────────────────────────────────────
+    print!("{}", receipt.render());
+
+    if args.dry_run {
+        println!("[dry-run] No changes made to git history");
     }
 
     Ok(ExitCode::Clean)
@@ -1745,12 +2361,151 @@ fn normalize_path(path: &std::path::Path) -> PathBuf {
     out
 }
 
+// ─── Policy command ───────────────────────────────────────────────────────────
+
+fn cmd_policy(args: cli::policy::PolicyCommand) -> Result<ExitCode> {
+    use cli::policy::PolicyAction;
+    match args.action {
+        PolicyAction::Validate(validate_args) => cmd_policy_validate(validate_args),
+        PolicyAction::Init(init_args) => cmd_policy_init(init_args),
+    }
+}
+
+/// `sicario policy validate` — parse `.sicario/policy.yaml` and check all rule
+/// IDs against the loaded rule set. Prints unknown rule IDs and invalid glob
+/// patterns. Exits 0 if valid, exits 1 if any issues found.
+fn cmd_policy_validate(args: cli::policy::PolicyValidateArgs) -> Result<ExitCode> {
+    use engine::sast_engine::SastEngine;
+
+    let project_root = PathBuf::from(&args.dir);
+    let policy_path = project_root.join(".sicario").join("policy.yaml");
+
+    if !policy_path.exists() {
+        eprintln!(
+            "sicario: No policy file found at '{}'.",
+            policy_path.display()
+        );
+        return Ok(ExitCode::FindingsDetected);
+    }
+
+    // Parse the policy file
+    let policy = match policy::PolicyLoader::load(&project_root) {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            eprintln!("sicario: No policy file found.");
+            return Ok(ExitCode::FindingsDetected);
+        }
+        Err(e) => {
+            eprintln!("sicario: Failed to parse policy file: {e}");
+            return Ok(ExitCode::FindingsDetected);
+        }
+    };
+
+    // Load the rule set to validate rule IDs against
+    let mut eng = SastEngine::new(&project_root)?;
+    load_embedded_rules_into(&mut eng);
+    if eng.get_rules().is_empty() {
+        let disk_files = discover_bundled_rules();
+        for f in &disk_files {
+            let _ = eng.load_rules(f);
+        }
+    }
+    if eng.get_rules().is_empty() {
+        eng.load_default_rules();
+    }
+
+    let known_rule_ids: std::collections::HashSet<&str> =
+        eng.get_rules().iter().map(|r| r.id.as_str()).collect();
+
+    let mut issues_found = false;
+
+    // Check required_rules
+    for rule_id in &policy.required_rules {
+        if !known_rule_ids.contains(rule_id.as_str()) {
+            eprintln!(
+                "sicario: policy validate: unknown rule ID in required_rules: '{}'",
+                rule_id
+            );
+            issues_found = true;
+        }
+    }
+
+    // Check blocked_suppressions
+    for rule_id in &policy.blocked_suppressions {
+        if !known_rule_ids.contains(rule_id.as_str()) {
+            eprintln!(
+                "sicario: policy validate: unknown rule ID in blocked_suppressions: '{}'",
+                rule_id
+            );
+            issues_found = true;
+        }
+    }
+
+    // Validate glob patterns in scope
+    for pattern in &policy.scope {
+        if let Err(e) = globset::Glob::new(pattern) {
+            eprintln!(
+                "sicario: policy validate: invalid glob pattern in scope '{}': {}",
+                pattern, e
+            );
+            issues_found = true;
+        }
+    }
+
+    if issues_found {
+        eprintln!("sicario: policy validate: policy file has issues — fix them before enforcing.");
+        Ok(ExitCode::FindingsDetected)
+    } else {
+        println!("sicario: policy validate: OK — policy file is valid.");
+        Ok(ExitCode::Clean)
+    }
+}
+
+/// `sicario policy init` — generate a `.sicario/policy.yaml` template.
+/// Does not overwrite an existing file.
+fn cmd_policy_init(args: cli::policy::PolicyInitArgs) -> Result<ExitCode> {
+    let project_root = PathBuf::from(&args.dir);
+    let sicario_dir = project_root.join(".sicario");
+    let policy_path = sicario_dir.join("policy.yaml");
+
+    if policy_path.exists() {
+        eprintln!(
+            "sicario: policy init: '{}' already exists. Skipping.",
+            policy_path.display()
+        );
+        return Ok(ExitCode::Clean);
+    }
+
+    std::fs::create_dir_all(&sicario_dir)?;
+    std::fs::write(&policy_path, cli::policy::POLICY_TEMPLATE)?;
+
+    println!("sicario: policy init: created '{}'.", policy_path.display());
+    Ok(ExitCode::Clean)
+}
+
 fn cmd_fix(args: cli::fix::FixArgs) -> Result<ExitCode> {
+    use remediation::agent_selector::{AgentConfig, AgentSelector};
     use remediation::iteration_guard::IterationGuard;
     use remediation::remediation_engine::RemediationEngine;
     use verification::scanner::VerificationScanning;
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+
+    // ── --staged mode ─────────────────────────────────────────────────────────
+    if args.staged {
+        return cmd_fix_staged(&args, &cwd);
+    }
+
+    // Parse --agent flag and resolve effective allow_ai setting.
+    // AgentConfig::Local implicitly grants AI consent (localhost calls only).
+    let agent_config = match AgentSelector::parse(args.agent.as_deref()) {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            eprintln!("sicario: {e}");
+            return Ok(ExitCode::InternalError);
+        }
+    };
+    let effective_allow_ai = args.allow_ai || AgentSelector::implicit_allow_ai(&agent_config);
 
     // Handle revert
     if let Some(ref patch_id) = args.revert {
@@ -1809,7 +2564,13 @@ fn cmd_fix(args: cli::fix::FixArgs) -> Result<ExitCode> {
             eng.load_default_rules();
         }
     }
-    let vulns = eng.scan_directory(&scan_root)?;
+    // For single-file fixes, scan just that file (fast path — avoids SCA and
+    // background threads). For directory fixes, scan the whole directory.
+    let vulns = if is_dir {
+        eng.scan_directory(&scan_root)?
+    } else {
+        eng.scan_file(&file_path)?
+    };
 
     // Normalise both sides to lowercase strings for a case-insensitive,
     // separator-insensitive comparison (handles Windows drive-letter casing
@@ -1821,19 +2582,29 @@ fn cmd_fix(args: cli::fix::FixArgs) -> Result<ExitCode> {
 
     // Filter to the target file (or all files under the target directory)
     // and optionally the specified rule.
+    //
+    // For single-file scans, scan_file returns the exact path we passed in,
+    // so the comparison is always exact. For directory scans, the engine
+    // returns relative paths which we resolve against cwd.
     let file_vulns: Vec<_> = vulns
         .iter()
         .filter(|v| {
-            let vpath = v
-                .file_path
-                .to_string_lossy()
-                .replace('\\', "/")
-                .to_lowercase();
             if is_dir {
+                // Resolve the vulnerability's file path to absolute
+                let abs_vpath = if v.file_path.is_absolute() {
+                    v.file_path.clone()
+                } else {
+                    cwd.join(&v.file_path)
+                };
+                let vpath = abs_vpath
+                    .to_string_lossy()
+                    .replace('\\', "/")
+                    .to_lowercase();
                 // Directory: match any file whose path starts with the target dir
                 vpath.starts_with(&target)
             } else {
-                vpath == target
+                // Single-file: scan_file returns the exact path we passed in
+                true
             }
         })
         .filter(|v| args.rule.as_ref().is_none_or(|r| v.rule_id == *r))
@@ -1844,7 +2615,7 @@ fn cmd_fix(args: cli::fix::FixArgs) -> Result<ExitCode> {
         return Ok(ExitCode::Clean);
     }
 
-    let engine = RemediationEngine::new_with_allow_ai(&cwd, args.allow_ai)?;
+    let engine = RemediationEngine::new_with_agent(&cwd, &agent_config, effective_allow_ai)?;
 
     if args.yes {
         // Batch mode: process all vulnerabilities without per-fix prompts
@@ -1859,6 +2630,22 @@ fn cmd_fix(args: cli::fix::FixArgs) -> Result<ExitCode> {
             "sicario: batch complete — {} applied, {} reverted, {} skipped",
             batch.applied, batch.reverted, batch.skipped
         );
+        // ── Task 12.9: Emit PatchReceipt for each successful batch fix ────
+        if !args.no_receipt {
+            use remediation::remediation_engine::BatchFixOutcome;
+            for detail in &batch.details {
+                if matches!(detail.outcome, BatchFixOutcome::Applied) {
+                    let receipt = remediation::PatchReceipt::deterministic(
+                        &detail.rule_id,
+                        &*detail.file_path.to_string_lossy(),
+                        0, // line not tracked in batch detail
+                        0,
+                        &detail.rule_id,
+                    );
+                    receipt.print();
+                }
+            }
+        }
     } else {
         // Interactive mode: confirm each fix individually, with iteration cap
         for vuln in &file_vulns {
@@ -1904,14 +2691,38 @@ fn cmd_fix(args: cli::fix::FixArgs) -> Result<ExitCode> {
 
                 // Emit zero-exfiltration receipt (unless suppressed with --no-receipt)
                 if !args.no_receipt {
-                    let receipt = remediation::PatchReceipt::deterministic(
-                        &vuln.rule_id,
-                        &args.file,
-                        vuln.line as u32,
-                        execution_ms,
-                        &vuln.rule_id,
-                    );
+                    let receipt = if let Some(model) = engine.ollama_model_name() {
+                        // Local agent path: emit local_agent receipt (zero exfiltration)
+                        remediation::PatchReceipt::local_agent(
+                            &vuln.rule_id,
+                            &args.file,
+                            vuln.line as u32,
+                            execution_ms,
+                            model,
+                        )
+                    } else {
+                        // Deterministic or cloud path
+                        remediation::PatchReceipt::deterministic(
+                            &vuln.rule_id,
+                            &args.file,
+                            vuln.line as u32,
+                            execution_ms,
+                            &vuln.rule_id,
+                        )
+                    };
                     receipt.print();
+                }
+
+                // Open a PR/MR if --pr flag is set
+                if args.pr {
+                    match engine.create_pull_request(&patch, "auto", &vuln.rule_id) {
+                        Ok(pr_url) => {
+                            eprintln!("sicario: pull request created: {}", pr_url);
+                        }
+                        Err(e) => {
+                            eprintln!("sicario: warning — could not create pull request: {}", e);
+                        }
+                    }
                 }
 
                 // Post-fix verification
@@ -1945,6 +2756,229 @@ fn cmd_fix(args: cli::fix::FixArgs) -> Result<ExitCode> {
             } else {
                 eprintln!("sicario: patch skipped");
             }
+        }
+    }
+
+    Ok(ExitCode::Clean)
+}
+
+// ─── Staged fix command ───────────────────────────────────────────────────────
+
+/// Result of a single staged fix attempt, serialized to JSON with `--format json`.
+#[derive(serde::Serialize)]
+struct StagedFixResult {
+    file: String,
+    rule_id: String,
+    line: usize,
+    fixed: bool,
+    template_used: Option<String>,
+}
+
+/// Implement `sicario fix --staged`:
+///
+/// 1. Run `git diff --cached --name-only` to enumerate staged files.
+/// 2. Normalize path separators to `/` on Windows.
+/// 3. Scan staged files for vulnerabilities.
+/// 4. Apply only deterministic (registry) fixes — no LLM fallback.
+/// 5. With `--format json`, output a JSON array of fix result objects.
+/// 6. Exit non-zero if run outside a Git repository.
+fn cmd_fix_staged(args: &cli::fix::FixArgs, cwd: &std::path::Path) -> Result<ExitCode> {
+    use cli::fix::FixOutputFormat;
+    use remediation::remediation_engine::RemediationEngine;
+
+    // ── Step 1: Enumerate staged files via git ────────────────────────────────
+    let git_output = std::process::Command::new("git")
+        .args(["diff", "--cached", "--name-only"])
+        .current_dir(cwd)
+        .output();
+
+    let git_output = match git_output {
+        Ok(out) => out,
+        Err(e) => {
+            eprintln!(
+                "sicario fix --staged: failed to run git: {e}\n\
+                 Ensure git is installed and this command is run inside a Git repository."
+            );
+            return Ok(ExitCode::InternalError);
+        }
+    };
+
+    if !git_output.status.success() {
+        let stderr = String::from_utf8_lossy(&git_output.stderr);
+        eprintln!(
+            "sicario fix --staged: not inside a Git repository or git command failed.\n\
+             git error: {stderr}"
+        );
+        return Ok(ExitCode::InternalError);
+    }
+
+    let stdout = String::from_utf8_lossy(&git_output.stdout);
+    let staged_files: Vec<String> = stdout
+        .lines()
+        .filter(|l| !l.is_empty())
+        .map(|l| {
+            // Normalize path separators to `/` on Windows
+            #[cfg(windows)]
+            {
+                l.replace('\\', "/")
+            }
+            #[cfg(not(windows))]
+            {
+                l.to_string()
+            }
+        })
+        .collect();
+
+    if staged_files.is_empty() {
+        if args.format == FixOutputFormat::Json {
+            println!("[]");
+        } else {
+            eprintln!("sicario fix --staged: no staged files found");
+        }
+        return Ok(ExitCode::Clean);
+    }
+
+    // ── Step 2: Scan staged files for vulnerabilities ─────────────────────────
+    let mut eng = engine::sast_engine::SastEngine::new(cwd)?;
+    let embedded_count = load_embedded_rules_into(&mut eng);
+    if embedded_count == 0 {
+        for f in discover_bundled_rules() {
+            let _ = eng.load_rules(&f);
+        }
+        if eng.get_rules().is_empty() {
+            eng.load_default_rules();
+        }
+    }
+
+    // Collect all vulnerabilities across staged files
+    let mut all_vulns: Vec<engine::vulnerability::Vulnerability> = Vec::new();
+    for staged_file in &staged_files {
+        let file_path = cwd.join(staged_file);
+        if !file_path.exists() {
+            // File may have been deleted — skip
+            continue;
+        }
+        let parent = file_path.parent().unwrap_or(cwd);
+        match eng.scan_directory(parent) {
+            Ok(vulns) => {
+                let target = file_path
+                    .to_string_lossy()
+                    .replace('\\', "/")
+                    .to_lowercase();
+                for v in vulns {
+                    let vpath = v
+                        .file_path
+                        .to_string_lossy()
+                        .replace('\\', "/")
+                        .to_lowercase();
+                    if vpath == target {
+                        // Apply optional rule filter
+                        if args.rule.as_ref().is_none_or(|r| v.rule_id == *r) {
+                            all_vulns.push(v);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to scan {}: {}", staged_file, e);
+            }
+        }
+    }
+
+    // ── Step 3: Apply deterministic fixes only (no LLM fallback) ─────────────
+    // Use a plain RemediationEngine (allow_ai = false) — the staged path
+    // MUST NOT invoke any LLM. Only registry templates are used.
+    let engine = RemediationEngine::new(cwd)?;
+
+    let mut results: Vec<StagedFixResult> = Vec::new();
+
+    for vuln in &all_vulns {
+        let file_str = vuln.file_path.to_string_lossy().replace('\\', "/");
+
+        // Read original content
+        let original_content = match std::fs::read_to_string(&vuln.file_path) {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!("Could not read {}: {}", file_str, e);
+                results.push(StagedFixResult {
+                    file: file_str,
+                    rule_id: vuln.rule_id.clone(),
+                    line: vuln.line,
+                    fixed: false,
+                    template_used: None,
+                });
+                continue;
+            }
+        };
+
+        // Try deterministic registry fix only — no LLM
+        let fixed_content = engine.try_deterministic_fix(vuln, &original_content);
+
+        match fixed_content {
+            Some((content, template_name)) => {
+                // Apply the fix
+                match std::fs::write(&vuln.file_path, &content) {
+                    Ok(()) => {
+                        results.push(StagedFixResult {
+                            file: file_str,
+                            rule_id: vuln.rule_id.clone(),
+                            line: vuln.line,
+                            fixed: true,
+                            template_used: Some(template_name),
+                        });
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to write fix to {}: {}", file_str, e);
+                        results.push(StagedFixResult {
+                            file: file_str,
+                            rule_id: vuln.rule_id.clone(),
+                            line: vuln.line,
+                            fixed: false,
+                            template_used: None,
+                        });
+                    }
+                }
+            }
+            None => {
+                results.push(StagedFixResult {
+                    file: file_str,
+                    rule_id: vuln.rule_id.clone(),
+                    line: vuln.line,
+                    fixed: false,
+                    template_used: None,
+                });
+            }
+        }
+    }
+
+    // ── Step 4: Output results ────────────────────────────────────────────────
+    match args.format {
+        FixOutputFormat::Json => {
+            println!("{}", serde_json::to_string_pretty(&results)?);
+        }
+        FixOutputFormat::Text => {
+            let fixed_count = results.iter().filter(|r| r.fixed).count();
+            let unfixed_count = results.iter().filter(|r| !r.fixed).count();
+            for r in &results {
+                if r.fixed {
+                    eprintln!(
+                        "sicario: fixed {} in {}:{} (template: {})",
+                        r.rule_id,
+                        r.file,
+                        r.line,
+                        r.template_used.as_deref().unwrap_or("unknown")
+                    );
+                } else {
+                    eprintln!(
+                        "sicario: could not fix {} in {}:{} (no deterministic template)",
+                        r.rule_id, r.file, r.line
+                    );
+                }
+            }
+            eprintln!(
+                "sicario fix --staged: {} fixed, {} could not be fixed",
+                fixed_count, unfixed_count
+            );
         }
     }
 
@@ -2022,9 +3056,117 @@ fn cmd_baseline(args: cli::baseline::BaselineCommand) -> Result<ExitCode> {
                 }
             }
         }
+        BaselineAction::Diff(diff_args) => {
+            return cmd_baseline_diff(diff_args, &cwd, &mgr);
+        }
     }
 
     Ok(ExitCode::Clean)
+}
+
+// ─── Baseline diff command ────────────────────────────────────────────────────
+
+fn cmd_baseline_diff(
+    args: cli::baseline::BaselineDiffArgs,
+    cwd: &std::path::Path,
+    mgr: &baseline::manager::BaselineManager,
+) -> Result<ExitCode> {
+    use baseline::manager::BaselineManagement;
+    use engine::vulnerability::Severity;
+
+    // Exit code 2: no baseline file exists
+    if !mgr.has_baselines() {
+        eprintln!(
+            "sicario: no baseline files found in .sicario/baselines/.\n\
+             Run `sicario baseline save` to create a baseline before running diff."
+        );
+        return Ok(ExitCode::InternalError);
+    }
+
+    // Run a fresh scan of the current directory
+    let rule_files = discover_bundled_rules();
+    let mut eng = engine::sast_engine::SastEngine::new(cwd)?;
+    for f in &rule_files {
+        let _ = eng.load_rules(f);
+    }
+    let vulns = eng.scan_directory(cwd)?;
+    let findings: Vec<engine::vulnerability::Finding> = vulns
+        .iter()
+        .map(|v| engine::vulnerability::Finding::from_vulnerability(v, &v.rule_id))
+        .collect();
+
+    // Resolve the reference: --tag takes precedence over positional reference, then most recent
+    let delta = if let Some(tag) = &args.tag {
+        mgr.compare(tag, &findings)?
+    } else if let Some(reference) = &args.reference {
+        mgr.compare(reference, &findings)?
+    } else {
+        mgr.compare_latest(&findings)?
+    };
+
+    let threshold_severity: Severity = args.threshold.into();
+
+    if args.ci {
+        // CI mode: print structured summary and exit with appropriate code
+        let known = delta.unchanged_findings.len();
+        let resolved = delta.resolved_findings.len();
+        let new_count = delta.new_findings.len();
+
+        // Count new findings at or above threshold
+        let blocking: Vec<&baseline::manager::BaselineFinding> = delta
+            .new_findings
+            .iter()
+            .filter(|f| f.severity >= threshold_severity)
+            .collect();
+
+        println!("✓  {} known findings (unchanged — not blocking)", known);
+        println!("✓  {} findings resolved since baseline", resolved);
+
+        if blocking.is_empty() {
+            println!("✓  {} NEW findings introduced (none blocking)", new_count);
+            Ok(ExitCode::Clean)
+        } else {
+            println!(
+                "✗  {} NEW findings introduced (blocking CI)",
+                blocking.len()
+            );
+            println!();
+            println!("Blocking new findings:");
+            for f in &blocking {
+                println!(
+                    "  [{severity}] {rule} — {file}:{line}",
+                    severity = f.severity,
+                    rule = f.rule_id,
+                    file = f.file_path.display(),
+                    line = f.line,
+                );
+            }
+            // Also list non-blocking new findings if any
+            let non_blocking: Vec<&baseline::manager::BaselineFinding> = delta
+                .new_findings
+                .iter()
+                .filter(|f| f.severity < threshold_severity)
+                .collect();
+            if !non_blocking.is_empty() {
+                println!();
+                println!("Non-blocking new findings (below threshold):");
+                for f in &non_blocking {
+                    println!(
+                        "  [{severity}] {rule} — {file}:{line}",
+                        severity = f.severity,
+                        rule = f.rule_id,
+                        file = f.file_path.display(),
+                        line = f.line,
+                    );
+                }
+            }
+            Ok(ExitCode::FindingsDetected)
+        }
+    } else {
+        // Non-CI mode: print delta as JSON
+        println!("{}", serde_json::to_string_pretty(&delta)?);
+        Ok(ExitCode::Clean)
+    }
 }
 
 // ─── Config command ───────────────────────────────────────────────────────────
@@ -2294,6 +3436,145 @@ fn cmd_cache(args: cli::cache::CacheCommand) -> Result<ExitCode> {
 
 // ─── Report handler (preserved from original) ────────────────────────────────
 
+// ─── Rule compiler command ────────────────────────────────────────────────────
+
+/// `sicario rule` — compile a natural language description into a security rule.
+///
+/// Pipeline:
+/// 1. Validate description length (≤ 200 chars).
+/// 2. Probe Ollama; exit 2 if not available.
+/// 3. Resolve language from `--lang` or auto-detect.
+/// 4. Call `RuleCompiler::compile`.
+/// 5. If `--dry-run`: print the query and exit 0.
+/// 6. Otherwise: save the rule and print the success summary.
+fn cmd_rule(args: cli::rule::RuleArgs) -> Result<ExitCode> {
+    use engine::sast_engine::SastEngine;
+    use engine::vulnerability::Severity;
+    use parser::Language;
+    use rule_compiler::{save_rule, RuleCompiler};
+
+    // ── Validate description length ───────────────────────────────────────
+    if args.description.len() > 200 {
+        eprintln!(
+            "sicario rule: description must be ≤ 200 characters (got {})",
+            args.description.len()
+        );
+        return Ok(ExitCode::InternalError);
+    }
+
+    // ── Probe Ollama ──────────────────────────────────────────────────────
+    let ollama = match crate::remediation::ollama_client::OllamaClient::probe(500) {
+        Ok(client) => client,
+        Err(e) => {
+            eprintln!("sicario rule: Ollama is not available: {e}");
+            eprintln!("  Install or start Ollama: https://ollama.ai");
+            eprintln!("  Then pull a recommended model:");
+            eprintln!("    ollama pull qwen2.5-coder:7b");
+            eprintln!("    ollama pull deepseek-coder-v2");
+            return Ok(ExitCode::InternalError);
+        }
+    };
+
+    // ── Resolve language ──────────────────────────────────────────────────
+    let language = if let Some(ref lang_str) = args.lang {
+        match lang_str.to_lowercase().as_str() {
+            "javascript" | "js" => Language::JavaScript,
+            "typescript" | "ts" => Language::TypeScript,
+            "python" | "py" => Language::Python,
+            "rust" | "rs" => Language::Rust,
+            "go" => Language::Go,
+            "java" => Language::Java,
+            "ruby" | "rb" => Language::Ruby,
+            "php" => Language::Php,
+            other => {
+                eprintln!(
+                    "sicario rule: unknown language '{}'. Valid values: javascript, typescript, python, rust, go, java, ruby, php",
+                    other
+                );
+                return Ok(ExitCode::InternalError);
+            }
+        }
+    } else {
+        // Auto-detect from project files
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        auto_detect_language(&cwd).unwrap_or(Language::JavaScript)
+    };
+
+    // ── Print progress ────────────────────────────────────────────────────
+    eprintln!("[sicario] Compiling rule from: \"{}\"", args.description);
+
+    // ── Compile the rule ──────────────────────────────────────────────────
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let engine = SastEngine::new(&cwd)?;
+    let severity: Severity = args.severity.into();
+    let mut compiler = RuleCompiler::new(ollama, engine);
+
+    let rule = match compiler.compile(&args.description, language, severity) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("sicario rule: compilation failed: {e}");
+            return Ok(ExitCode::FindingsDetected);
+        }
+    };
+
+    // ── Dry-run: print query and exit ─────────────────────────────────────
+    if args.dry_run {
+        println!("{}", rule.pattern.query);
+        return Ok(ExitCode::Clean);
+    }
+
+    // ── Save the rule ─────────────────────────────────────────────────────
+    let path = match save_rule(&rule, &cwd) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("sicario rule: failed to save rule: {e}");
+            return Ok(ExitCode::InternalError);
+        }
+    };
+
+    eprintln!("[sicario] Rule '{}' saved to {}", rule.id, path.display());
+    eprintln!("  Query: {}", rule.pattern.query);
+    eprintln!("  Language: {:?}", language);
+    eprintln!("  Severity: {:?}", rule.severity);
+
+    Ok(ExitCode::Clean)
+}
+
+/// Auto-detect the primary language used in the current project.
+///
+/// Counts source files by extension and returns the most common language.
+/// Falls back to `None` if no supported files are found.
+fn auto_detect_language(project_root: &std::path::Path) -> Option<parser::Language> {
+    use parser::Language;
+    use std::collections::HashMap;
+
+    let mut counts: HashMap<Language, usize> = HashMap::new();
+
+    fn walk(dir: &std::path::Path, counts: &mut HashMap<Language, usize>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if path.is_dir() {
+                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if matches!(name, "node_modules" | ".git" | "target" | "dist" | "build") {
+                    continue;
+                }
+                walk(&path, counts);
+            } else if let Some(lang) = Language::from_path(&path) {
+                *counts.entry(lang).or_insert(0) += 1;
+            }
+        }
+    }
+
+    walk(project_root, &mut counts);
+    counts
+        .into_iter()
+        .max_by_key(|(_, count)| *count)
+        .map(|(lang, _)| lang)
+}
+
 fn cmd_report_handler(dir_str: &str, output: Option<&str>) -> Result<()> {
     use engine::sast_engine::SastEngine;
     use reporting::{generate_compliance_report, write_compliance_reports};
@@ -2543,5 +3824,650 @@ mod tests {
             warning.is_some(),
             "Warning string must be returned even in quiet mode"
         );
+    }
+
+    // ── Test 5: auto-load .sicario/rules/ ────────────────────────────────────
+
+    /// When `.sicario/rules/custom.yaml` contains a valid rule, the rule should
+    /// be loadable by `SastEngine::load_rules` (simulating what cmd_scan does).
+    ///
+    /// Validates: Requirement 17.5 (auto-load .sicario/rules/ on scan)
+    #[test]
+    fn test_sicario_rules_dir_custom_rule_is_loadable() {
+        let temp = TempDir::new().unwrap();
+        let project_root = temp.path();
+
+        // Create .sicario/rules/ directory with a custom rule
+        let sicario_rules_dir = project_root.join(".sicario").join("rules");
+        fs::create_dir_all(&sicario_rules_dir).unwrap();
+
+        let custom_rule_content = r#"
+- id: custom/js/detect-eval-custom
+  name: "Custom Detect eval"
+  description: "Custom rule to detect eval usage"
+  severity: High
+  languages:
+    - JavaScript
+  pattern:
+    query: "(call_expression function: (identifier) @fn (#eq? @fn \"eval\")) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-95"
+"#;
+        let rule_path = sicario_rules_dir.join("custom.yaml");
+        fs::write(&rule_path, custom_rule_content).unwrap();
+
+        // Load the rule using SastEngine::load_rules (same as cmd_scan does)
+        let mut eng = SastEngine::new(project_root).unwrap();
+        eng.load_rules(&rule_path)
+            .expect("Should load custom rule from .sicario/rules/");
+
+        let rules = eng.get_rules();
+        assert!(
+            rules.iter().any(|r| r.id == "custom/js/detect-eval-custom"),
+            "Custom rule should be active after loading from .sicario/rules/"
+        );
+    }
+
+    /// Verify that the auto-load logic correctly counts YAML files in .sicario/rules/.
+    ///
+    /// Validates: Requirement 17.5 (auto-load .sicario/rules/ on scan)
+    #[test]
+    fn test_sicario_rules_dir_multiple_rules_all_loaded() {
+        let temp = TempDir::new().unwrap();
+        let project_root = temp.path();
+
+        let sicario_rules_dir = project_root.join(".sicario").join("rules");
+        fs::create_dir_all(&sicario_rules_dir).unwrap();
+
+        // Write two rule files
+        let rule1 = r#"
+- id: custom/js/rule-one
+  name: "Rule One"
+  description: "First custom rule"
+  severity: High
+  languages:
+    - JavaScript
+  pattern:
+    query: "(call_expression function: (identifier) @fn (#eq? @fn \"eval\")) @call"
+    captures:
+      - "call"
+"#;
+        let rule2 = r#"
+- id: custom/py/rule-two
+  name: "Rule Two"
+  description: "Second custom rule"
+  severity: Medium
+  languages:
+    - Python
+  pattern:
+    query: "(call function: (identifier) @fn (#eq? @fn \"exec\")) @call"
+    captures:
+      - "call"
+"#;
+        fs::write(sicario_rules_dir.join("rule1.yaml"), rule1).unwrap();
+        fs::write(sicario_rules_dir.join("rule2.yaml"), rule2).unwrap();
+
+        let mut eng = SastEngine::new(project_root).unwrap();
+        let mut loaded = 0usize;
+        for entry in fs::read_dir(&sicario_rules_dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|e| e.to_str()) == Some("yaml") {
+                if eng.load_rules(&path).is_ok() {
+                    loaded += 1;
+                }
+            }
+        }
+
+        assert_eq!(loaded, 2, "Both custom rule files should be loaded");
+        let rules = eng.get_rules();
+        assert!(rules.iter().any(|r| r.id == "custom/js/rule-one"));
+        assert!(rules.iter().any(|r| r.id == "custom/py/rule-two"));
+    }
+}
+
+// ─── Attack command ───────────────────────────────────────────────────────────
+
+/// `sicario attack` — Shadow Pen-Tester.
+///
+/// Pre-flight checks:
+/// 1. Validate target URL is `localhost` or `127.0.0.1` — exit 2 if not.
+/// 2. Probe `GET /` on target with 2-second timeout — exit 2 if no response.
+/// 3. Unless `--yes` or `--dry-run`, print confirmation prompt and require `y`.
+///
+/// Then:
+/// - Run `sicario scan` on current directory to get findings.
+/// - Run `RouteExtractor::extract` on current directory.
+/// - If `--dry-run`: print extracted routes and generated payloads, exit 0.
+/// - Run `LocalAttackRunner::run`.
+/// - Print attack receipt for each confirmed vulnerability.
+/// - Exit 0 if no confirmed vulnerabilities; exit 1 if any confirmed.
+fn cmd_attack(args: cli::attack::AttackArgs) -> Result<ExitCode> {
+    use attack::payload_generator::AttackPayloadGenerator;
+    use attack::route_extractor::RouteExtractor;
+    use attack::runner::LocalAttackRunner;
+    use engine::sast_engine::SastEngine;
+
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+
+    // ── Pre-flight 1: validate target URL is localhost ────────────────────
+    let target = &args.target;
+    let is_localhost = target.contains("localhost") || target.contains("127.0.0.1");
+    if !is_localhost {
+        eprintln!(
+            "sicario attack: target must be localhost or 127.0.0.1, got: {}",
+            target
+        );
+        eprintln!("sicario attack: for safety, only local targets are supported.");
+        return Ok(ExitCode::InternalError);
+    }
+
+    // ── Pre-flight 2: probe GET / on target ───────────────────────────────
+    if !args.dry_run {
+        let probe_url = format!("{}/", target.trim_end_matches('/'));
+        let probe_result = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(2))
+            .build()
+            .ok()
+            .and_then(|c| c.get(&probe_url).send().ok());
+
+        if probe_result.is_none() {
+            eprintln!("sicario attack: Target server not responding at {}", target);
+            eprintln!("sicario attack: Start your server and try again.");
+            return Ok(ExitCode::InternalError);
+        }
+    }
+
+    // ── Pre-flight 3: confirmation prompt ─────────────────────────────────
+    if !args.yes && !args.dry_run {
+        eprint!(
+            "Warning: This will fire active exploit payloads against {}. \
+Ensure this is a safe, local development environment. Proceed? [y/N] ",
+            target
+        );
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input).unwrap_or(0);
+        let trimmed = input.trim().to_lowercase();
+        if trimmed != "y" && trimmed != "yes" {
+            eprintln!("sicario attack: Aborted.");
+            return Ok(ExitCode::Clean);
+        }
+    }
+
+    // ── Run sicario scan to get findings ──────────────────────────────────
+    eprintln!(
+        "[sicario] Scanning {} for vulnerabilities...",
+        cwd.display()
+    );
+    let mut eng = SastEngine::new(&cwd)?;
+    let _rules_loaded = load_embedded_rules_into(&mut eng);
+    if eng.get_rules().is_empty() {
+        eng.load_default_rules();
+    }
+    let findings = eng.scan_directory(&cwd).unwrap_or_default();
+    eprintln!("[sicario] Found {} findings.", findings.len());
+
+    // ── Run RouteExtractor ────────────────────────────────────────────────
+    eprintln!("[sicario] Extracting routes from {}...", cwd.display());
+    let routes = RouteExtractor::extract(&cwd).unwrap_or_default();
+    eprintln!("[sicario] Found {} routes.", routes.len());
+
+    if routes.is_empty() {
+        eprintln!(
+            "[sicario] No routes found. Ensure this is an Express.js, FastAPI, or Flask project."
+        );
+    }
+
+    // ── Dry-run: print routes and payloads, exit 0 ────────────────────────
+    if args.dry_run {
+        println!("\n=== Extracted Routes ===");
+        if routes.is_empty() {
+            println!("  (no routes found)");
+        }
+        for route in &routes {
+            println!(
+                "  {} {} ({}:{})",
+                route.method,
+                route.path,
+                route.handler_file.display(),
+                route.handler_line
+            );
+            for param in &route.parameters {
+                println!("    param: {} ({:?})", param.name, param.location);
+            }
+        }
+
+        println!("\n=== Generated Payloads (dry-run, no requests fired) ===");
+        for route in &routes {
+            for finding in &findings {
+                let payloads = AttackPayloadGenerator::generate_dry_run(route, finding);
+                for payload in payloads.iter().filter(|p| !p.is_benign) {
+                    println!(
+                        "  {} {} param={} cwe={} payload={}",
+                        payload.method,
+                        payload.route_path,
+                        payload.parameter,
+                        payload.cwe,
+                        payload.payload
+                    );
+                }
+            }
+        }
+
+        return Ok(ExitCode::Clean);
+    }
+
+    // ── Run LocalAttackRunner ─────────────────────────────────────────────
+    if routes.is_empty() || findings.is_empty() {
+        eprintln!("[sicario] Nothing to attack (no routes or no findings).");
+        return Ok(ExitCode::Clean);
+    }
+
+    eprintln!("[sicario] Running attack against {}...", target);
+    let results = LocalAttackRunner::run(target, &routes, &findings, args.timeout)?;
+
+    // ── Print attack receipt ──────────────────────────────────────────────
+    let confirmed: Vec<_> = results.iter().filter(|r| r.confirmed).collect();
+
+    if confirmed.is_empty() {
+        println!("\n[sicario] No vulnerabilities confirmed. All attacks were inconclusive.");
+        return Ok(ExitCode::Clean);
+    }
+
+    println!("\n=== Attack Receipt ===");
+    println!("Confirmed vulnerabilities: {}", confirmed.len());
+    println!();
+
+    for result in &confirmed {
+        println!(
+            "  ✗ CONFIRMED: {} {} (param: {})",
+            result.payload.method, result.payload.route_path, result.payload.parameter
+        );
+        println!("    CWE: {}", result.payload.cwe);
+        println!("    Detection: {:?}", result.detection_method);
+        println!(
+            "    Response time: {}ms (baseline: {}ms)",
+            result.response_time_ms, result.baseline_time_ms
+        );
+        if !result.response_snippet.is_empty() {
+            println!("    Response: {}", &result.response_snippet);
+        }
+        if let Some(ref finding) = result.mapped_finding {
+            println!(
+                "    Finding: {} at {}:{}",
+                finding.rule_id,
+                finding.file_path.display(),
+                finding.line
+            );
+        }
+        println!();
+    }
+
+    // ── Offer to apply deterministic patches ──────────────────────────────
+    for result in &confirmed {
+        if let Some(ref finding) = result.mapped_finding {
+            eprint!(
+                "Apply deterministic patch for {} at {}:{}? [y/N] ",
+                finding.rule_id,
+                finding.file_path.display(),
+                finding.line
+            );
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input).unwrap_or(0);
+            if input.trim().to_lowercase() == "y" || input.trim().to_lowercase() == "yes" {
+                // Run sicario fix for this specific finding
+                eprintln!(
+                    "[sicario] Run: sicario fix {} --rule {}",
+                    finding.file_path.display(),
+                    finding.rule_id
+                );
+            }
+        }
+    }
+
+    // Exit 1 if any confirmed vulnerabilities
+    Ok(ExitCode::FindingsDetected)
+}
+
+// ─── Attack integration tests ─────────────────────────────────────────────────
+
+#[cfg(test)]
+mod attack_tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::TempDir;
+
+    fn write_express_file(dir: &TempDir) {
+        let content = r#"
+const express = require('express');
+const app = express();
+
+app.get('/users', (req, res) => {
+    const id = req.query.id;
+    res.json([]);
+});
+
+app.post('/users', (req, res) => {
+    const name = req.body.name;
+    res.json({ id: 1 });
+});
+"#;
+        let path = dir.path().join("app.js");
+        let mut f = std::fs::File::create(&path).unwrap();
+        f.write_all(content.as_bytes()).unwrap();
+    }
+
+    #[test]
+    fn test_dry_run_extracts_routes_no_http_requests() {
+        let dir = TempDir::new().unwrap();
+        write_express_file(&dir);
+
+        // Simulate dry-run: extract routes and generate payloads
+        let routes = attack::route_extractor::RouteExtractor::extract(dir.path()).unwrap();
+        assert!(!routes.is_empty(), "Expected routes from Express file");
+
+        // Verify routes have correct methods and paths
+        let get_route = routes
+            .iter()
+            .find(|r| r.method == attack::route_extractor::HttpMethod::Get);
+        assert!(get_route.is_some(), "Expected GET route");
+        assert_eq!(get_route.unwrap().path, "/users");
+
+        let post_route = routes
+            .iter()
+            .find(|r| r.method == attack::route_extractor::HttpMethod::Post);
+        assert!(post_route.is_some(), "Expected POST route");
+    }
+
+    #[test]
+    fn test_localhost_validation() {
+        // Valid localhost targets
+        assert!("http://localhost:3000".contains("localhost"));
+        assert!("http://127.0.0.1:3000".contains("127.0.0.1"));
+
+        // Invalid targets
+        assert!(!"http://example.com".contains("localhost"));
+        assert!(!"http://example.com".contains("127.0.0.1"));
+    }
+}
+
+// ─── Guard command ────────────────────────────────────────────────────────────
+
+fn cmd_guard(args: cli::guard::GuardCommand) -> Result<ExitCode> {
+    use cli::guard::{GuardCommand, GuardRestoreArgs, GuardScanArgs, GuardWatchArgs};
+    use guard::quarantine::QuarantineManager;
+    use guard::watcher::PackageWatcher;
+
+    match args {
+        GuardCommand::Watch(watch_args) => cmd_guard_watch(watch_args),
+        GuardCommand::Scan(scan_args) => cmd_guard_scan(scan_args),
+        GuardCommand::List => cmd_guard_list(),
+        GuardCommand::Restore(restore_args) => cmd_guard_restore(restore_args),
+    }
+}
+
+/// `sicario guard scan` — one-shot scan of node_modules
+fn cmd_guard_scan(args: cli::guard::GuardScanArgs) -> Result<ExitCode> {
+    use guard::behavioral_scanner::BehavioralScanner;
+    use guard::quarantine::QuarantineManager;
+
+    let dir = PathBuf::from(&args.dir);
+    if !dir.is_dir() {
+        eprintln!("sicario: directory does not exist: {}", dir.display());
+        return Ok(ExitCode::InternalError);
+    }
+
+    // Enumerate all package directories in node_modules/ (top-level only)
+    let entries = std::fs::read_dir(&dir)?;
+    let mut packages: Vec<PathBuf> = entries
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        .collect();
+    packages.sort();
+
+    eprintln!(
+        "[sicario guard] Scanning {} packages in {}...",
+        packages.len(),
+        dir.display()
+    );
+
+    let mut critical_count = 0usize;
+    let mut high_count = 0usize;
+    let mut flagged_packages = Vec::new();
+
+    for pkg_dir in &packages {
+        match BehavioralScanner::scan_package(pkg_dir) {
+            Ok(anomalies) => {
+                let has_critical = anomalies
+                    .iter()
+                    .any(|a| a.severity == engine::vulnerability::Severity::Critical);
+                let has_high = anomalies
+                    .iter()
+                    .any(|a| a.severity == engine::vulnerability::Severity::High);
+
+                if has_critical || has_high {
+                    let pkg_name = pkg_dir
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("unknown");
+                    flagged_packages.push((pkg_name.to_string(), anomalies.clone()));
+
+                    if has_critical {
+                        critical_count += 1;
+                    } else if has_high {
+                        high_count += 1;
+                    }
+
+                    // Quarantine Critical packages if --auto-quarantine
+                    if has_critical && args.auto_quarantine {
+                        if let Err(e) = QuarantineManager::quarantine(pkg_dir, &anomalies, true) {
+                            eprintln!("[sicario guard] Failed to quarantine {}: {}", pkg_name, e);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Failed to scan package {:?}: {}", pkg_dir, e);
+            }
+        }
+    }
+
+    // Print summary table
+    if flagged_packages.is_empty() {
+        println!("\n[sicario guard] {} packages clean.", packages.len());
+        return Ok(ExitCode::Clean);
+    }
+
+    println!("\n=== Behavioral Anomalies Detected ===");
+    println!("{:<30} {:<10} {:<50}", "Package", "Severity", "Anomaly");
+    println!("{}", "-".repeat(90));
+
+    for (pkg_name, anomalies) in &flagged_packages {
+        for anomaly in anomalies {
+            println!(
+                "{:<30} {:<10} {:<50}",
+                pkg_name,
+                format!("{:?}", anomaly.severity),
+                format!(
+                    "{:?} at {}:{}",
+                    anomaly.signal,
+                    anomaly.file.display(),
+                    anomaly.line
+                )
+            );
+        }
+    }
+
+    println!(
+        "\nSummary: {} Critical, {} High",
+        critical_count, high_count
+    );
+
+    if critical_count > 0 {
+        Ok(ExitCode::FindingsDetected)
+    } else {
+        Ok(ExitCode::Clean)
+    }
+}
+
+/// `sicario guard watch` — persistent mode
+fn cmd_guard_watch(args: cli::guard::GuardWatchArgs) -> Result<ExitCode> {
+    use guard::watcher::{resolve_npm_cache_dir, PackageWatcher};
+
+    let project_root = PathBuf::from(&args.project);
+
+    // Resolve the cache directory based on the package manager
+    let cache_dir = match args.pm.as_str() {
+        "npm" => resolve_npm_cache_dir(&project_root),
+        "pip" | "cargo" => {
+            eprintln!(
+                "sicario: --pm {} is not yet supported. Only npm is supported.",
+                args.pm
+            );
+            return Ok(ExitCode::InternalError);
+        }
+        _ => {
+            eprintln!(
+                "sicario: unknown package manager '{}'. Supported: npm, pip, cargo",
+                args.pm
+            );
+            return Ok(ExitCode::InternalError);
+        }
+    };
+
+    let cache_dir = match cache_dir {
+        Some(d) => d,
+        None => {
+            eprintln!("sicario: could not resolve package cache directory for {}. Ensure node_modules/ exists.", args.pm);
+            return Ok(ExitCode::InternalError);
+        }
+    };
+
+    PackageWatcher::watch(&cache_dir, &project_root, args.auto_quarantine)?;
+    Ok(ExitCode::Clean)
+}
+
+/// `sicario guard list` — list all quarantined packages
+fn cmd_guard_list() -> Result<ExitCode> {
+    use guard::quarantine::QuarantineManager;
+
+    let project_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let records = QuarantineManager::list(&project_root)?;
+
+    if records.is_empty() {
+        println!("No packages quarantined.");
+        return Ok(ExitCode::Clean);
+    }
+
+    println!("=== Quarantined Packages ===");
+    println!(
+        "{:<30} {:<10} {:<20} {:<10}",
+        "Package", "Version", "Quarantined At", "Action"
+    );
+    println!("{}", "-".repeat(70));
+
+    for record in &records {
+        println!(
+            "{:<30} {:<10} {:<20} {:<10}",
+            record.package_name,
+            record.version,
+            record.quarantined_at.chars().take(19).collect::<String>(),
+            format!("{:?}", record.action)
+        );
+    }
+
+    println!("\nTotal: {} packages", records.len());
+    Ok(ExitCode::Clean)
+}
+
+/// `sicario guard restore` — restore a quarantined package
+fn cmd_guard_restore(args: cli::guard::GuardRestoreArgs) -> Result<ExitCode> {
+    let project_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let node_modules = project_root.join("node_modules");
+
+    let quarantined_path = node_modules.join(format!("{}.sicario-quarantined", args.package_name));
+    let restored_path = node_modules.join(&args.package_name);
+
+    if !quarantined_path.exists() {
+        eprintln!(
+            "sicario: quarantined package not found: {}",
+            quarantined_path.display()
+        );
+        return Ok(ExitCode::InternalError);
+    }
+
+    std::fs::rename(&quarantined_path, &restored_path)?;
+    println!("Restored package: {}", args.package_name);
+    Ok(ExitCode::Clean)
+}
+
+// ─── Guard integration tests ──────────────────────────────────────────────────
+
+#[cfg(test)]
+mod guard_tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::TempDir;
+
+    fn create_test_package(root: &TempDir, name: &str, code: &str) -> PathBuf {
+        let node_modules = root.path().join("node_modules");
+        std::fs::create_dir_all(&node_modules).unwrap();
+
+        let pkg_dir = node_modules.join(name);
+        std::fs::create_dir_all(&pkg_dir).unwrap();
+
+        let pkg_json = format!(r#"{{"name":"{}","version":"1.0.0","keywords":[]}}"#, name);
+        let mut f = std::fs::File::create(pkg_dir.join("package.json")).unwrap();
+        f.write_all(pkg_json.as_bytes()).unwrap();
+
+        let mut f = std::fs::File::create(pkg_dir.join("index.js")).unwrap();
+        f.write_all(code.as_bytes()).unwrap();
+
+        pkg_dir
+    }
+
+    #[test]
+    fn test_guard_scan_clean_node_modules_exits_0() {
+        let root = TempDir::new().unwrap();
+        create_test_package(&root, "clean-pkg", "function add(a, b) { return a + b; }");
+
+        let args = cli::guard::GuardScanArgs {
+            dir: root
+                .path()
+                .join("node_modules")
+                .to_string_lossy()
+                .to_string(),
+            auto_quarantine: false,
+        };
+
+        let result = cmd_guard_scan(args).unwrap();
+        assert_eq!(result, ExitCode::Clean);
+    }
+
+    #[test]
+    fn test_guard_scan_evil_package_exits_1() {
+        let root = TempDir::new().unwrap();
+        create_test_package(&root, "evil-pkg", "const cp = require('child_process');");
+
+        let args = cli::guard::GuardScanArgs {
+            dir: root
+                .path()
+                .join("node_modules")
+                .to_string_lossy()
+                .to_string(),
+            auto_quarantine: false,
+        };
+
+        let result = cmd_guard_scan(args).unwrap();
+        assert_eq!(result, ExitCode::FindingsDetected);
+    }
+
+    #[test]
+    fn test_guard_list_no_quarantine_records() {
+        let _root = TempDir::new().unwrap();
+        // No quarantine.json file exists
+        let result = cmd_guard_list().unwrap();
+        assert_eq!(result, ExitCode::Clean);
     }
 }

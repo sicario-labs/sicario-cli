@@ -50,6 +50,8 @@ mod property_tests {
             cloud_exposed: None,
             cwe_id: None,
             owasp_category: None,
+            confidence_score: 1.0,
+            suppressed: false,
             execution_trace: None,
         }
     }

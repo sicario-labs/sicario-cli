@@ -7,6 +7,71 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.3.0] — 2026-05-06
+
+### Added
+
+**Developer Track**
+
+- **Ollama air-gapped remediation (`sicario fix --agent=local`)** — routes LLM fix calls to a local Ollama instance (`http://127.0.0.1:11434`). Zero source code leaves the machine. Includes `OllamaClient` with model priority selection (`qwen2.5-coder` → `deepseek-coder` → first available), `MicroContextExtractor` for function-scoped prompts, and a three-stage `TreeSitterVerificationLoop` that discards any LLM output with syntax errors or hallucinated identifiers before touching disk.
+- **`SqlAstRewriteTemplate`** — AST-level SQL injection fix that rewrites string concatenation and template literal queries to parameterized form (`$1`, `$2`, …). Handles single-line, template literal, and multi-line concatenation patterns. Registered under `js-sql-string-concat`, `js-sql-template-string`, and `node-sql-template-literal`.
+- **Ghost Fix pre-commit hook (`sicario hook auto-fix`)** — installs a POSIX sh pre-commit hook that runs `sicario fix --staged` on every commit, auto-applies deterministic patches, and blocks the commit if unfixed Critical/High findings remain. Idempotent; respects `SICARIO_SKIP_HOOK=1` bypass.
+- **`sicario fix --staged`** — restricts fix attempts to files in `git diff --cached --name-only`. Deterministic templates only (no LLM). JSON output with `{ file, rule_id, line, fixed, template_used }` per finding.
+- **Proof-of-concept generation (`sicario scan --prove`)** — generates targeted exploit payloads for SQL injection (time-based), SSRF (local probe listener), command injection, and path traversal findings. Consent prompt before any payload is printed; `--format json` suppresses prompt and adds `poc` field to each finding. Safety enforced in Rust: no destructive SQL keywords, no non-localhost URLs.
+
+**Enterprise Track**
+
+- **Security regression guard (`sicario baseline diff --ci`)** — compares current scan against a saved baseline. Exits 1 on new findings above threshold, 0 otherwise, 2 if no baseline exists. CI-friendly summary format.
+- **Compliance evidence export (`sicario report compliance`)** — generates `.sicario/compliance-report-<timestamp>.json` with remediation log, suppression audit, baseline history, and MTTR by rule. Optional SARIF export.
+- **Policy-as-code enforcement (`sicario policy init/validate`)** — `.sicario/policy.yaml` supports `fail_on`, `required_rules`, `blocked_suppressions`, `scope`, and `max_findings`. Policy fields override all CLI flags.
+- **MTTR tracking (`sicario report mttr`)** — per-rule mean time to remediate with trend indicators (↑/↓/→). `--since <ISO8601>` for period filtering. JSON output for Datadog/Splunk.
+- **Suppression audit log (`sicario suppressions audit`)** — scans all `sicario-ignore` directives, attributes each to a git commit and author via `git blame`. JSON and CSV output. `--since` and `--author` filters.
+- **Dependency license risk scanner (`sicario scan --licenses`)** — classifies npm/PyPI dependency licenses into HIGH/MEDIUM/LOW tiers. `--fail-on-license` exit code gating. Allowlist via `.sicario/license-allowlist.txt`.
+
+**New Commands**
+
+- **`sicario exorcise`** — rewrites local git history to remove hardcoded secrets. Detects credentials via `SecretScanner`, replaces with `process.env.VAR_NAME`, creates new commits with identical metadata. `--dry-run` shows what would change without touching the repo. Pre-flight checks enforce clean working tree and ≤50 commit limit.
+- **`sicario rule`** — NLP-to-AST rule compiler. Converts a natural language description into a validated tree-sitter `SecurityRule` via a two-stage Ollama pipeline (intent extraction → query generation with 3-attempt validation loop). Saves to `.sicario/rules/` and auto-loads on every scan.
+- **`sicario attack --dry-run`** — Shadow Pen-Tester. Extracts HTTP routes from Express.js, FastAPI, and Flask source files via AST analysis, then generates targeted attack payloads (SQL injection, command injection, SSRF, XSS, path traversal) bound to each route parameter. `--dry-run` prints payloads without firing requests. Safety enforced: localhost-only targets, no destructive SQL.
+- **`sicario guard scan/watch/list/restore`** — Poison-Pill Interceptor. Scans `node_modules/` for behavioral anomalies using 7 tree-sitter rules (`require('child_process')`, dynamic `require()`, obfuscated `eval()`, hex-encoded payloads, etc.). Quarantines Critical packages by renaming to `.sicario-quarantined`. Persistent watch mode via filesystem watcher.
+
+**V1 Bottleneck Fixes**
+
+- Wired `confidence_score` and `suppressed` fields into exit code computation — `--confidence-threshold` and `sicario-ignore` now actually affect CI gating.
+- Fixed Ollama model priority selection — now prefers `qwen2.5-coder` over `deepseek-coder` over first-in-list instead of always picking the first model.
+- Implemented `create_pull_request` for GitHub and GitLab (was a stub returning `Err`).
+- Replaced `// TODO: Add JSON schema validation` in deserialization template with a concrete `zod`-based stub.
+- Wired `--auto-suppress` flag into scan output filtering.
+- Wired `--confidence-threshold` into output filtering (was silently ignored).
+- Added `--learn-suppressions` flag to record inline suppressions into the learner.
+- Fixed `sicario config set-provider` endpoint not being read by `resolve_endpoint`.
+- Emit `PatchReceipt` in batch fix mode.
+- Added `sicario baseline diff` as alias for `sicario baseline compare --ci`.
+- Wired `VerificationScanner` into single-file `cmd_fix`.
+
+**Telemetry & Notifications**
+
+- Anonymous usage telemetry (`fire_usage_ping`) fires on every `sicario scan` — opt out via `SICARIO_NO_TELEMETRY=1` or `sicario config set no_telemetry true`.
+- Dynamic notification system fetches release announcements from the cloud on scan completion. Seen notifications are not shown again.
+
+**Taint Analysis**
+
+- `sicario scan --trace` — cross-file taint tracing via `ReachabilityAnalyzer`. Prints a box-drawing call chain from taint source to vulnerable sink. `--format json` populates `dataflow_trace` field. Capped at 50,000 nodes; JS/TS and Python only.
+
+**New Rules**
+
+- `js-spawn-shell-true` — detects `spawn(cmd, args, { shell: true })` (CWE-78, Critical)
+- `js-child-process-exec-concat` — detects `exec('...' + userInput)` (CWE-78, Critical)
+- `js-child-process-template-literal` — detects `` exec(`...${userInput}`) `` (CWE-78, Critical)
+- `js-ssrf-fetch-user-url` — now matches `fetch(req.query.url)` and other member expression URLs (CWE-918, High) — previously only matched bare identifiers
+
+### Fixed
+
+- `BehavioralScanner` now uses `ExclusionManager::new_empty()` when scanning packages inside `node_modules/`, bypassing the parent project's `.gitignore` which typically excludes `node_modules/**`.
+- `attack --dry-run` SSRF payloads use a fixed placeholder port instead of binding a real TCP listener, preventing 30-second hangs in dry-run mode.
+
+---
+
 ## [0.2.5] — 2026-05-02
 
 ### Fixed

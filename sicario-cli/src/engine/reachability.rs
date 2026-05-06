@@ -528,13 +528,24 @@ impl ReachabilityAnalyzer {
                     }
                     let call_line = callee_capture.node.start_position().row + 1;
                     let caller_id = find_enclosing_function(path, call_line, &self.call_graph);
-                    // Search all files for the callee
-                    let callee_id = self
+
+                    // Task 15.1: Global cross-file callee lookup with confidence filter.
+                    // Only wire the edge if exactly one node across all files has that
+                    // function name (skip ambiguous matches to avoid false edges).
+                    let matching_nodes: Vec<FunctionId> = self
                         .call_graph
                         .nodes
                         .values()
-                        .find(|n| n.name == callee_name)
-                        .map(|n| n.id);
+                        .filter(|n| n.name == callee_name)
+                        .map(|n| n.id)
+                        .collect();
+
+                    let callee_id = if matching_nodes.len() == 1 {
+                        Some(matching_nodes[0])
+                    } else {
+                        // Zero matches or ambiguous (multiple files define same name) → skip
+                        None
+                    };
 
                     if let (Some(caller), Some(callee)) = (caller_id, callee_id) {
                         if caller != callee {
@@ -683,6 +694,133 @@ impl ReachabilityAnalyzer {
 impl Default for ReachabilityAnalyzer {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Task 15.2: TaintTrace and TaintTraceStep structs
+// ---------------------------------------------------------------------------
+
+/// A single step in a cross-boundary taint trace (source → sink path).
+#[derive(Debug, Clone)]
+pub struct TaintTraceStep {
+    pub file: PathBuf,
+    pub line: usize,
+    pub function_name: String,
+    pub description: String,
+}
+
+/// A complete taint trace from an external input source to a vulnerable sink.
+#[derive(Debug, Clone)]
+pub struct TaintTrace {
+    /// Ordered steps from taint source to sink (inclusive).
+    pub steps: Vec<TaintTraceStep>,
+    /// Rule ID of the vulnerability at the sink.
+    pub sink_rule_id: String,
+    pub sink_file: PathBuf,
+    pub sink_line: usize,
+}
+
+impl TaintTrace {
+    /// Render the taint trace as a box-drawing terminal string.
+    ///
+    /// The returned string is intended for display on stderr to avoid
+    /// contaminating `--format json` output on stdout.
+    pub fn render(&self) -> String {
+        let width = 76usize;
+        let header = format!(
+            "TAINT TRACE: {} in {}:{}",
+            self.sink_rule_id,
+            self.sink_file.display(),
+            self.sink_line
+        );
+        // Truncate header if too long
+        let header_display = if header.len() > width - 4 {
+            format!("{}…", &header[..width - 5])
+        } else {
+            header
+        };
+
+        let mut out = String::new();
+        // Top border
+        let top_fill = width.saturating_sub(4 + header_display.len());
+        out.push_str(&format!(
+            "  ┌─ {} {}\n",
+            header_display,
+            "─".repeat(top_fill)
+        ));
+        out.push_str(&format!("  │{}\n", " ".repeat(width)));
+
+        for (i, step) in self.steps.iter().enumerate() {
+            let is_sink = i == self.steps.len() - 1;
+            let sink_marker = if is_sink { "  ← SINK" } else { "" };
+            let step_line = format!(
+                "  [{}] {}:{}  {}{}",
+                i + 1,
+                step.file.display(),
+                step.line,
+                step.function_name,
+                sink_marker
+            );
+            out.push_str(&format!("  │  {}\n", step_line));
+            out.push_str(&format!("  │      ↳ {}\n", step.description));
+            out.push_str(&format!("  │{}\n", " ".repeat(width)));
+        }
+
+        // Attack vector summary
+        let n_files: std::collections::HashSet<_> = self.steps.iter().map(|s| &s.file).collect();
+        out.push_str(&format!(
+            "  │  Attack vector: {} function{} across {} file{}\n",
+            self.steps.len(),
+            if self.steps.len() == 1 { "" } else { "s" },
+            n_files.len(),
+            if n_files.len() == 1 { "" } else { "s" },
+        ));
+        out.push_str(&format!("  └{}\n", "─".repeat(width + 1)));
+        out
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Task 15.3: ReachabilityAnalyzer::trace_to_vulnerability
+// ---------------------------------------------------------------------------
+
+impl ReachabilityAnalyzer {
+    /// Trace the taint path from any external input source to the function
+    /// containing `vuln`. Returns `None` if no path exists (the vulnerability
+    /// is not reachable from any taint source).
+    pub fn trace_to_vulnerability(&self, vuln: &Vulnerability) -> Option<TaintTrace> {
+        let vuln_fn_id = find_enclosing_function(&vuln.file_path, vuln.line, &self.call_graph)?;
+
+        // Try each taint source; return the first path found
+        for source_id in self.call_graph.taint_source_ids() {
+            if let Some(path) = self.bfs_path(source_id, vuln_fn_id) {
+                let steps = path
+                    .iter()
+                    .map(|id| {
+                        let node = &self.call_graph.nodes[id];
+                        TaintTraceStep {
+                            file: node.file_path.clone(),
+                            line: node.line,
+                            function_name: node.name.clone(),
+                            description: if node.is_taint_source {
+                                "External input enters here".to_string()
+                            } else {
+                                format!("Tainted data flows through `{}`", node.name)
+                            },
+                        }
+                    })
+                    .collect();
+
+                return Some(TaintTrace {
+                    steps,
+                    sink_rule_id: vuln.rule_id.clone(),
+                    sink_file: vuln.file_path.clone(),
+                    sink_line: vuln.line,
+                });
+            }
+        }
+        None
     }
 }
 
@@ -887,6 +1025,276 @@ function process(input) {
         assert!(reachable.contains(&id_source));
         assert!(!reachable.contains(&id_isolated));
     }
+
+    // ── Task 15.1: Cross-file call edge resolution ────────────────────────
+
+    #[test]
+    fn test_cross_file_edge_resolution() {
+        // Two-file JS project: handler in routes.js calls buildQuery in db.js
+        let temp = TempDir::new().unwrap();
+        let routes_path = write_file(
+            temp.path(),
+            "routes.js",
+            r#"
+function handler(req) {
+  const result = buildQuery(req.body);
+  return result;
+}
+"#,
+        );
+        let db_path = write_file(
+            temp.path(),
+            "db.js",
+            r#"
+function buildQuery(params) {
+  return "SELECT * FROM t WHERE id = " + params.id;
+}
+"#,
+        );
+
+        let mut analyzer = ReachabilityAnalyzer::new();
+        analyzer.build_call_graph(&[routes_path, db_path]).unwrap();
+
+        // Find the handler and buildQuery nodes
+        let handler_id = analyzer
+            .call_graph
+            .nodes
+            .values()
+            .find(|n| n.name == "handler")
+            .map(|n| n.id);
+        let build_query_id = analyzer
+            .call_graph
+            .nodes
+            .values()
+            .find(|n| n.name == "buildQuery")
+            .map(|n| n.id);
+
+        assert!(handler_id.is_some(), "handler should be in call graph");
+        assert!(
+            build_query_id.is_some(),
+            "buildQuery should be in call graph"
+        );
+
+        // The cross-file edge handler → buildQuery should be present
+        let handler_node = &analyzer.call_graph.nodes[&handler_id.unwrap()];
+        assert!(
+            handler_node.calls.contains(&build_query_id.unwrap()),
+            "handler should call buildQuery across files"
+        );
+    }
+
+    #[test]
+    fn test_ambiguous_callee_no_edge() {
+        // Same function name in two files → no edge wired (conservative)
+        let temp = TempDir::new().unwrap();
+        let file_a = write_file(
+            temp.path(),
+            "a.js",
+            r#"
+function caller() {
+  helper();
+}
+function helper() {
+  return 1;
+}
+"#,
+        );
+        let file_b = write_file(
+            temp.path(),
+            "b.js",
+            r#"
+function helper() {
+  return 2;
+}
+"#,
+        );
+
+        let mut analyzer = ReachabilityAnalyzer::new();
+        analyzer.build_call_graph(&[file_a, file_b]).unwrap();
+
+        // There are two `helper` functions → ambiguous → no cross-file edge
+        let helper_count = analyzer
+            .call_graph
+            .nodes
+            .values()
+            .filter(|n| n.name == "helper")
+            .count();
+        assert_eq!(helper_count, 2, "should have two helper nodes");
+
+        // caller should have no outgoing edges (ambiguous callee skipped)
+        let caller_node = analyzer
+            .call_graph
+            .nodes
+            .values()
+            .find(|n| n.name == "caller");
+        if let Some(caller) = caller_node {
+            assert!(
+                caller.calls.is_empty(),
+                "caller should have no edges when callee is ambiguous"
+            );
+        }
+    }
+
+    // ── Task 15.2: TaintTrace::render() ──────────────────────────────────
+
+    #[test]
+    fn test_taint_trace_render_3_steps() {
+        let trace = TaintTrace {
+            steps: vec![
+                TaintTraceStep {
+                    file: PathBuf::from("src/routes/user.js"),
+                    line: 12,
+                    function_name: "handleUserRequest".to_string(),
+                    description: "External input enters here".to_string(),
+                },
+                TaintTraceStep {
+                    file: PathBuf::from("src/services/user.js"),
+                    line: 34,
+                    function_name: "getUserById".to_string(),
+                    description: "Tainted data flows through `getUserById`".to_string(),
+                },
+                TaintTraceStep {
+                    file: PathBuf::from("src/db/queries.js"),
+                    line: 42,
+                    function_name: "buildQuery".to_string(),
+                    description: "Tainted value reaches SQL query construction".to_string(),
+                },
+            ],
+            sink_rule_id: "sql-injection".to_string(),
+            sink_file: PathBuf::from("src/db/queries.js"),
+            sink_line: 42,
+        };
+
+        let rendered = trace.render();
+
+        // Should contain the rule ID
+        assert!(
+            rendered.contains("sql-injection"),
+            "render should contain rule ID"
+        );
+        // Should contain all 3 step numbers
+        assert!(rendered.contains("[1]"), "render should contain step 1");
+        assert!(rendered.contains("[2]"), "render should contain step 2");
+        assert!(rendered.contains("[3]"), "render should contain step 3");
+        // Should contain function names
+        assert!(
+            rendered.contains("handleUserRequest"),
+            "render should contain function name"
+        );
+        assert!(
+            rendered.contains("buildQuery"),
+            "render should contain sink function"
+        );
+        // Should contain SINK marker on last step
+        assert!(rendered.contains("← SINK"), "render should mark the sink");
+        // Should contain box-drawing characters
+        assert!(rendered.contains("┌"), "render should have top border");
+        assert!(rendered.contains("└"), "render should have bottom border");
+        // Should contain attack vector summary
+        assert!(
+            rendered.contains("Attack vector"),
+            "render should have attack vector summary"
+        );
+    }
+
+    // ── Task 15.3: trace_to_vulnerability ────────────────────────────────
+
+    #[test]
+    fn test_trace_to_vulnerability_3_node_chain() {
+        use crate::engine::Severity;
+
+        let mut analyzer = ReachabilityAnalyzer::new();
+        let id_source = Uuid::new_v4();
+        let id_middle = Uuid::new_v4();
+        let id_sink = Uuid::new_v4();
+
+        for (id, name, line, is_src) in [
+            (id_source, "sourceFunc", 1usize, true),
+            (id_middle, "middleFunc", 10usize, false),
+            (id_sink, "sinkFunc", 20usize, false),
+        ] {
+            analyzer.call_graph.add_node(FunctionNode {
+                id,
+                name: name.to_string(),
+                file_path: PathBuf::from("app.js"),
+                line,
+                calls: vec![],
+                called_by: vec![],
+                parameters: vec![],
+                is_taint_source: is_src,
+            });
+        }
+        analyzer.call_graph.add_edge(id_source, id_middle);
+        analyzer.call_graph.add_edge(id_middle, id_sink);
+
+        // Create a vulnerability inside sinkFunc (line 20)
+        let vuln = crate::engine::vulnerability::Vulnerability::new(
+            "sql-injection".to_string(),
+            PathBuf::from("app.js"),
+            20,
+            1,
+            "snippet".to_string(),
+            Severity::High,
+        );
+
+        let trace = analyzer.trace_to_vulnerability(&vuln);
+        assert!(
+            trace.is_some(),
+            "should find a trace for reachable vulnerability"
+        );
+        let trace = trace.unwrap();
+        assert_eq!(trace.steps.len(), 3, "trace should have 3 steps");
+        assert_eq!(trace.steps[0].function_name, "sourceFunc");
+        assert_eq!(trace.steps[1].function_name, "middleFunc");
+        assert_eq!(trace.steps[2].function_name, "sinkFunc");
+        assert!(
+            trace.steps[0].description.contains("External input"),
+            "first step should describe taint source"
+        );
+    }
+
+    #[test]
+    fn test_trace_to_vulnerability_disconnected_returns_none() {
+        use crate::engine::Severity;
+
+        let mut analyzer = ReachabilityAnalyzer::new();
+        let id_source = Uuid::new_v4();
+        let id_isolated = Uuid::new_v4();
+
+        analyzer.call_graph.add_node(FunctionNode {
+            id: id_source,
+            name: "sourceFunc".to_string(),
+            file_path: PathBuf::from("a.js"),
+            line: 1,
+            calls: vec![],
+            called_by: vec![],
+            parameters: vec![],
+            is_taint_source: true,
+        });
+        analyzer.call_graph.add_node(FunctionNode {
+            id: id_isolated,
+            name: "isolatedFunc".to_string(),
+            file_path: PathBuf::from("b.js"),
+            line: 5,
+            calls: vec![],
+            called_by: vec![],
+            parameters: vec![],
+            is_taint_source: false,
+        });
+        // No edge between them
+
+        let vuln = crate::engine::vulnerability::Vulnerability::new(
+            "sql-injection".to_string(),
+            PathBuf::from("b.js"),
+            5,
+            1,
+            "snippet".to_string(),
+            Severity::High,
+        );
+
+        let trace = analyzer.trace_to_vulnerability(&vuln);
+        assert!(trace.is_none(), "disconnected sink should return None");
+    }
 }
 
 #[cfg(test)]
@@ -1087,5 +1495,42 @@ def {}(x, y):
                 fn_name
             );
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Task 15.5: Performance benchmark test
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod perf_tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    /// Task 15.5: build_call_graph on a 1,000-file project must complete within 2 seconds.
+    #[test]
+    fn test_build_call_graph_1000_files_within_2_seconds() {
+        let temp = TempDir::new().unwrap();
+        let mut files = Vec::new();
+
+        // Generate 1,000 small JS files each with one function
+        for i in 0..1000 {
+            let content = format!("function fn_{i}(x) {{ return x + {i}; }}\n");
+            let path = temp.path().join(format!("file_{i}.js"));
+            fs::write(&path, &content).unwrap();
+            files.push(path);
+        }
+
+        let mut analyzer = ReachabilityAnalyzer::new();
+        let start = std::time::Instant::now();
+        analyzer.build_call_graph(&files).unwrap();
+        let elapsed = start.elapsed();
+
+        assert!(
+            elapsed.as_secs() < 2,
+            "build_call_graph on 1,000 files took {:?}, expected < 2 seconds",
+            elapsed
+        );
     }
 }

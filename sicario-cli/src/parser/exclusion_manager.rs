@@ -38,6 +38,17 @@ impl ExclusionManager {
         Ok(manager)
     }
 
+    /// Create an ExclusionManager with no patterns at all — not even the
+    /// built-in default excludes. Used by `BehavioralScanner` to scan inside
+    /// `node_modules` without any exclusion filtering.
+    pub fn new_empty() -> Self {
+        Self {
+            gitignore_patterns: GlobSet::empty(),
+            sicarioignore_patterns: GlobSet::empty(),
+            default_excludes: GlobSet::empty(),
+        }
+    }
+
     /// Create an ExclusionManager with only the built-in default excludes and
     /// no patterns loaded from `.gitignore` or `.sicarioignore`.
     ///

@@ -614,11 +614,14 @@ fn apply_insecure_deserialization_template(original: &str, vuln: &Vulnerability)
         }
         "javascript" | "typescript" => {
             format!(
-                "{indent}// SICARIO FIX: Validate deserialized data with schema validation\n\
-                 {indent}const parsed = JSON.parse(userInput);\n\
-                 {indent}// TODO: Add JSON schema validation for parsed data\n\
-                 {indent}if (typeof parsed !== 'object' || parsed === null) {{\n\
-                 {indent}  throw new Error('Invalid deserialized data');\n\
+                "{indent}// SICARIO FIX: Validate deserialized data against a schema\n\
+                 {indent}const {{ z }} = require('zod');\n\
+                 {indent}const schema = z.object({{}}); // TODO: define your schema shape here\n\
+                 {indent}let parsed;\n\
+                 {indent}try {{\n\
+                 {indent}  parsed = schema.parse(JSON.parse(userInput));\n\
+                 {indent}}} catch (e) {{\n\
+                 {indent}  return res.status(400).json({{ error: 'Invalid input' }});\n\
                  {indent}}}",
             )
         }

@@ -40,6 +40,24 @@ function corsHeaders() {
   };
 }
 
+// ── Helper: semver comparison ────────────────────────────────────────────────
+// Compares two semver strings (e.g. "1.2.3") numerically.
+// Returns: negative if a < b, 0 if a == b, positive if a > b.
+// Non-numeric pre-release suffixes are stripped before comparison.
+function compareSemver(a: string, b: string): number {
+  const parseParts = (v: string): [number, number, number] => {
+    // Strip any pre-release suffix (e.g. "1.2.3-beta" → "1.2.3")
+    const clean = v.split("-")[0].split("+")[0];
+    const parts = clean.split(".").map((p) => parseInt(p, 10) || 0);
+    return [parts[0] ?? 0, parts[1] ?? 0, parts[2] ?? 0];
+  };
+  const [aMaj, aMin, aPatch] = parseParts(a);
+  const [bMaj, bMin, bPatch] = parseParts(b);
+  if (aMaj !== bMaj) return aMaj - bMaj;
+  if (aMin !== bMin) return aMin - bMin;
+  return aPatch - bPatch;
+}
+
 /**
  * Resolve the authenticated user from either:
  * 1. Convex Auth JWT (standard browser sessions), or
@@ -1273,6 +1291,81 @@ http.route({
   method: "OPTIONS",
   handler: httpAction(async () => {
     return new Response(null, { status: 204, headers: corsHeaders() });
+  }),
+});
+
+// ── GET /api/v1/notifications — Return active notifications for CLI display ─
+// No authentication required. Always returns HTTP 200 with a JSON array.
+// Returns [] on any internal error (never returns non-200).
+http.route({
+  path: "/api/v1/notifications",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const url = new URL(request.url);
+      const cliVersion = url.searchParams.get("cli_version") ?? "0.0.0";
+      const now = new Date().toISOString();
+
+      let notifications: any[] = [];
+      try {
+        notifications = await ctx.runQuery(api.notifications.listActive, { now });
+      } catch {
+        // Internal query error — return empty array
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders() },
+        });
+      }
+
+      // Filter by version range using semver comparison.
+      // Exclude if minVersion > cliVersion OR maxVersion < cliVersion.
+      const filtered = notifications.filter((n: any) => {
+        if (n.minVersion && compareSemver(n.minVersion, cliVersion) > 0) {
+          return false; // minVersion > cliVersion → exclude
+        }
+        if (n.maxVersion && compareSemver(n.maxVersion, cliVersion) < 0) {
+          return false; // maxVersion < cliVersion → exclude
+        }
+        return true;
+      });
+
+      // Map to the public response shape.
+      const response = filtered.map((n: any) => ({
+        id: n.notificationId,
+        message: n.message,
+        severity: n.severity,
+        min_version: n.minVersion ?? null,
+        max_version: n.maxVersion ?? null,
+        url: n.url ?? null,
+      }));
+
+      return new Response(JSON.stringify(response), {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      });
+    } catch {
+      // Catch-all — always return 200 with empty array
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      });
+    }
+  }),
+});
+
+// ── OPTIONS /api/v1/notifications — CORS preflight ──────────────────────────
+http.route({
+  path: "/api/v1/notifications",
+  method: "OPTIONS",
+  handler: httpAction(async () => {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+    });
   }),
 });
 

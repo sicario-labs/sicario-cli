@@ -73,6 +73,8 @@ mod tests {
                         cloud_exposed: None,
                         cwe_id: None,
                         owasp_category: owasp,
+                        confidence_score: 1.0,
+                        suppressed: false,
                         execution_trace: None,
                     }
                 },

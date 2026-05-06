@@ -1,5 +1,6 @@
 //! Baseline subcommand arguments.
 
+use crate::cli::scan::SeverityLevel;
 use clap::{Parser, Subcommand};
 
 /// Manage security debt baselines.
@@ -17,6 +18,8 @@ pub enum BaselineAction {
     Compare(BaselineCompareArgs),
     /// Show finding count trends across baselines
     Trend(BaselineTrendArgs),
+    /// Diff current scan against a baseline (CI-friendly)
+    Diff(BaselineDiffArgs),
 }
 
 /// Arguments for `baseline save`.
@@ -48,4 +51,23 @@ pub struct BaselineTrendArgs {
     /// Output format
     #[arg(long, default_value = "json")]
     pub format: String,
+}
+
+/// Arguments for `baseline diff`.
+#[derive(Parser, Debug)]
+pub struct BaselineDiffArgs {
+    /// Tag or timestamp of the baseline to compare against (optional; uses most recent if omitted)
+    pub reference: Option<String>,
+
+    /// Exit with code 1 on new findings above threshold (for CI use)
+    #[arg(long)]
+    pub ci: bool,
+
+    /// Minimum severity for CI blocking (default: high)
+    #[arg(long, value_enum, default_value = "high")]
+    pub threshold: SeverityLevel,
+
+    /// Tag of a named baseline to compare against
+    #[arg(long)]
+    pub tag: Option<String>,
 }

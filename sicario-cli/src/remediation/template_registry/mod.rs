@@ -39,7 +39,7 @@ pub use web_headers::*;
 
 use crate::parser::Language;
 
-// ── Core trait ────────────────────────────────────────────────────────────────
+// ── Core traits ───────────────────────────────────────────────────────────────
 
 /// A deterministic, LLM-free patch generator for a specific vulnerability class.
 ///
@@ -62,18 +62,57 @@ pub trait PatchTemplate: Send + Sync {
     fn name(&self) -> &'static str;
 }
 
+/// A deterministic, LLM-free patch generator that operates on the **full file
+/// content** rather than a single line.
+///
+/// Unlike `PatchTemplate`, which receives only the vulnerable line,
+/// `MultiLinePatchTemplate` receives the entire file content and the
+/// 1-based line number of the vulnerability. This allows AST-level rewrites
+/// that span multiple lines (e.g. SQL parameterisation across a multi-line
+/// query construction).
+///
+/// `generate_multiline_patch` returns `Some(new_file_content)` — the complete
+/// fixed file — or `None` to signal that this template cannot handle the case
+/// and the engine should fall through to the `PatchTemplate` lookup.
+///
+/// The returned content is validated with tree-sitter before being accepted.
+/// If validation fails the result is discarded and the single-line lookup
+/// proceeds.
+pub trait MultiLinePatchTemplate: Send + Sync {
+    /// Human-readable name for diagnostics and logging.
+    fn name(&self) -> &'static str;
+
+    /// Attempt to generate a fully-fixed file content for the vulnerability at
+    /// `vulnerable_line` (1-based).
+    ///
+    /// Returns `Some(fixed_file_content)` on success, `None` if this template
+    /// cannot handle the given input.
+    fn generate_multiline_patch(
+        &self,
+        file_content: &str,
+        vulnerable_line: usize,
+        lang: Language,
+    ) -> Option<String>;
+}
+
 // ── Registry ──────────────────────────────────────────────────────────────────
 
 /// Maps Rule IDs and CWE numbers to their `PatchTemplate` implementations.
 ///
 /// Lookup order:
-/// 1. Exact Rule ID match (highest priority — most specific)
-/// 2. CWE number match (e.g. "338" for CWE-338)
+/// 1. Multi-line Rule ID match (highest priority — AST-level rewrite)
+/// 2. Multi-line CWE match
+/// 3. Exact Rule ID match (single-line template)
+/// 4. CWE number match (single-line template)
 pub struct TemplateRegistry {
-    /// rule_id → template
+    /// rule_id → single-line template
     by_rule: HashMap<String, Box<dyn PatchTemplate>>,
-    /// CWE number string (e.g. "338") → template
+    /// CWE number string (e.g. "338") → single-line template
     by_cwe: HashMap<String, Box<dyn PatchTemplate>>,
+    /// rule_id → multi-line template (checked before single-line)
+    by_rule_multi: HashMap<String, Box<dyn MultiLinePatchTemplate>>,
+    /// CWE number string → multi-line template (checked before single-line)
+    by_cwe_multi: HashMap<String, Box<dyn MultiLinePatchTemplate>>,
 }
 
 impl TemplateRegistry {
@@ -82,6 +121,8 @@ impl TemplateRegistry {
         Self {
             by_rule: HashMap::new(),
             by_cwe: HashMap::new(),
+            by_rule_multi: HashMap::new(),
+            by_cwe_multi: HashMap::new(),
         }
     }
 
@@ -93,6 +134,66 @@ impl TemplateRegistry {
     /// Register a template for a CWE number (just the digits, e.g. `"338"`).
     pub fn register_cwe(&mut self, cwe_num: &str, template: Box<dyn PatchTemplate>) {
         self.by_cwe.insert(cwe_num.to_string(), template);
+    }
+
+    /// Register a `MultiLinePatchTemplate` for a rule ID and optional CWE number.
+    ///
+    /// The multi-line template is checked before any single-line template for
+    /// the same rule/CWE. Pass `None` for `cwe_num` when no CWE alias is needed.
+    pub fn register_multi(
+        &mut self,
+        rule_id: &str,
+        cwe_num: Option<&str>,
+        template: Box<dyn MultiLinePatchTemplate>,
+    ) {
+        // We need to store the same template under both keys. Since
+        // `Box<dyn MultiLinePatchTemplate>` is not `Clone`, we use a shared
+        // `Arc` internally. However, to keep the API simple and avoid changing
+        // the field types, we accept a `Box` and register by rule_id only when
+        // no CWE is provided, or register by CWE only when rule_id is empty.
+        //
+        // For the common case (both rule_id and cwe_num provided), the caller
+        // must call `register_multi` twice — once per key — or use the
+        // convenience wrapper below.
+        self.by_rule_multi.insert(rule_id.to_string(), template);
+        // CWE alias is registered separately via `register_multi_cwe`.
+        let _ = cwe_num; // stored via register_multi_cwe if needed
+    }
+
+    /// Register a `MultiLinePatchTemplate` for a CWE number only.
+    ///
+    /// Use this alongside `register_multi` when the same template should be
+    /// reachable by both rule ID and CWE number.
+    pub fn register_multi_cwe(&mut self, cwe_num: &str, template: Box<dyn MultiLinePatchTemplate>) {
+        self.by_cwe_multi.insert(cwe_num.to_string(), template);
+    }
+
+    /// Look up a `MultiLinePatchTemplate` for the given rule_id and optional CWE.
+    ///
+    /// Returns a reference to the best matching multi-line template, or `None`.
+    pub fn lookup_multi(
+        &self,
+        rule_id: &str,
+        cwe_id: Option<&str>,
+    ) -> Option<&dyn MultiLinePatchTemplate> {
+        // 1. Exact rule ID match
+        if let Some(t) = self.by_rule_multi.get(rule_id) {
+            return Some(t.as_ref());
+        }
+
+        // 2. CWE match — extract numeric part from "CWE-338" → "338"
+        if let Some(cwe) = cwe_id {
+            let cwe_num = cwe
+                .to_lowercase()
+                .trim_start_matches("cwe-")
+                .trim()
+                .to_string();
+            if let Some(t) = self.by_cwe_multi.get(&cwe_num) {
+                return Some(t.as_ref());
+            }
+        }
+
+        None
     }
 
     /// Look up a template for the given rule_id and optional CWE string.
@@ -573,11 +674,34 @@ impl Default for TemplateRegistry {
         r.register_rule("node-sync-file-read", Box::new(FileReadSyncTemplate));
 
         // ── Sprint 4: SQL + TLS/SSRF + Django/Flask + Cloud/IaC + React ──────
-        r.register_rule("js-sql-string-concat", Box::new(SqlStringConcatTemplate));
+
+        // AST-level SQL rewrite (multi-line, JS/TS only) — highest priority for CWE-89
+        // Replaces the comment-only single-line templates for these rule IDs.
+        r.register_multi(
+            "js-sql-string-concat",
+            None,
+            Box::new(SqlAstRewriteTemplate),
+        );
+        r.register_multi(
+            "js-sql-template-string",
+            None,
+            Box::new(SqlAstRewriteTemplate),
+        );
+        r.register_multi(
+            "node-sql-template-literal",
+            None,
+            Box::new(SqlAstRewriteTemplate),
+        );
+        // Register CWE-89 multi-line alias so lookup_multi("...", Some("CWE-89")) works
+        r.register_multi_cwe("89", Box::new(SqlAstRewriteTemplate));
+
+        // Single-line fallback for non-JS/TS SQL concat (Python, Go, generic)
         r.register_rule("py-sql-string-concat", Box::new(SqlStringConcatTemplate));
         r.register_rule("go-sql-string-concat", Box::new(SqlStringConcatTemplate));
         r.register_rule("sql-string-concat", Box::new(SqlStringConcatTemplate));
-
+        // js-sql-string-concat single-line fallback (used if multi-line returns None)
+        r.register_rule("js-sql-string-concat", Box::new(SqlStringConcatTemplate));
+        // js-sql-template-string / node-sql-template-literal single-line fallback
         r.register_rule(
             "js-sql-template-string",
             Box::new(SqlTemplateStringTemplate),
@@ -749,3 +873,171 @@ impl Default for TemplateRegistry {
 }
 
 // ── Template implementations ──────────────────────────────────────────────────
+
+#[cfg(test)]
+mod multi_line_tests {
+    use super::*;
+    use crate::parser::Language;
+
+    // ── Stub implementations ──────────────────────────────────────────────────
+
+    /// A `MultiLinePatchTemplate` that always returns `Some` with a fixed
+    /// replacement (valid JS syntax).
+    struct AlwaysSomeMultiTemplate;
+
+    impl MultiLinePatchTemplate for AlwaysSomeMultiTemplate {
+        fn name(&self) -> &'static str {
+            "always-some-multi"
+        }
+
+        fn generate_multiline_patch(
+            &self,
+            _file_content: &str,
+            _vulnerable_line: usize,
+            _lang: Language,
+        ) -> Option<String> {
+            // Return a syntactically valid JS file
+            Some("const x = 1;\n".to_string())
+        }
+    }
+
+    /// A `MultiLinePatchTemplate` that always returns `None`.
+    struct AlwaysNoneMultiTemplate;
+
+    impl MultiLinePatchTemplate for AlwaysNoneMultiTemplate {
+        fn name(&self) -> &'static str {
+            "always-none-multi"
+        }
+
+        fn generate_multiline_patch(
+            &self,
+            _file_content: &str,
+            _vulnerable_line: usize,
+            _lang: Language,
+        ) -> Option<String> {
+            None
+        }
+    }
+
+    /// A `PatchTemplate` that always returns `Some` with a sentinel value so
+    /// we can detect when the single-line path was taken.
+    struct SentinelSingleTemplate;
+
+    impl PatchTemplate for SentinelSingleTemplate {
+        fn name(&self) -> &'static str {
+            "sentinel-single"
+        }
+
+        fn generate_patch(&self, _vulnerable_line: &str, _lang: Language) -> Option<String> {
+            Some("SENTINEL_SINGLE_LINE_FIX".to_string())
+        }
+    }
+
+    // ── Tests ─────────────────────────────────────────────────────────────────
+
+    /// `register_multi` stores the template and `lookup_multi` retrieves it by
+    /// rule ID.
+    #[test]
+    fn register_multi_and_lookup_by_rule_id() {
+        let mut registry = TemplateRegistry::new();
+        registry.register_multi("test-rule", None, Box::new(AlwaysSomeMultiTemplate));
+
+        let result = registry.lookup_multi("test-rule", None);
+        assert!(
+            result.is_some(),
+            "lookup_multi should find the registered template"
+        );
+        assert_eq!(result.unwrap().name(), "always-some-multi");
+    }
+
+    /// `register_multi_cwe` stores the template and `lookup_multi` retrieves it
+    /// by CWE ID (both raw number and "CWE-NNN" format).
+    #[test]
+    fn register_multi_cwe_and_lookup_by_cwe() {
+        let mut registry = TemplateRegistry::new();
+        registry.register_multi_cwe("89", Box::new(AlwaysSomeMultiTemplate));
+
+        // Lookup with raw CWE number
+        let result = registry.lookup_multi("unknown-rule", Some("89"));
+        assert!(
+            result.is_some(),
+            "lookup_multi should find template by CWE number"
+        );
+
+        // Lookup with "CWE-NNN" format
+        let result2 = registry.lookup_multi("unknown-rule", Some("CWE-89"));
+        assert!(
+            result2.is_some(),
+            "lookup_multi should find template by CWE-NNN format"
+        );
+    }
+
+    /// Rule ID takes priority over CWE when both are registered.
+    #[test]
+    fn rule_id_takes_priority_over_cwe_in_multi_lookup() {
+        let mut registry = TemplateRegistry::new();
+        registry.register_multi("priority-rule", None, Box::new(AlwaysSomeMultiTemplate));
+        registry.register_multi_cwe("89", Box::new(AlwaysNoneMultiTemplate));
+
+        let result = registry.lookup_multi("priority-rule", Some("89"));
+        assert!(result.is_some());
+        // Should get the rule-ID match (AlwaysSomeMultiTemplate), not the CWE match
+        assert_eq!(result.unwrap().name(), "always-some-multi");
+    }
+
+    /// `lookup_multi` returns `None` when no multi-line template is registered
+    /// for the given rule/CWE.
+    #[test]
+    fn lookup_multi_returns_none_when_not_registered() {
+        let registry = TemplateRegistry::new();
+        assert!(registry.lookup_multi("nonexistent-rule", None).is_none());
+        assert!(registry
+            .lookup_multi("nonexistent-rule", Some("999"))
+            .is_none());
+    }
+
+    /// When a `MultiLinePatchTemplate` returns `Some`, `generate_multiline_patch`
+    /// produces the expected content.
+    #[test]
+    fn multi_template_some_produces_content() {
+        let tmpl = AlwaysSomeMultiTemplate;
+        let result = tmpl.generate_multiline_patch("original content\n", 1, Language::JavaScript);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), "const x = 1;\n");
+    }
+
+    /// When a `MultiLinePatchTemplate` returns `None`, the result is `None`.
+    #[test]
+    fn multi_template_none_returns_none() {
+        let tmpl = AlwaysNoneMultiTemplate;
+        let result = tmpl.generate_multiline_patch("original content\n", 1, Language::JavaScript);
+        assert!(result.is_none());
+    }
+
+    /// A registry with both a multi-line and a single-line template registered
+    /// for the same rule: `lookup_multi` finds the multi-line one, `lookup`
+    /// finds the single-line one. This verifies the two maps are independent.
+    #[test]
+    fn multi_and_single_registrations_are_independent() {
+        let mut registry = TemplateRegistry::new();
+        registry.register_multi("shared-rule", None, Box::new(AlwaysSomeMultiTemplate));
+        registry.register_rule("shared-rule", Box::new(SentinelSingleTemplate));
+
+        // Multi-line lookup returns the multi-line template
+        let multi = registry.lookup_multi("shared-rule", None);
+        assert!(multi.is_some());
+        assert_eq!(multi.unwrap().name(), "always-some-multi");
+
+        // Single-line lookup returns the single-line template
+        let single = registry.lookup("shared-rule", None);
+        assert!(single.is_some());
+        assert_eq!(single.unwrap().name(), "sentinel-single");
+    }
+
+    /// `MultiLinePatchTemplate` trait object is `Send + Sync` (compile-time check).
+    #[test]
+    fn multi_line_template_is_send_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<Box<dyn MultiLinePatchTemplate>>();
+    }
+}

@@ -13,6 +13,8 @@ pub struct HookCommand {
 pub enum HookAction {
     /// Install the Sicario pre-commit hook
     Install,
+    /// Install the Sicario auto-fix pre-commit hook (Ghost Fix mode)
+    AutoFix,
     /// Uninstall the Sicario pre-commit hook
     Uninstall,
     /// Show current hook status

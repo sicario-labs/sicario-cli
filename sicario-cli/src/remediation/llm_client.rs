@@ -113,6 +113,17 @@ struct AnthropicErrorDetail {
 
 // ── System prompt (XML protocol) ──────────────────────────────────────────────
 
+/// System prompt for local Ollama models (JSON output protocol).
+///
+/// Local models use a simpler JSON-based protocol to reduce token usage and
+/// improve reliability with smaller models.
+///
+/// Requirements: eta-engine 1.4
+pub const SECURITY_FIX_SYSTEM_PROMPT_LOCAL: &str =
+    "You are a strict code transformer. Return ONLY a JSON object with a single field: \
+     {\"replacement\": \"<fixed code>\"}. Do not explain. Do not add imports. \
+     Do not invent variable names. Only use variables from the provided scope list.";
+
 /// System prompt that enforces the XML output protocol.
 ///
 /// The model MUST wrap its reasoning in <scratchpad> and the exact replacement

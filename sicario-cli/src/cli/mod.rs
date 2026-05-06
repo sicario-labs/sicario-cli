@@ -1,15 +1,21 @@
 //! Clap-based CLI definitions for Sicario.
 
+pub mod attack;
 pub mod baseline;
 pub mod benchmark;
 pub mod cache;
 pub mod config;
 pub mod exit_code;
 pub mod exit_code_property_tests;
+pub mod exorcise;
 pub mod fix;
+pub mod guard;
 pub mod hook;
 pub mod link;
 pub mod lsp;
+pub mod policy;
+pub mod report;
+pub mod rule;
 pub mod rules;
 pub mod scan;
 pub mod suppressions;
@@ -17,16 +23,24 @@ pub mod suppressions;
 #[cfg(test)]
 pub mod watch_integration_tests;
 
+#[cfg(test)]
+pub mod fix_staged_tests;
+
 use clap::{Parser, Subcommand};
 
+use self::attack::AttackArgs;
 use self::baseline::BaselineCommand;
 use self::benchmark::BenchmarkArgs;
 use self::cache::CacheCommand;
 use self::config::ConfigCommand;
+use self::exorcise::ExorciseArgs;
 use self::fix::FixArgs;
 use self::hook::HookCommand;
 use self::link::LinkArgs;
 use self::lsp::LspArgs;
+use self::policy::PolicyCommand;
+use self::report::ReportArgs;
+use self::rule::RuleArgs;
 use self::rules::RulesCommand;
 use self::scan::ScanArgs;
 use self::suppressions::SuppressionsCommand;
@@ -71,6 +85,8 @@ pub enum Command {
     Hook(HookCommand),
     /// Start the Language Server Protocol server
     Lsp(LspArgs),
+    /// Manage and enforce organizational security policies
+    Policy(PolicyCommand),
     /// Run performance benchmarks
     Benchmark(BenchmarkArgs),
     /// Test and validate security rules
@@ -81,22 +97,17 @@ pub enum Command {
     Link(LinkArgs),
     /// Start the Kiro Power MCP server (stdio JSON-RPC 2.0)
     Mcp,
-}
-
-/// Arguments for the `report` subcommand.
-#[derive(Parser, Debug)]
-pub struct ReportArgs {
-    /// Directory to scan
-    #[arg(long, default_value = ".")]
-    pub dir: String,
-
-    /// Output directory for reports
-    #[arg(long)]
-    pub output: Option<String>,
-
-    /// Report format
-    #[arg(long, default_value = "owasp")]
-    pub format: String,
+    /// Rewrite local git history to remove hardcoded secrets
+    Exorcise(ExorciseArgs),
+    /// Compile a natural language description into a security rule
+    Rule(RuleArgs),
+    /// Run the Shadow Pen-Tester against a local target
+    Attack(AttackArgs),
+    /// Monitor package installations for behavioral anomalies (Poison-Pill Interceptor)
+    Guard {
+        #[command(subcommand)]
+        command: guard::GuardCommand,
+    },
 }
 
 /// Arguments for the `completions` subcommand.

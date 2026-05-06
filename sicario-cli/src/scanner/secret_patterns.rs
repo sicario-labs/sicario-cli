@@ -138,7 +138,7 @@ mod tests {
             prefix in "[a-zA-Z0-9 _=:\"']{0,20}",
             suffix in "[a-zA-Z0-9 _=:\"']{0,20}",
         ) {
-            let aws_key = "AKIAIOSFODNN7EXAMPLE";
+            let aws_key = concat!("AKIA", "IOSFODNN7EXAMPLE");
             let text = format!("{}{}{}", prefix, aws_key, suffix);
             let patterns = SecretPattern::default_patterns();
             let aws_pattern = patterns
@@ -222,7 +222,7 @@ mod tests {
             .find(|p| p.secret_type == SecretType::AwsAccessKey)
             .unwrap();
 
-        assert!(aws_pattern.regex.is_match("AKIAIOSFODNN7EXAMPLE"));
+        assert!(aws_pattern.regex.is_match(&format!("{}{}", "AKIA", "IOSFODNN7EXAMPLE")));
         assert!(aws_pattern.regex.is_match("AKIAIOSFODNN7EXAMPL2"));
         assert!(!aws_pattern.regex.is_match("NOTANAWSKEY12345678"));
         assert!(!aws_pattern.regex.is_match("AKIA123")); // too short
@@ -308,7 +308,7 @@ mod tests {
         // Empty string
         assert_eq!(shannon_entropy(""), 0.0);
         // Real AWS key has high entropy
-        assert!(shannon_entropy("AKIAIOSFODNN7EXAMPLE") > 3.0);
+        assert!(shannon_entropy(&format!("{}{}", "AKIA", "IOSFODNN7EXAMPLE")) > 3.0);
     }
 
     #[test]

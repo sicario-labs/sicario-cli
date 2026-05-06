@@ -14,7 +14,10 @@ use std::path::{Path, PathBuf};
 
 use super::backup_manager::{BackupManager, PatchHistoryEntry};
 use super::llm_client::LlmClient;
+use super::micro_context::MicroContextExtractor;
+use super::ollama_client::OllamaClient;
 use super::template_engine::TemplateRegistry;
+use super::ts_verification::{TreeSitterVerificationLoop, VerificationResult};
 use super::{AiFallbackDecision, FixContext, Patch};
 use crate::engine::Vulnerability;
 use crate::parser::{Language as ParserLanguage, TreeSitterEngine};
@@ -52,6 +55,8 @@ pub enum BatchFixOutcome {
 pub struct RemediationEngine {
     tree_sitter: TreeSitterEngine,
     ai_client: LlmClient,
+    /// Optional Ollama client — set when `AgentConfig::Local` is active.
+    ollama_client: Option<OllamaClient>,
     backup_manager: BackupManager,
     /// Pre-built registry of deterministic templates — checked before the LLM.
     registry: TemplateRegistry,
@@ -69,6 +74,7 @@ impl RemediationEngine {
         Ok(Self {
             tree_sitter: TreeSitterEngine::new(project_root)?,
             ai_client: LlmClient::new()?,
+            ollama_client: None,
             backup_manager: BackupManager::new(project_root)?,
             registry: TemplateRegistry::default(),
             allow_ai: false,
@@ -83,9 +89,67 @@ impl RemediationEngine {
         Ok(Self {
             tree_sitter: TreeSitterEngine::new(project_root)?,
             ai_client: LlmClient::new()?,
+            ollama_client: None,
             backup_manager: BackupManager::new(project_root)?,
             registry: TemplateRegistry::default(),
             allow_ai,
+        })
+    }
+
+    /// Create a new `RemediationEngine` with an `AgentConfig`.
+    ///
+    /// When `AgentConfig::Local` is provided:
+    ///   - `allow_ai` is set to `true` implicitly (no consent prompt for localhost).
+    ///   - An `OllamaClient` is constructed (probing or using the provided model).
+    ///   - LLM fallback calls are routed to Ollama instead of cloud providers.
+    ///
+    /// When `AgentConfig::Cloud` or `AgentConfig::Auto`, behaves identically to
+    /// `new_with_allow_ai`.
+    pub fn new_with_agent(
+        project_root: &Path,
+        agent_config: &super::agent_selector::AgentConfig,
+        allow_ai: bool,
+    ) -> Result<Self> {
+        use super::agent_selector::AgentConfig;
+
+        let (ollama_client, effective_allow_ai) = match agent_config {
+            AgentConfig::Local { model_override } => {
+                // ── Zero-Exfiltration Invariant (Req 3) ──────────────────────
+                // When AgentConfig::Local is active, ALL network traffic from
+                // RemediationEngine MUST go exclusively to http://127.0.0.1:11434.
+                //
+                // Enforcement points:
+                //   1. OllamaClient only holds two URL constants, both pointing
+                //      to 127.0.0.1:11434 (see ollama_client.rs module doc).
+                //   2. The cloud LlmClient (self.ai_client) is constructed but
+                //      NEVER called in the local agent code path — the
+                //      `if let Some(ollama) = &self.ollama_client` branch in
+                //      `remediate_with_retries` routes all calls to OllamaClient.
+                //   3. PatchReceipt::local_agent enforces lines_exfiltrated: 0
+                //      and tokens_burned: 0 at the type level.
+                //
+                // Code reviewers: verify that no call to `self.ai_client` can
+                // be reached when `self.ollama_client.is_some()` is true.
+                let client = match model_override {
+                    Some(model) => OllamaClient::new_with_model(model.clone())?,
+                    None => OllamaClient::probe(500)?,
+                };
+                eprintln!(
+                    "[sicario] Local agent: using Ollama model '{}'",
+                    client.model()
+                );
+                (Some(client), true) // always allow_ai for local
+            }
+            AgentConfig::Cloud | AgentConfig::Auto => (None, allow_ai),
+        };
+
+        Ok(Self {
+            tree_sitter: TreeSitterEngine::new(project_root)?,
+            ai_client: LlmClient::new()?,
+            ollama_client,
+            backup_manager: BackupManager::new(project_root)?,
+            registry: TemplateRegistry::default(),
+            allow_ai: effective_allow_ai,
         })
     }
 
@@ -224,6 +288,21 @@ impl RemediationEngine {
             .build()
             .context("Failed to build Tokio runtime")?;
 
+        // ── Local agent: extract micro-context for TreeSitterVerificationLoop ─
+        // Extract in-scope variables once before the retry loop so we don't
+        // re-parse the file on every attempt.
+        let micro_ctx = if self.ollama_client.is_some() {
+            let lang = crate::parser::Language::from_path(&vuln.file_path)
+                .unwrap_or(crate::parser::Language::JavaScript);
+            Some(MicroContextExtractor::extract(
+                original_content,
+                vuln.line,
+                lang,
+            ))
+        } else {
+            None
+        };
+
         let mut extra_feedback: Option<String> = None;
         let mut last_error = String::from("all retries exhausted");
 
@@ -234,38 +313,138 @@ impl RemediationEngine {
             ));
 
             // ── Step A: Call the LLM ──────────────────────────────────────────
-            let raw_response = match rt.block_on(
-                self.ai_client
-                    .generate_fix_xml(&base_context, extra_feedback.as_deref()),
-            ) {
-                Ok(r) => {
-                    spinner.finish_success("LLM responded");
-                    r.text
-                }
-                Err(e) => {
-                    let msg = e.to_string();
-                    if msg.contains("timed out") || msg.contains("timeout") {
-                        spinner.finish_timeout();
-                    } else {
-                        spinner.finish_error(&format!("LLM error: {msg}"));
+            let raw_response = if let Some(ollama) = &self.ollama_client {
+                // Local agent path: use OllamaClient (no async, blocking HTTP)
+                match ollama.generate_fix_xml(&base_context) {
+                    Ok(text) => {
+                        spinner.finish_success("Ollama responded");
+                        text
                     }
-                    last_error = msg;
-                    break; // LLM unavailable — fall through to template
+                    Err(e) => {
+                        let msg = e.to_string();
+                        if msg.contains("timed out") || msg.contains("timeout") {
+                            spinner.finish_timeout();
+                        } else {
+                            spinner.finish_error(&format!("Ollama error: {msg}"));
+                        }
+                        last_error = msg;
+                        break; // Ollama unavailable — fall through to template
+                    }
+                }
+            } else {
+                // Cloud agent path: use async LlmClient
+                match rt.block_on(
+                    self.ai_client
+                        .generate_fix_xml(&base_context, extra_feedback.as_deref()),
+                ) {
+                    Ok(r) => {
+                        spinner.finish_success("LLM responded");
+                        r.text
+                    }
+                    Err(e) => {
+                        let msg = e.to_string();
+                        if msg.contains("timed out") || msg.contains("timeout") {
+                            spinner.finish_timeout();
+                        } else {
+                            spinner.finish_error(&format!("LLM error: {msg}"));
+                        }
+                        last_error = msg;
+                        break; // LLM unavailable — fall through to template
+                    }
                 }
             };
 
-            // ── Step B: Extract patch from XML ────────────────────────────────
-            let raw_patch = match extract_patch(&raw_response) {
-                Ok(p) => p,
-                Err(e) => {
-                    last_error = format!("XML extraction failed: {e}");
-                    eprintln!("sicario: attempt {attempt}/{max_retries} — {last_error}");
-                    extra_feedback = Some(format!(
-                        "PREVIOUS ATTEMPT FAILED: Your response did not contain valid \
-                         <sicario_patch> tags. Error: {e}\n\
-                         You MUST wrap the replacement code in <sicario_patch>...</sicario_patch>."
-                    ));
-                    continue;
+            // ── Step B: Extract patch from XML or JSON ────────────────────────
+            let raw_patch = if self.ollama_client.is_some() {
+                // Local agent: response is JSON {"replacement": "..."}
+                // Run through the three-stage TreeSitterVerificationLoop:
+                //   Stage 1 — JSON parse
+                //   Stage 2 — tree-sitter syntax check
+                //   Stage 3 — identifier scope check
+                // On Accept, the candidate is already spliced — skip Steps C/D.
+                if let Some(ref ctx) = micro_ctx {
+                    let lang = crate::parser::Language::from_path(&vuln.file_path)
+                        .unwrap_or(crate::parser::Language::JavaScript);
+                    match TreeSitterVerificationLoop::verify(
+                        &raw_response,
+                        &ctx.in_scope_variables,
+                        lang,
+                        original_content,
+                        vuln.line,
+                    ) {
+                        VerificationResult::Accept(candidate) => {
+                            // Stages 1-3 passed — go straight to Step E.
+                            match self.verify_in_memory(vuln, &candidate) {
+                                Ok(true) => return Ok(candidate),
+                                Ok(false) => {
+                                    last_error = format!(
+                                        "vulnerability {} still present after fix",
+                                        vuln.rule_id
+                                    );
+                                    eprintln!(
+                                        "sicario: attempt {attempt}/{max_retries} — {last_error}"
+                                    );
+                                    extra_feedback = Some(format!(
+                                        "PREVIOUS ATTEMPT FAILED: The patch was applied but the \
+                                         vulnerability '{}' is still detected by the SAST scanner. \
+                                         Try a fundamentally different approach.",
+                                        vuln.rule_id
+                                    ));
+                                    continue;
+                                }
+                                Err(e) => {
+                                    eprintln!(
+                                        "sicario: warning — in-memory verification failed ({e}), \
+                                         accepting syntax-valid patch"
+                                    );
+                                    return Ok(candidate);
+                                }
+                            }
+                        }
+                        VerificationResult::Discard => {
+                            last_error = "TreeSitterVerificationLoop discarded response \
+                                          (invalid JSON, syntax error, or hallucinated identifier)"
+                                .to_string();
+                            eprintln!("sicario: attempt {attempt}/{max_retries} — {last_error}");
+                            extra_feedback = Some(
+                                "PREVIOUS ATTEMPT FAILED: Your response was rejected by the \
+                                 verification loop. Ensure: (1) valid JSON \
+                                 {\"replacement\": \"...\"}, (2) syntactically correct code, \
+                                 (3) only use variable names from the provided scope list."
+                                    .to_string(),
+                            );
+                            continue;
+                        }
+                    }
+                }
+                // Fallback: micro_ctx unavailable — use manual JSON extraction
+                match extract_json_replacement(&raw_response) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        last_error = format!("JSON extraction failed: {e}");
+                        eprintln!("sicario: attempt {attempt}/{max_retries} — {last_error}");
+                        extra_feedback = Some(format!(
+                            "PREVIOUS ATTEMPT FAILED: Your response was not valid JSON. \
+                             Error: {e}\n\
+                             You MUST respond with ONLY: {{\"replacement\": \"<fixed code>\"}}"
+                        ));
+                        continue;
+                    }
+                }
+            } else {
+                // Cloud agent: response uses XML <sicario_patch> protocol
+                match extract_patch(&raw_response) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        last_error = format!("XML extraction failed: {e}");
+                        eprintln!("sicario: attempt {attempt}/{max_retries} — {last_error}");
+                        extra_feedback = Some(format!(
+                            "PREVIOUS ATTEMPT FAILED: Your response did not contain valid \
+                             <sicario_patch> tags. Error: {e}\n\
+                             You MUST wrap the replacement code in <sicario_patch>...</sicario_patch>."
+                        ));
+                        continue;
+                    }
                 }
             };
 
@@ -446,17 +625,41 @@ impl RemediationEngine {
             })
     }
 
-    /// Create a pull request with the patch (stub — requires git provider API).
-    pub fn create_pull_request(&self, _patch: &Patch, _git_provider: &str) -> Result<String> {
-        // PR creation requires git provider API integration (future task)
-        Err(anyhow::anyhow!(
-            "Pull request creation is not yet implemented"
-        ))
+    /// Create a pull request with the patch.
+    ///
+    /// Dispatches to the correct implementation based on `git_provider` or
+    /// auto-detection from the remote URL when `git_provider` is `"auto"`.
+    ///
+    /// Supported providers: `"github"`, `"gitlab"`, `"auto"`.
+    pub fn create_pull_request(
+        &self,
+        patch: &Patch,
+        git_provider: &str,
+        rule_id: &str,
+    ) -> Result<String> {
+        use super::pr_client::{create_github_pr, create_gitlab_mr, create_pull_request_auto};
+        match git_provider {
+            "github" => create_github_pr(patch, rule_id),
+            "gitlab" => create_gitlab_mr(patch, rule_id),
+            "auto" | "" => create_pull_request_auto(patch, rule_id),
+            other => Err(anyhow::anyhow!(
+                "Unsupported git provider: '{}'. Valid values: github, gitlab, auto",
+                other
+            )),
+        }
     }
 
     /// Expose the backup manager for external use (e.g. TUI patch application).
     pub fn backup_manager(&self) -> &BackupManager {
         &self.backup_manager
+    }
+
+    /// Return the Ollama model name if a local agent is active, or `None`.
+    ///
+    /// Used by `cmd_fix` to emit a `PatchReceipt::local_agent` receipt with
+    /// the correct model name after a successful local agent fix.
+    pub fn ollama_model_name(&self) -> Option<&str> {
+        self.ollama_client.as_ref().map(|c| c.model())
     }
 
     // ── Internal helpers ──────────────────────────────────────────────────────
@@ -500,9 +703,42 @@ impl RemediationEngine {
 
     /// Try the `TemplateRegistry` for a deterministic, LLM-free fix.
     ///
+    /// Lookup order:
+    /// 1. `MultiLinePatchTemplate` (AST-level, full-file rewrite) — validated
+    ///    with tree-sitter; discarded on syntax error.
+    /// 2. `PatchTemplate` (single-line replacement) — validated with
+    ///    tree-sitter; discarded on syntax error.
+    ///
     /// Returns `Some(fixed_content)` if a registered template matched and
     /// produced a valid replacement, `None` otherwise.
     fn try_registry_fix(&self, vuln: &Vulnerability, original_content: &str) -> Option<String> {
+        let language = detect_language_name(&vuln.file_path);
+        let lang = ParserLanguage::from_path(&vuln.file_path).unwrap_or(ParserLanguage::JavaScript);
+
+        // ── Step 1: Try multi-line template first ─────────────────────────────
+        if let Some(multi_tmpl) = self
+            .registry
+            .lookup_multi(&vuln.rule_id, vuln.cwe_id.as_deref())
+        {
+            if let Some(fixed_content) =
+                multi_tmpl.generate_multiline_patch(original_content, vuln.line, lang)
+            {
+                // Validate syntax — discard and fall through on failure
+                if self.validate_syntax(&fixed_content, &language) {
+                    return Some(fixed_content);
+                }
+                eprintln!(
+                    "sicario: multi-line template '{}' produced invalid syntax for {} — \
+                     falling through to single-line lookup",
+                    multi_tmpl.name(),
+                    vuln.rule_id
+                );
+                // Fall through to single-line lookup below
+            }
+            // MultiLinePatchTemplate returned None — fall through
+        }
+
+        // ── Step 2: Try single-line template ──────────────────────────────────
         let lines: Vec<&str> = original_content.lines().collect();
         let line_idx = vuln
             .line
@@ -513,7 +749,6 @@ impl RemediationEngine {
         }
 
         let vulnerable_line = lines[line_idx];
-        let lang = ParserLanguage::from_path(&vuln.file_path).unwrap_or(ParserLanguage::JavaScript);
 
         let fixed_line =
             self.registry
@@ -537,7 +772,6 @@ impl RemediationEngine {
             splice_patch(original_content, vuln.line, &vuln.snippet, &fixed_indented);
 
         // Validate syntax — if the registry fix breaks syntax, fall through to LLM
-        let language = detect_language_name(&vuln.file_path);
         if !self.validate_syntax(&fixed_content, &language) {
             eprintln!(
                 "sicario: registry template '{}' produced invalid syntax for {} — falling back to LLM",
@@ -551,6 +785,79 @@ impl RemediationEngine {
         }
 
         Some(fixed_content)
+    }
+
+    /// Public wrapper for deterministic-only fix used by `--staged` mode.
+    ///
+    /// Tries the template registry (multi-line then single-line) and returns
+    /// `Some((fixed_content, template_name))` on success, `None` if no
+    /// deterministic template matched.
+    ///
+    /// This method NEVER calls the LLM — it is safe to use in pre-commit hooks
+    /// and CI pipelines where zero-exfiltration is required.
+    pub fn try_deterministic_fix(
+        &self,
+        vuln: &Vulnerability,
+        original_content: &str,
+    ) -> Option<(String, String)> {
+        let lang = ParserLanguage::from_path(&vuln.file_path).unwrap_or(ParserLanguage::JavaScript);
+
+        // ── Try multi-line template first ─────────────────────────────────────
+        if let Some(multi_tmpl) = self
+            .registry
+            .lookup_multi(&vuln.rule_id, vuln.cwe_id.as_deref())
+        {
+            if let Some(fixed_content) =
+                multi_tmpl.generate_multiline_patch(original_content, vuln.line, lang)
+            {
+                let language = detect_language_name(&vuln.file_path);
+                if self.validate_syntax(&fixed_content, &language) {
+                    return Some((fixed_content, multi_tmpl.name().to_string()));
+                }
+            }
+        }
+
+        // ── Try single-line template ──────────────────────────────────────────
+        let lines: Vec<&str> = original_content.lines().collect();
+        if lines.is_empty() {
+            return None;
+        }
+        let line_idx = vuln
+            .line
+            .saturating_sub(1)
+            .min(lines.len().saturating_sub(1));
+        let vulnerable_line = lines[line_idx];
+
+        let template = self
+            .registry
+            .lookup(&vuln.rule_id, vuln.cwe_id.as_deref())?;
+        let template_name = template.name().to_string();
+
+        let fixed_line =
+            self.registry
+                .apply(&vuln.rule_id, vuln.cwe_id.as_deref(), vulnerable_line, lang)?;
+
+        let original_indent: String = vulnerable_line
+            .chars()
+            .take_while(|c| c.is_whitespace())
+            .collect();
+        let fixed_indented = if !original_indent.is_empty()
+            && !fixed_line.starts_with(|c: char| c.is_whitespace())
+        {
+            format!("{original_indent}{fixed_line}")
+        } else {
+            fixed_line
+        };
+
+        let fixed_content =
+            splice_patch(original_content, vuln.line, &vuln.snippet, &fixed_indented);
+
+        let language = detect_language_name(&vuln.file_path);
+        if !self.validate_syntax(&fixed_content, &language) {
+            return None;
+        }
+
+        Some((fixed_content, template_name))
     }
 
     // ── Diff display and confirmation ─────────────────────────────────────────
@@ -1521,6 +1828,33 @@ fn strip_line_number_annotations(patch: &str) -> String {
         .join("\n")
 }
 
+/// Extract the `replacement` field from a local-model JSON response.
+///
+/// Local Ollama models respond with `{"replacement": "<fixed code>"}` rather
+/// than the XML `<sicario_patch>` protocol used by cloud models.
+///
+/// Returns `Err` if the response is not valid JSON or lacks the `replacement`
+/// field, so the retry loop can feed back a correction prompt.
+fn extract_json_replacement(response: &str) -> anyhow::Result<String> {
+    // Strip any markdown fences the model may have wrapped around the JSON
+    let cleaned = super::llm_client::strip_markdown_fences(response);
+
+    let value: serde_json::Value = serde_json::from_str(cleaned.trim())
+        .map_err(|e| anyhow::anyhow!("Response is not valid JSON: {e}"))?;
+
+    let replacement = value
+        .get("replacement")
+        .ok_or_else(|| anyhow::anyhow!("JSON response missing 'replacement' field"))?
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("'replacement' field is not a string"))?;
+
+    if replacement.is_empty() {
+        return Err(anyhow::anyhow!("'replacement' field is empty"));
+    }
+
+    Ok(replacement.to_string())
+}
+
 /// Compute a unified diff string between `original` and `fixed`.
 pub fn compute_unified_diff(filename: &str, original: &str, fixed: &str) -> String {
     let diff = TextDiff::from_lines(original, fixed);
@@ -1572,6 +1906,8 @@ mod tests {
             cloud_exposed: None,
             cwe_id: Some("CWE-89".to_string()),
             owasp_category: None,
+            confidence_score: 1.0,
+            suppressed: false,
             execution_trace: None,
         }
     }
@@ -1799,6 +2135,8 @@ mod tests {
             cloud_exposed: None,
             cwe_id: Some("CWE-89".to_string()),
             owasp_category: None,
+            confidence_score: 1.0,
+            suppressed: false,
             execution_trace: None,
         };
 
@@ -1831,6 +2169,8 @@ mod tests {
             cloud_exposed: None,
             cwe_id: Some("CWE-89".to_string()),
             owasp_category: None,
+            confidence_score: 1.0,
+            suppressed: false,
             execution_trace: None,
         };
 
@@ -1863,6 +2203,8 @@ mod tests {
             cloud_exposed: None,
             cwe_id: Some("CWE-79".to_string()),
             owasp_category: None,
+            confidence_score: 1.0,
+            suppressed: false,
             execution_trace: None,
         };
 
@@ -1892,6 +2234,8 @@ mod tests {
             cloud_exposed: None,
             cwe_id: Some("CWE-78".to_string()),
             owasp_category: None,
+            confidence_score: 1.0,
+            suppressed: false,
             execution_trace: None,
         };
 
@@ -1924,6 +2268,8 @@ mod tests {
             cloud_exposed: None,
             cwe_id: Some("CWE-999".to_string()),
             owasp_category: None,
+            confidence_score: 1.0,
+            suppressed: false,
             execution_trace: None,
         };
 
@@ -1952,6 +2298,8 @@ mod tests {
             cloud_exposed: None,
             cwe_id: Some("CWE-89".to_string()),
             owasp_category: None,
+            confidence_score: 1.0,
+            suppressed: false,
             execution_trace: None,
         };
         assert_eq!(classify_vulnerability(&vuln_sql), VulnType::SqlInjection);
@@ -1986,6 +2334,8 @@ mod tests {
             cloud_exposed: None,
             cwe_id: None,
             owasp_category: None,
+            confidence_score: 1.0,
+            suppressed: false,
             execution_trace: None,
         };
         assert_eq!(classify_vulnerability(&vuln), VulnType::SqlInjection);

@@ -47,6 +47,31 @@ impl PatchReceipt {
         }
     }
 
+    /// Create a receipt for a local agent (Ollama) patch.
+    ///
+    /// `tokens_burned` and `lines_exfiltrated` are always 0 — the local agent
+    /// calls only `http://127.0.0.1:11434` and no code leaves the machine.
+    ///
+    /// `template_used` is set to `"ollama-local (<model_name>)"` so the receipt
+    /// makes the zero-exfiltration guarantee visible.
+    pub fn local_agent(
+        rule_id: impl Into<String>,
+        file: impl Into<String>,
+        line: u32,
+        execution_ms: u128,
+        model_name: impl Into<String>,
+    ) -> Self {
+        Self {
+            rule_id: rule_id.into(),
+            file: file.into(),
+            line,
+            execution_ms,
+            tokens_burned: 0,
+            lines_exfiltrated: 0,
+            template_used: format!("ollama-local ({})", model_name.into()),
+        }
+    }
+
     /// Create a receipt for an AI Fallback patch (tokens and lines are non-zero).
     pub fn ai_fallback(
         rule_id: impl Into<String>,
@@ -244,6 +269,52 @@ mod tests {
                 "Each line should be exactly 48 chars wide, got {char_count} for: {line:?}"
             );
         }
+    }
+
+    /// Task 1.5: `local_agent` constructor always produces `tokens_burned: 0`
+    /// and `lines_exfiltrated: 0`.
+    #[test]
+    fn test_local_agent_constructor_zero_tokens_and_exfiltration() {
+        let receipt = PatchReceipt::local_agent(
+            "sql-injection",
+            "src/db/queries.js",
+            42,
+            150,
+            "qwen2.5-coder:7b",
+        );
+
+        assert_eq!(
+            receipt.tokens_burned, 0,
+            "local_agent patch must have tokens_burned = 0"
+        );
+        assert_eq!(
+            receipt.lines_exfiltrated, 0,
+            "local_agent patch must have lines_exfiltrated = 0"
+        );
+    }
+
+    /// Task 1.5: `local_agent` constructor sets `template_used` to
+    /// `"ollama-local (<model_name>)"`.
+    #[test]
+    fn test_local_agent_constructor_template_used() {
+        let receipt = PatchReceipt::local_agent(
+            "xss",
+            "src/views/render.py",
+            10,
+            200,
+            "deepseek-coder-v2:latest",
+        );
+
+        assert_eq!(
+            receipt.template_used,
+            "ollama-local (deepseek-coder-v2:latest)"
+        );
+        assert_eq!(receipt.rule_id, "xss");
+        assert_eq!(receipt.file, "src/views/render.py");
+        assert_eq!(receipt.line, 10);
+        assert_eq!(receipt.execution_ms, 200);
+        assert_eq!(receipt.tokens_burned, 0);
+        assert_eq!(receipt.lines_exfiltrated, 0);
     }
 
     /// Verify AI fallback receipt has non-zero tokens and exfiltration.

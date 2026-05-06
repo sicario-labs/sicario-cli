@@ -1,4 +1,4 @@
-﻿//! Web framework (Django, Flask, TLS, SSRF, React) patch templates.
+//! Web framework (Django, Flask, TLS, SSRF, React) patch templates.
 
 use super::helpers::*;
 use super::PatchTemplate;
@@ -792,7 +792,13 @@ mod sprint4_tests {
     fn test_aws_key_comment_injected() {
         let t = AwsHardcodedAccessKeyTemplate;
         let result = t
-            .generate_patch(&format!("    accessKeyId: '{}',", concat!("AKIA", "IOSFODNN7EXAMPLE")), js())
+            .generate_patch(
+                &format!(
+                    "    accessKeyId: '{}',",
+                    concat!("AKIA", "IOSFODNN7EXAMPLE")
+                ),
+                js(),
+            )
             .unwrap();
         assert!(result.contains("// SICARIO FIX (CWE-798)"));
         assert!(result.contains("IAM role"));

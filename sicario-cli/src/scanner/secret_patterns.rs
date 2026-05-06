@@ -222,7 +222,9 @@ mod tests {
             .find(|p| p.secret_type == SecretType::AwsAccessKey)
             .unwrap();
 
-        assert!(aws_pattern.regex.is_match(&format!("{}{}", "AKIA", "IOSFODNN7EXAMPLE")));
+        assert!(aws_pattern
+            .regex
+            .is_match(&format!("{}{}", "AKIA", "IOSFODNN7EXAMPLE")));
         assert!(aws_pattern.regex.is_match("AKIAIOSFODNN7EXAMPL2"));
         assert!(!aws_pattern.regex.is_match("NOTANAWSKEY12345678"));
         assert!(!aws_pattern.regex.is_match("AKIA123")); // too short

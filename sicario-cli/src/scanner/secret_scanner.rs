@@ -314,7 +314,12 @@ mod tests {
     fn test_scan_file_respects_suppression() {
         let mut f = tempfile::NamedTempFile::new().unwrap();
         writeln!(f, "// sicario-ignore-secret").unwrap();
-        writeln!(f, "const key = \"{}\";", concat!("AKIA", "IOSFODNN7EXAMPLE")).unwrap();
+        writeln!(
+            f,
+            "const key = \"{}\";",
+            concat!("AKIA", "IOSFODNN7EXAMPLE")
+        )
+        .unwrap();
         f.flush().unwrap();
 
         let scanner = create_scanner();
@@ -329,7 +334,12 @@ mod tests {
     #[test]
     fn test_scan_file_reports_unsuppressed_secrets() {
         let mut f = tempfile::NamedTempFile::new().unwrap();
-        writeln!(f, "const key = \"{}\";", concat!("AKIA", "IOSFODNN7EXAMPLE")).unwrap();
+        writeln!(
+            f,
+            "const key = \"{}\";",
+            concat!("AKIA", "IOSFODNN7EXAMPLE")
+        )
+        .unwrap();
         f.flush().unwrap();
 
         let scanner = create_scanner();
@@ -343,7 +353,10 @@ mod tests {
     #[test]
     fn test_line_numbers_are_correct() {
         let scanner = create_scanner();
-        let content = &format!("line1\nline2\nconst key = \"{}\";\nline4", concat!("AKIA", "IOSFODNN7EXAMPLE"));
+        let content = &format!(
+            "line1\nline2\nconst key = \"{}\";\nline4",
+            concat!("AKIA", "IOSFODNN7EXAMPLE")
+        );
         let secrets = scanner.scan_content_for_secrets(content, Path::new("test.js"));
         let aws = secrets
             .iter()
@@ -365,7 +378,11 @@ mod tests {
 
         // Create a file with a secret
         let secret_file = temp_dir.path().join("secrets.js");
-        std::fs::write(&secret_file, &format!("const key = \"{}\";", concat!("AKIA", "IOSFODNN7EXAMPLE"))).unwrap();
+        std::fs::write(
+            &secret_file,
+            &format!("const key = \"{}\";", concat!("AKIA", "IOSFODNN7EXAMPLE")),
+        )
+        .unwrap();
 
         // Stage and commit the file
         let mut index = repo.index().unwrap();

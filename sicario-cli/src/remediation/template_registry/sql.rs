@@ -208,34 +208,35 @@ impl MultiLinePatchTemplate for SqlAstRewriteTemplate {
 
 /// Find the deepest AST node whose range contains `target_row` (0-indexed).
 fn find_node_at_row<'a>(root: Node<'a>, target_row: usize) -> Option<Node<'a>> {
-    let mut cursor = root.walk();
-    let mut best: Option<Node<'a>> = None;
-
-    loop {
-        let node = cursor.node();
+    // Use a simple recursive descent: find the deepest node that spans target_row.
+    fn descend<'b>(node: Node<'b>, target_row: usize) -> Option<Node<'b>> {
         let start_row = node.start_position().row;
         let end_row = node.end_position().row;
 
-        if start_row <= target_row && target_row <= end_row {
-            best = Some(node);
-            if cursor.goto_first_child() {
-                continue;
+        // This node doesn't span the target row
+        if start_row > target_row || end_row < target_row {
+            return None;
+        }
+
+        // Try to find a deeper child that also spans the target row
+        let mut cursor = node.walk();
+        if cursor.goto_first_child() {
+            loop {
+                let child = cursor.node();
+                if let Some(deeper) = descend(child, target_row) {
+                    return Some(deeper);
+                }
+                if !cursor.goto_next_sibling() {
+                    break;
+                }
             }
         }
 
-        loop {
-            if cursor.goto_next_sibling() {
-                break;
-            }
-            if !cursor.goto_parent() {
-                return best;
-            }
-            let parent = cursor.node();
-            if parent.start_position().row > target_row {
-                return best;
-            }
-        }
+        // No child spans the target row — this node is the deepest match
+        Some(node)
     }
+
+    descend(root, target_row)
 }
 
 /// Walk up the AST from `node` to find the nearest `call_expression` whose

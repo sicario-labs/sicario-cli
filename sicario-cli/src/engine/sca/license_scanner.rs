@@ -68,19 +68,20 @@ pub fn classify_license(license: &str) -> LicenseRisk {
     // Normalise: strip whitespace, uppercase for comparison
     let normalised = license.trim().to_uppercase();
 
-    // HIGH tier — strong copyleft
-    const HIGH: &[&str] = &["GPL-2.0", "GPL-3.0", "AGPL-3.0", "SSPL-1.0", "EUPL-1.2"];
-    for h in HIGH {
-        if normalised.contains(h) {
-            return LicenseRisk::High;
-        }
-    }
-
-    // MEDIUM tier — weak copyleft
+    // MEDIUM tier checked FIRST — must precede HIGH to avoid LGPL matching GPL
+    // e.g. "LGPL-3.0" contains "GPL-3.0" as a substring, so HIGH must not match it
     const MEDIUM: &[&str] = &["LGPL-2.1", "LGPL-3.0", "MPL-2.0", "CDDL-1.0"];
     for m in MEDIUM {
         if normalised.contains(m) {
             return LicenseRisk::Medium;
+        }
+    }
+
+    // HIGH tier — strong copyleft (checked after LGPL to avoid false positives)
+    const HIGH: &[&str] = &["GPL-2.0", "GPL-3.0", "AGPL-3.0", "SSPL-1.0", "EUPL-1.2"];
+    for h in HIGH {
+        if normalised.contains(h) {
+            return LicenseRisk::High;
         }
     }
 

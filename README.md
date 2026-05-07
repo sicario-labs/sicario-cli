@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Security scanning that runs where your code lives. Your source never leaves your machine.</strong><br/>
-  SAST &nbsp;·&nbsp; SCA &nbsp;·&nbsp; Secret Detection &nbsp;·&nbsp; Reachability Analysis &nbsp;·&nbsp; AI Auto-Remediation
+  SAST &nbsp;·&nbsp; SCA &nbsp;·&nbsp; Secret Detection &nbsp;·&nbsp; Reachability Analysis &nbsp;·&nbsp; AI Auto-Remediation &nbsp;·&nbsp; PoC Generation &nbsp;·&nbsp; Supply-Chain Guard
 </p>
 
 <p align="center">
@@ -62,9 +62,9 @@ Sicario is different:
 - **Single binary, zero runtime.** One command installs it. No Python, no Node, no Docker.
 - **Fast.** Tree-sitter AST parsing + Rayon parallelism. Scans complete in seconds, not minutes.
 - **Low noise.** Data-flow reachability filters findings to exploitable paths only. Compiler-style output with source context — no wall of JSON.
-- **Fixes vulnerabilities.** AI remediation generates and applies patches. Template-based fallbacks work without an API key.
-- **Full stack.** SAST, SCA, and secret scanning in one tool. One command, one report.
-- **Zero exfiltration.** Analysis runs entirely on your machine. The cloud receives only structured finding metadata — never source code.
+- **Fixes vulnerabilities.** AI remediation generates and applies patches. `--agent=local` routes all LLM calls to a local Ollama instance — zero exfiltration, no API key needed. Template-based fallbacks work without any LLM.
+- **Full stack.** SAST, SCA, secret scanning, PoC generation, supply-chain guard, and git history rewriting in one tool. One command, one report.
+- **Zero exfiltration.** Analysis runs entirely on your machine. The cloud receives only structured finding metadata — never source code. The local AI path (`--agent=local`) never makes any external network call.
 
 ---
 
@@ -127,14 +127,41 @@ sicario scan . --format sarif --sarif-output results.sarif
 # AI-powered fix for a specific finding
 sicario fix src/db.js --rule js/sql-injection
 
-# AI-powered fix for all findings in a directory
-sicario fix src/ --rule js/sql-injection
+# Local AI fix using Ollama (zero exfiltration — no code leaves your machine)
+sicario fix src/db.js --rule js/sql-injection --agent=local
+
+# Fix all staged files before committing (deterministic templates only)
+sicario fix --staged
+
+# Install a pre-commit hook that auto-fixes on every commit
+sicario hook auto-fix
+
+# Generate a proof-of-concept exploit payload for a finding
+sicario scan . --prove
 
 # Generate an OWASP Top 10 compliance report
 sicario report .
 
+# Scan dependency licenses for copyleft risk
+sicario scan . --licenses
+
+# Continuous watch mode — re-scans on file save
+sicario scan . --watch
+
 # Interactive TUI
 sicario tui
+
+# Rewrite git history to remove hardcoded secrets
+sicario exorcise --dry-run
+
+# Compile a natural language description into a YAML rule
+sicario rule "detect eval() called with user input"
+
+# Shadow pen-tester — generate attack payloads for HTTP routes (dry run)
+sicario attack --dry-run src/
+
+# Monitor node_modules for supply-chain anomalies
+sicario guard scan node_modules/
 ```
 
 ---
@@ -146,21 +173,36 @@ sicario tui
 - **SAST** — 500+ rules across JavaScript/TypeScript, Python, Rust, Go, and Java. Rules are plain YAML — add a detector in minutes without recompiling.
 - **SCA** — dependency vulnerability matching via the OSV.dev database with a local SQLite cache. Parses `package.json`, `Cargo.toml`, and `requirements.txt`.
 - **Secret detection** — regex + entropy analysis with provider-specific verifiers.
-- **Data-flow reachability** — filters findings to paths reachable from external taint sources, dramatically reducing false positives.
+- **Data-flow reachability** — filters findings to paths reachable from external taint sources, dramatically reducing false positives. `--trace` prints the full call chain from source to sink.
 - **Cloud exposure analysis** — auto-detects Kubernetes manifests and escalates severity for publicly exposed services.
+- **Dependency license scanning** — classifies npm/PyPI licenses into HIGH/MEDIUM/LOW risk tiers with `--fail-on-license` CI gating.
 
 ### Remediation
 
-- Multi-provider AI code fixes (any OpenAI-compatible LLM endpoint, BYOK)
-- Template-based fallback fixes for SQL injection, XSS, and command injection — no API key required
-- Safe backup and rollback for every patch applied
-- Post-fix verification scan to confirm the vulnerability is resolved
+- **Local AI fixes (zero exfiltration)** — `--agent=local` routes fix calls to a local Ollama instance (`http://127.0.0.1:11434`). No source code leaves the machine. Supports `qwen2.5-coder`, `deepseek-coder`, and any other Ollama model.
+- **Multi-provider cloud AI fixes** — any OpenAI-compatible LLM endpoint, BYOK. 19 providers supported out of the box.
+- **Template-based fallback fixes** — SQL injection, XSS, command injection, and more — no API key required, sub-50ms application.
+- **AST-level SQL rewrite** — `SqlAstRewriteTemplate` rewrites string concatenation and template literal queries to parameterized form (`$1`, `$2`, …) using tree-sitter.
+- **Ghost Fix pre-commit hook** — `sicario hook auto-fix` installs a POSIX sh hook that auto-applies deterministic patches on every commit and blocks if unfixed Critical/High findings remain.
+- **`sicario fix --staged`** — restricts fixes to staged files only; JSON output for CI pipelines.
+- **Safe backup and rollback** — every patch is backed up before application; `sicario fix --revert <id>` restores the original.
+- **Post-fix verification** — re-scans after patching to confirm the vulnerability is resolved.
+
+### Security operations
+
+- **Proof-of-concept generation (`--prove`)** — generates targeted exploit payloads for SQL injection (time-based blind), SSRF (local probe listener), command injection, and path traversal. Consent prompt before any payload is printed; `--format json` adds a `poc` field to each finding.
+- **Git history rewriting (`sicario exorcise`)** — detects and removes hardcoded secrets from local git history. `--dry-run` shows what would change without touching the repo.
+- **Shadow pen-tester (`sicario attack --dry-run`)** — extracts HTTP routes from Express.js, FastAPI, and Flask source via AST analysis, then generates targeted attack payloads bound to each route parameter.
+- **Poison-pill interceptor (`sicario guard`)** — scans `node_modules/` for behavioral anomalies (dynamic `require()`, obfuscated `eval()`, hex-encoded payloads, etc.). Quarantines Critical packages. Persistent watch mode.
+- **NLP rule compiler (`sicario rule`)** — converts a natural language description into a validated tree-sitter `SecurityRule` via a two-stage Ollama pipeline.
 
 ### Reporting
 
 - Compiler-style diagnostic output with source context and span underlines
 - SARIF v2.1.0 for GitHub Code Scanning
 - OWASP Top 10 compliance report (JSON + Markdown)
+- MTTR tracking with trend indicators (`sicario report mttr`)
+- Compliance evidence export with remediation log and suppression audit
 - JSON export with accurate scan metadata
 
 ### Developer experience
@@ -168,9 +210,12 @@ sicario tui
 - Interactive TUI dashboard (Ratatui)
 - MCP server for AI assistant integration (Claude, Cursor, Kiro)
 - VS Code extension via Language Server Protocol
-- Git pre-commit hook integration
+- Git pre-commit hook integration (`sicario hook`)
+- Continuous watch mode (`sicario scan --watch`)
 - Shell completions (bash, zsh, fish, PowerShell)
 - OAuth 2.0 + PKCE device flow authentication
+- Policy-as-code enforcement (`.sicario/policy.yaml`)
+- Baseline management for diff-aware CI scanning
 
 ---
 
@@ -268,17 +313,29 @@ The backend runs on [Convex](https://convex.dev). The analysis always runs local
 | `scanner/` | Secret detection (patterns, entropy, provider verifiers) |
 | `output/` | Branded text tables, JSON, SARIF formatters, compiler-style diagnostics |
 | `remediation/` | AI-powered code fixes, backup manager, post-fix verification |
+| `remediation/template_registry/` | 50+ deterministic fix templates; `SqlAstRewriteTemplate` for AST-level SQL rewrites |
 | `tui/` | Interactive terminal UI with async message passing |
 | `auth/` | OAuth 2.0 device flow with PKCE, secure token storage |
 | `cloud/` | Cloud priority scoring, K8s/CSPM exposure analysis |
 | `mcp/` | Model Context Protocol server for AI assistants |
 | `cli/` | Clap command definitions, exit codes, shell completions |
-| `reporting/` | OWASP Top 10 compliance report generation |
+| `reporting/` | OWASP Top 10 compliance report, MTTR tracking |
 | `baseline/` | Finding baseline management for diff-aware scanning |
 | `confidence/` | Per-finding confidence scoring |
 | `diff/` | Git-aware diff scanning |
 | `convex/` | Telemetry and cloud sync |
 | `publish/` | Scan result publishing to Sicario Cloud |
+| `poc/` | Proof-of-concept exploit payload generation |
+| `exorcist/` | Git history rewriting to remove hardcoded secrets |
+| `attack/` | Shadow pen-tester — HTTP route extraction and payload generation |
+| `guard/` | Poison-pill interceptor — `node_modules/` behavioral anomaly detection |
+| `hook/` | Git pre-commit hook management (standard + Ghost Fix auto-fix) |
+| `audit/` | Suppression audit log with git blame attribution |
+| `notifications/` | Server-side release notifications with seen-ID deduplication |
+| `policy/` | Policy-as-code enforcement from `.sicario/policy.yaml` |
+| `key_manager/` | 19-provider LLM key resolution with OS keyring integration |
+| `lsp/` | Language Server Protocol server for IDE integration |
+| `rule_compiler/` | NLP-to-AST rule compiler via Ollama two-stage pipeline |
 
 </details>
 

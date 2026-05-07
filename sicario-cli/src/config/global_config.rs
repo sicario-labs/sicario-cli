@@ -243,6 +243,33 @@ fn dirs_home() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    /// Serializes all tests that mutate HOME / USERPROFILE env vars.
+    /// Rust test threads run in parallel by default; without this lock,
+    /// two tests can stomp on each other's env-var state mid-execution.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    /// Set HOME and USERPROFILE to `path`, run `f`, then restore originals.
+    fn with_home<F: FnOnce()>(path: &std::path::Path, f: F) {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let original_home = std::env::var("HOME").ok();
+        let original_userprofile = std::env::var("USERPROFILE").ok();
+
+        std::env::set_var("HOME", path);
+        std::env::set_var("USERPROFILE", path);
+
+        f();
+
+        match original_home {
+            Some(h) => std::env::set_var("HOME", h),
+            None => std::env::remove_var("HOME"),
+        }
+        match original_userprofile {
+            Some(p) => std::env::set_var("USERPROFILE", p),
+            None => std::env::remove_var("USERPROFILE"),
+        }
+    }
 
     #[test]
     fn test_global_config_roundtrip() {
@@ -262,91 +289,44 @@ mod tests {
 
     #[test]
     fn test_set_global_config_value_rejects_unknown_key() {
-        // We can't write to the real home dir in tests, but we can verify
-        // that unknown keys are rejected before any I/O happens.
-        // Set both HOME and USERPROFILE so dirs_home() resolves to the temp dir
-        // on both Unix and Windows.
         let tmp = tempfile::tempdir().unwrap();
-        let original_home = std::env::var("HOME").ok();
-        let original_userprofile = std::env::var("USERPROFILE").ok();
-
-        std::env::set_var("HOME", tmp.path());
-        std::env::set_var("USERPROFILE", tmp.path());
-        let result = set_global_config_value("UNKNOWN_KEY", "value");
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Unknown config key"));
-
-        // Restore HOME / USERPROFILE
-        match original_home {
-            Some(h) => std::env::set_var("HOME", h),
-            None => std::env::remove_var("HOME"),
-        }
-        match original_userprofile {
-            Some(p) => std::env::set_var("USERPROFILE", p),
-            None => std::env::remove_var("USERPROFILE"),
-        }
+        with_home(tmp.path(), || {
+            let result = set_global_config_value("UNKNOWN_KEY", "value");
+            assert!(result.is_err());
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("Unknown config key"));
+        });
     }
 
     #[test]
     fn test_set_and_load_global_config() {
         let tmp = tempfile::tempdir().unwrap();
-        let original_home = std::env::var("HOME").ok();
-        let original_userprofile = std::env::var("USERPROFILE").ok();
-
-        // Set both HOME and USERPROFILE so dirs_home() resolves to the temp dir
-        // on both Unix and Windows.
-        std::env::set_var("HOME", tmp.path());
-        std::env::set_var("USERPROFILE", tmp.path());
-
-        set_global_config_value("ANTHROPIC_API_KEY", "sk-ant-test123").unwrap();
-        let loaded = load_global_config().unwrap();
-        assert_eq!(loaded.anthropic_api_key.as_deref(), Some("sk-ant-test123"));
-
-        // Restore HOME / USERPROFILE
-        match original_home {
-            Some(h) => std::env::set_var("HOME", h),
-            None => std::env::remove_var("HOME"),
-        }
-        match original_userprofile {
-            Some(p) => std::env::set_var("USERPROFILE", p),
-            None => std::env::remove_var("USERPROFILE"),
-        }
+        with_home(tmp.path(), || {
+            set_global_config_value("ANTHROPIC_API_KEY", "sk-ant-test123").unwrap();
+            let loaded = load_global_config().unwrap();
+            assert_eq!(loaded.anthropic_api_key.as_deref(), Some("sk-ant-test123"));
+        });
     }
 
     #[test]
     fn test_set_no_telemetry_true_persists_to_config() {
         let tmp = tempfile::tempdir().unwrap();
-        let original_home = std::env::var("HOME").ok();
-        let original_userprofile = std::env::var("USERPROFILE").ok();
+        with_home(tmp.path(), || {
+            set_global_config_value("no_telemetry", "true").unwrap();
+            let loaded = load_global_config().unwrap();
+            assert_eq!(
+                loaded.no_telemetry,
+                Some(true),
+                "no_telemetry should be Some(true) after set_global_config_value(\"no_telemetry\", \"true\")"
+            );
 
-        std::env::set_var("HOME", tmp.path());
-        std::env::set_var("USERPROFILE", tmp.path());
-
-        set_global_config_value("no_telemetry", "true").unwrap();
-        let loaded = load_global_config().unwrap();
-        assert_eq!(
-            loaded.no_telemetry,
-            Some(true),
-            "no_telemetry should be Some(true) after set_global_config_value(\"no_telemetry\", \"true\")"
-        );
-
-        // Also verify false round-trips correctly
-        set_global_config_value("no_telemetry", "false").unwrap();
-        let loaded2 = load_global_config().unwrap();
-        assert_eq!(loaded2.no_telemetry, Some(false));
-
-        // Restore HOME / USERPROFILE
-        match original_home {
-            Some(h) => std::env::set_var("HOME", h),
-            None => std::env::remove_var("HOME"),
-        }
-        match original_userprofile {
-            Some(p) => std::env::set_var("USERPROFILE", p),
-            None => std::env::remove_var("USERPROFILE"),
-        }
+            // Also verify false round-trips correctly
+            set_global_config_value("no_telemetry", "false").unwrap();
+            let loaded2 = load_global_config().unwrap();
+            assert_eq!(loaded2.no_telemetry, Some(false));
+        });
     }
 
     #[test]
@@ -402,51 +382,33 @@ mod tests {
         use crate::key_manager::provider_registry::find_provider;
 
         let tmp = tempfile::tempdir().unwrap();
-        let original_home = std::env::var("HOME").ok();
-        let original_userprofile = std::env::var("USERPROFILE").ok();
+        with_home(tmp.path(), || {
+            let preset =
+                find_provider("anthropic").expect("anthropic provider must exist in registry");
 
-        // Point HOME to a temp dir so we don't touch the real ~/.sicario/config.toml
-        std::env::set_var("HOME", tmp.path());
-        std::env::set_var("USERPROFILE", tmp.path());
+            set_global_config_value("llm_endpoint", preset.endpoint).unwrap();
+            set_global_config_value("llm_model", preset.default_model).unwrap();
 
-        // Look up the anthropic preset from the registry
-        let preset = find_provider("anthropic").expect("anthropic provider must exist in registry");
+            let loaded =
+                load_global_config().expect("config.toml should exist after set-provider");
 
-        // Simulate what `sicario config set-provider anthropic` does:
-        // write llm_endpoint and llm_model to ~/.sicario/config.toml
-        set_global_config_value("llm_endpoint", preset.endpoint).unwrap();
-        set_global_config_value("llm_model", preset.default_model).unwrap();
+            assert_eq!(
+                loaded.llm_endpoint.as_deref(),
+                Some("https://api.anthropic.com/v1"),
+                "llm_endpoint should be the Anthropic API base URL"
+            );
+            assert_eq!(
+                loaded.llm_model.as_deref(),
+                Some("claude-opus-4-5"),
+                "llm_model should be the Anthropic default model"
+            );
 
-        // Load the written config and verify the values
-        let loaded = load_global_config().expect("config.toml should exist after set-provider");
-
-        assert_eq!(
-            loaded.llm_endpoint.as_deref(),
-            Some("https://api.anthropic.com/v1"),
-            "llm_endpoint should be the Anthropic API base URL"
-        );
-        assert_eq!(
-            loaded.llm_model.as_deref(),
-            Some("claude-opus-4-5"),
-            "llm_model should be the Anthropic default model"
-        );
-
-        // Verify the config file was written to the correct path
-        let config_path = tmp.path().join(".sicario").join("config.toml");
-        assert!(
-            config_path.exists(),
-            "config.toml should be written to ~/.sicario/config.toml"
-        );
-
-        // Restore HOME / USERPROFILE
-        match original_home {
-            Some(h) => std::env::set_var("HOME", h),
-            None => std::env::remove_var("HOME"),
-        }
-        match original_userprofile {
-            Some(p) => std::env::set_var("USERPROFILE", p),
-            None => std::env::remove_var("USERPROFILE"),
-        }
+            let config_path = tmp.path().join(".sicario").join("config.toml");
+            assert!(
+                config_path.exists(),
+                "config.toml should be written to ~/.sicario/config.toml"
+            );
+        });
     }
 
     /// Integration test: unknown provider name prints error and returns exit code 2.

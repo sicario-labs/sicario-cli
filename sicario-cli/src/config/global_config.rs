@@ -389,8 +389,7 @@ mod tests {
             set_global_config_value("llm_endpoint", preset.endpoint).unwrap();
             set_global_config_value("llm_model", preset.default_model).unwrap();
 
-            let loaded =
-                load_global_config().expect("config.toml should exist after set-provider");
+            let loaded = load_global_config().expect("config.toml should exist after set-provider");
 
             assert_eq!(
                 loaded.llm_endpoint.as_deref(),

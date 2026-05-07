@@ -100,7 +100,7 @@ fn git_blame_porcelain(
 /// `(author_email, commit_sha, committed_at)`.
 ///
 /// Porcelain format (first block):
-/// ```
+/// ```text
 /// <commit-sha> <orig-line> <final-line> <num-lines>
 /// author <name>
 /// author-mail <email>

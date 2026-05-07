@@ -207,36 +207,50 @@ impl MultiLinePatchTemplate for SqlAstRewriteTemplate {
 // ── AST helpers ───────────────────────────────────────────────────────────────
 
 /// Find the deepest AST node whose range contains `target_row` (0-indexed).
+///
+/// Uses an iterative cursor walk: descend into children as long as they span
+/// the target row, tracking the last matching node as `best`. This is the
+/// canonical approach for tree-sitter node lookup by line.
+///
+/// Skips punctuation-only nodes (`;`, `,`, `(`, `)`, etc.) so that the
+/// returned node is always a meaningful expression or statement node.
 fn find_node_at_row<'a>(root: Node<'a>, target_row: usize) -> Option<Node<'a>> {
-    // Use a simple recursive descent: find the deepest node that spans target_row.
-    fn descend<'b>(node: Node<'b>, target_row: usize) -> Option<Node<'b>> {
+    let mut cursor = root.walk();
+    let mut best: Option<Node<'a>> = None;
+
+    loop {
+        let node = cursor.node();
         let start_row = node.start_position().row;
         let end_row = node.end_position().row;
 
-        // This node doesn't span the target row
-        if start_row > target_row || end_row < target_row {
-            return None;
-        }
-
-        // Try to find a deeper child that also spans the target row
-        let mut cursor = node.walk();
-        if cursor.goto_first_child() {
-            loop {
-                let child = cursor.node();
-                if let Some(deeper) = descend(child, target_row) {
-                    return Some(deeper);
-                }
-                if !cursor.goto_next_sibling() {
-                    break;
-                }
+        if start_row <= target_row && target_row <= end_row {
+            // Only track this node as `best` if it's not a bare punctuation token.
+            // Punctuation tokens (`;`, `,`, `(`, `)`, `{`, `}`) are leaf nodes
+            // whose parent chain doesn't pass through the call_expression we need.
+            let kind = node.kind();
+            let is_punctuation = matches!(kind, ";" | "," | "(" | ")" | "{" | "}" | "[" | "]");
+            if !is_punctuation {
+                best = Some(node);
+            }
+            if cursor.goto_first_child() {
+                continue;
             }
         }
 
-        // No child spans the target row — this node is the deepest match
-        Some(node)
+        // Can't go deeper — try next sibling, then backtrack
+        loop {
+            if cursor.goto_next_sibling() {
+                break;
+            }
+            if !cursor.goto_parent() {
+                return best;
+            }
+            let parent = cursor.node();
+            if parent.start_position().row > target_row {
+                return best;
+            }
+        }
     }
-
-    descend(root, target_row)
 }
 
 /// Walk up the AST from `node` to find the nearest `call_expression` whose

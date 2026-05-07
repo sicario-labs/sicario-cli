@@ -239,7 +239,35 @@ fn seen_notifications_path() -> Option<PathBuf> {
 mod tests {
     use super::*;
     use std::io::Write;
+    use std::sync::Mutex;
     use tempfile::TempDir;
+
+    /// Serializes all tests that mutate HOME / USERPROFILE env vars.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    /// Set HOME (and USERPROFILE on Windows) to `path`, run `f`, then restore.
+    fn with_home<F: FnOnce()>(path: &std::path::Path, f: F) {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let original_home = std::env::var("HOME").ok();
+        #[cfg(windows)]
+        let original_userprofile = std::env::var("USERPROFILE").ok();
+
+        std::env::set_var("HOME", path);
+        #[cfg(windows)]
+        std::env::set_var("USERPROFILE", path);
+
+        f();
+
+        match original_home {
+            Some(h) => std::env::set_var("HOME", h),
+            None => std::env::remove_var("HOME"),
+        }
+        #[cfg(windows)]
+        match original_userprofile {
+            Some(p) => std::env::set_var("USERPROFILE", p),
+            None => std::env::remove_var("USERPROFILE"),
+        }
+    }
 
     fn make_notification(id: &str, severity: NotificationSeverity) -> Notification {
         Notification {
@@ -341,38 +369,30 @@ mod tests {
     #[test]
     fn test_mark_seen_and_load_seen_ids() {
         let tmp = TempDir::new().unwrap();
-        let tmp_path = tmp.path().to_str().unwrap().to_string();
-
-        // Override HOME so seen_notifications_path() resolves into the temp dir
-        std::env::set_var("HOME", &tmp_path);
-
-        let notifications = vec![
-            make_notification("notif-1", NotificationSeverity::Info),
-            make_notification("notif-2", NotificationSeverity::Warning),
-        ];
-
-        mark_seen(&notifications);
-
-        let seen = load_seen_ids();
-        assert!(seen.contains("notif-1"), "notif-1 should be in seen IDs");
-        assert!(seen.contains("notif-2"), "notif-2 should be in seen IDs");
-        assert_eq!(seen.len(), 2);
+        with_home(tmp.path(), || {
+            let notifications = vec![
+                make_notification("notif-1", NotificationSeverity::Info),
+                make_notification("notif-2", NotificationSeverity::Warning),
+            ];
+            mark_seen(&notifications);
+            let seen = load_seen_ids();
+            assert!(seen.contains("notif-1"), "notif-1 should be in seen IDs");
+            assert!(seen.contains("notif-2"), "notif-2 should be in seen IDs");
+            assert_eq!(seen.len(), 2);
+        });
     }
 
     /// `mark_seen` is idempotent — calling it twice doesn't duplicate IDs.
     #[test]
     fn test_mark_seen_idempotent() {
         let tmp = TempDir::new().unwrap();
-        let tmp_path = tmp.path().to_str().unwrap().to_string();
-        std::env::set_var("HOME", &tmp_path);
-
-        let notifications = vec![make_notification("notif-dup", NotificationSeverity::Info)];
-
-        mark_seen(&notifications);
-        mark_seen(&notifications);
-
-        let seen = load_seen_ids();
-        assert_eq!(seen.len(), 1, "Duplicate IDs should not be stored");
+        with_home(tmp.path(), || {
+            let notifications = vec![make_notification("notif-dup", NotificationSeverity::Info)];
+            mark_seen(&notifications);
+            mark_seen(&notifications);
+            let seen = load_seen_ids();
+            assert_eq!(seen.len(), 1, "Duplicate IDs should not be stored");
+        });
     }
 
     /// `mark_seen` with unwritable path → no panic, no error output.
@@ -415,47 +435,43 @@ mod tests {
     #[test]
     fn test_fetch_notifications_filters_seen_ids() {
         let tmp = TempDir::new().unwrap();
-        let tmp_path = tmp.path().to_str().unwrap().to_string();
-        std::env::set_var("HOME", &tmp_path);
+        with_home(tmp.path(), || {
+            // Write a seen_notifications.json with "already-seen"
+            let sicario_dir = tmp.path().join(".sicario");
+            std::fs::create_dir_all(&sicario_dir).unwrap();
+            let seen_path = sicario_dir.join("seen_notifications.json");
+            std::fs::write(&seen_path, r#"["already-seen"]"#).unwrap();
 
-        // Write a seen_notifications.json with "already-seen"
-        let sicario_dir = tmp.path().join(".sicario");
-        std::fs::create_dir_all(&sicario_dir).unwrap();
-        let seen_path = sicario_dir.join("seen_notifications.json");
-        std::fs::write(&seen_path, r#"["already-seen"]"#).unwrap();
+            let seen = load_seen_ids();
+            assert!(seen.contains("already-seen"));
 
-        // Verify load_seen_ids picks it up
-        let seen = load_seen_ids();
-        assert!(seen.contains("already-seen"));
+            let notifications = vec![
+                Notification {
+                    id: "already-seen".to_string(),
+                    message: "Old notification".to_string(),
+                    severity: NotificationSeverity::Info,
+                    min_version: None,
+                    max_version: None,
+                    url: None,
+                },
+                Notification {
+                    id: "new-notif".to_string(),
+                    message: "New notification".to_string(),
+                    severity: NotificationSeverity::Warning,
+                    min_version: None,
+                    max_version: None,
+                    url: None,
+                },
+            ];
 
-        // Simulate the filtering logic: a notification with id "already-seen"
-        // should be excluded
-        let notifications = vec![
-            Notification {
-                id: "already-seen".to_string(),
-                message: "Old notification".to_string(),
-                severity: NotificationSeverity::Info,
-                min_version: None,
-                max_version: None,
-                url: None,
-            },
-            Notification {
-                id: "new-notif".to_string(),
-                message: "New notification".to_string(),
-                severity: NotificationSeverity::Warning,
-                min_version: None,
-                max_version: None,
-                url: None,
-            },
-        ];
+            let filtered: Vec<_> = notifications
+                .into_iter()
+                .filter(|n| !seen.contains(&n.id))
+                .collect();
 
-        let filtered: Vec<_> = notifications
-            .into_iter()
-            .filter(|n| !seen.contains(&n.id))
-            .collect();
-
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].id, "new-notif");
+            assert_eq!(filtered.len(), 1);
+            assert_eq!(filtered[0].id, "new-notif");
+        });
     }
 
     /// `fetch_notifications` filters out notifications outside version range.
@@ -559,34 +575,33 @@ mod tests {
     #[test]
     fn test_load_seen_ids_missing_file() {
         let tmp = TempDir::new().unwrap();
-        std::env::set_var("HOME", tmp.path().to_str().unwrap());
-
-        let seen = load_seen_ids();
-        assert!(
-            seen.is_empty(),
-            "Should return empty set when file doesn't exist"
-        );
+        with_home(tmp.path(), || {
+            let seen = load_seen_ids();
+            assert!(
+                seen.is_empty(),
+                "Should return empty set when file doesn't exist"
+            );
+        });
     }
 
     /// `load_seen_ids` returns empty set when file contains invalid JSON.
     #[test]
     fn test_load_seen_ids_invalid_json() {
         let tmp = TempDir::new().unwrap();
-        std::env::set_var("HOME", tmp.path().to_str().unwrap());
-
-        let sicario_dir = tmp.path().join(".sicario");
-        std::fs::create_dir_all(&sicario_dir).unwrap();
-        std::fs::write(
-            sicario_dir.join("seen_notifications.json"),
-            "not valid json",
-        )
-        .unwrap();
-
-        let seen = load_seen_ids();
-        assert!(
-            seen.is_empty(),
-            "Should return empty set on JSON parse error"
-        );
+        with_home(tmp.path(), || {
+            let sicario_dir = tmp.path().join(".sicario");
+            std::fs::create_dir_all(&sicario_dir).unwrap();
+            std::fs::write(
+                sicario_dir.join("seen_notifications.json"),
+                "not valid json",
+            )
+            .unwrap();
+            let seen = load_seen_ids();
+            assert!(
+                seen.is_empty(),
+                "Should return empty set on JSON parse error"
+            );
+        });
     }
 
     // ── Integration tests: mock HTTP server ───────────────────────────────
@@ -628,34 +643,27 @@ mod tests {
     #[test]
     fn test_integration_fetch_then_mark_seen() {
         let tmp = TempDir::new().unwrap();
-        let tmp_path = tmp.path().to_str().unwrap().to_string();
-        std::env::set_var("HOME", &tmp_path);
+        with_home(tmp.path(), || {
+            let body = r#"[{"id":"integ-notif-1","message":"Integration test notification","severity":"info","min_version":null,"max_version":null,"url":null}]"#;
+            let port = start_mock_server_once(body);
+            std::env::set_var("SICARIO_CLOUD_URL", format!("http://127.0.0.1:{}", port));
 
-        // Serve a single notification with no version constraints
-        let body = r#"[{"id":"integ-notif-1","message":"Integration test notification","severity":"info","min_version":null,"max_version":null,"url":null}]"#;
-        let port = start_mock_server_once(body);
+            let notifications = fetch_notifications();
+            assert_eq!(
+                notifications.len(),
+                1,
+                "Should receive exactly one notification from mock server"
+            );
+            assert_eq!(notifications[0].id, "integ-notif-1");
 
-        // Point the client at our mock server
-        std::env::set_var("SICARIO_CLOUD_URL", format!("http://127.0.0.1:{}", port));
+            mark_seen(&notifications);
 
-        // First fetch: should return the notification (not yet seen)
-        let notifications = fetch_notifications();
-        assert_eq!(
-            notifications.len(),
-            1,
-            "Should receive exactly one notification from mock server"
-        );
-        assert_eq!(notifications[0].id, "integ-notif-1");
-
-        // Mark it as seen
-        mark_seen(&notifications);
-
-        // Verify it is now recorded in seen_notifications.json
-        let seen = load_seen_ids();
-        assert!(
-            seen.contains("integ-notif-1"),
-            "Notification should be recorded as seen after mark_seen"
-        );
+            let seen = load_seen_ids();
+            assert!(
+                seen.contains("integ-notif-1"),
+                "Notification should be recorded as seen after mark_seen"
+            );
+        });
     }
 
     /// Integration test: second run — notification already in seen_notifications.json
@@ -665,29 +673,26 @@ mod tests {
     #[test]
     fn test_integration_second_run_notification_not_shown() {
         let tmp = TempDir::new().unwrap();
-        let tmp_path = tmp.path().to_str().unwrap().to_string();
-        std::env::set_var("HOME", &tmp_path);
+        with_home(tmp.path(), || {
+            // Pre-populate seen_notifications.json with the notification ID
+            let sicario_dir = tmp.path().join(".sicario");
+            std::fs::create_dir_all(&sicario_dir).unwrap();
+            std::fs::write(
+                sicario_dir.join("seen_notifications.json"),
+                r#"["integ-notif-2"]"#,
+            )
+            .unwrap();
 
-        // Pre-populate seen_notifications.json with the notification ID
-        let sicario_dir = tmp.path().join(".sicario");
-        std::fs::create_dir_all(&sicario_dir).unwrap();
-        std::fs::write(
-            sicario_dir.join("seen_notifications.json"),
-            r#"["integ-notif-2"]"#,
-        )
-        .unwrap();
+            let body = r#"[{"id":"integ-notif-2","message":"Already seen notification","severity":"warning","min_version":null,"max_version":null,"url":null}]"#;
+            let port = start_mock_server_once(body);
+            std::env::set_var("SICARIO_CLOUD_URL", format!("http://127.0.0.1:{}", port));
 
-        // Serve the same notification again
-        let body = r#"[{"id":"integ-notif-2","message":"Already seen notification","severity":"warning","min_version":null,"max_version":null,"url":null}]"#;
-        let port = start_mock_server_once(body);
-        std::env::set_var("SICARIO_CLOUD_URL", format!("http://127.0.0.1:{}", port));
-
-        // Second fetch: should be filtered out because it's already seen
-        let notifications = fetch_notifications();
-        assert!(
-            notifications.is_empty(),
-            "Already-seen notification should not be returned on second run"
-        );
+            let notifications = fetch_notifications();
+            assert!(
+                notifications.is_empty(),
+                "Already-seen notification should not be returned on second run"
+            );
+        });
     }
 
     /// Integration test: `--quiet` suppression is enforced at the call site.

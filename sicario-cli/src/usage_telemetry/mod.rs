@@ -25,8 +25,6 @@ pub fn fire_usage_ping() {
     }
 
     // Opt-out: GlobalConfig::no_telemetry == Some(true)
-    // (The `no_telemetry` field is added in task 13.2; guard with a helper
-    //  that returns false when the field is absent so this compiles today.)
     if global_config_no_telemetry() {
         return;
     }
@@ -36,12 +34,29 @@ pub fn fire_usage_ping() {
     });
 }
 
+/// Fire a usage ping with extended metadata (Task 75.2).
+/// Includes hook_installed, vuln_db_version, and scan_type.
+pub fn fire_usage_ping_extended(
+    hook_installed: bool,
+    vuln_db_version: Option<String>,
+    scan_type: &str,
+) {
+    if std::env::var("SICARIO_NO_TELEMETRY").is_ok() {
+        return;
+    }
+    if global_config_no_telemetry() {
+        return;
+    }
+
+    let scan_type = scan_type.to_string();
+    std::thread::spawn(move || {
+        let _ = send_usage_ping_extended(hook_installed, vuln_db_version, &scan_type);
+    });
+}
+
 // ── Private implementation ────────────────────────────────────────────────────
 
 /// Build and POST the usage payload.  Returns `None` on any failure.
-///
-/// This function never panics and never logs — all errors are silently
-/// discarded so a broken telemetry endpoint can never affect the scan.
 fn send_usage_ping() -> Option<()> {
     use crate::publish::resolve_cloud_url;
 
@@ -63,7 +78,41 @@ fn send_usage_ping() -> Option<()> {
         .build()
         .ok()?;
 
-    // Fire and forget — ignore response body and status code entirely.
+    let _ = client.post(&endpoint).json(&payload).send();
+
+    Some(())
+}
+
+/// Task 75.2: Extended usage ping with hook_installed, vuln_db_version, scan_type.
+fn send_usage_ping_extended(
+    hook_installed: bool,
+    vuln_db_version: Option<String>,
+    scan_type: &str,
+) -> Option<()> {
+    use crate::publish::resolve_cloud_url;
+
+    let project_hash = compute_project_hash();
+    let environment = detect_environment();
+    let cli_version = env!("CARGO_PKG_VERSION");
+
+    let payload = serde_json::json!({
+        "event": "scan_run",
+        "environment": environment,
+        "project_hash": project_hash,
+        "cli_version": cli_version,
+        // Task 75.1 extended fields — all anonymous, no user/org/file data
+        "hook_installed": hook_installed,
+        "vuln_db_version": vuln_db_version,
+        "scan_type": scan_type,
+    });
+
+    let endpoint = format!("{}/api/v1/usage", resolve_cloud_url());
+
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .ok()?;
+
     let _ = client.post(&endpoint).json(&payload).send();
 
     Some(())

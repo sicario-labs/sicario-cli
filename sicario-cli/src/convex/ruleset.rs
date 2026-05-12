@@ -83,6 +83,7 @@ mod tests {
             owasp_category: None,
             help_uri: None,
             test_cases: None,
+            confidence: crate::engine::security_rule::ConfidenceLevel::High,
         }
     }
 

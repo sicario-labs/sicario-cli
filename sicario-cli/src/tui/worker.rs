@@ -135,6 +135,7 @@ mod tests {
   name: "Test Rule"
   description: "Matches identifiers"
   severity: Medium
+  confidence: high
   languages:
     - JavaScript
   pattern:
@@ -204,7 +205,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let rule_file = write_rule_file(temp_dir.path());
 
-        fs::write(temp_dir.path().join("app.js"), "const secret = 'value';").unwrap();
+        fs::write(temp_dir.path().join("app.js"), "var mySecretId = 'value';").unwrap();
 
         let (tx, rx) = mpsc::channel();
         let job = ScanJob {

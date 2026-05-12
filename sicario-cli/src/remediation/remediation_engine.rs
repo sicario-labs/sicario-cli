@@ -567,6 +567,8 @@ impl RemediationEngine {
 
         if rules_dir.exists() {
             load_yaml_rules_recursive(&mut eng, &rules_dir);
+        } else {
+            eng.load_default_rules();
         }
 
         let findings = eng.scan_file(tmp.path())?;
@@ -754,22 +756,9 @@ impl RemediationEngine {
             self.registry
                 .apply(&vuln.rule_id, vuln.cwe_id.as_deref(), vulnerable_line, lang)?;
 
-        // Re-apply original indentation if the template stripped it
-        let original_indent: String = vulnerable_line
-            .chars()
-            .take_while(|c| c.is_whitespace())
-            .collect();
-        let fixed_indented = if !original_indent.is_empty()
-            && !fixed_line.starts_with(|c: char| c.is_whitespace())
-        {
-            format!("{original_indent}{fixed_line}")
-        } else {
-            fixed_line
-        };
-
-        // Splice the fixed line back into the full file
+        // Splice the fixed line back into the full file — splice_patch automatically applies original indentation
         let fixed_content =
-            splice_patch(original_content, vuln.line, &vuln.snippet, &fixed_indented);
+            splice_patch(original_content, vuln.line, &vuln.snippet, &fixed_line);
 
         // Validate syntax — if the registry fix breaks syntax, fall through to LLM
         if !self.validate_syntax(&fixed_content, &language) {
@@ -1894,22 +1883,17 @@ mod tests {
     use uuid::Uuid;
 
     fn make_vuln(file_path: PathBuf, line: usize, snippet: &str) -> Vulnerability {
-        Vulnerability {
-            id: Uuid::new_v4(),
-            rule_id: "sql-injection".to_string(),
+        let mut v = Vulnerability::new(
+            "sql-injection".to_string(),
             file_path,
             line,
-            column: 0,
-            snippet: snippet.to_string(),
-            severity: Severity::High,
-            reachable: true,
-            cloud_exposed: None,
-            cwe_id: Some("CWE-89".to_string()),
-            owasp_category: None,
-            confidence_score: 1.0,
-            suppressed: false,
-            execution_trace: None,
-        }
+            0,
+            snippet.to_string(),
+            Severity::High,
+        );
+        v.reachable = true;
+        v.cwe_id = Some("CWE-89".to_string());
+        v
     }
 
     #[test]
@@ -2123,22 +2107,16 @@ mod tests {
         let engine = RemediationEngine::new(dir.path()).unwrap();
 
         let original = "query = 'SELECT * FROM users WHERE id = ' + user_id\n";
-        let vuln = Vulnerability {
-            id: Uuid::new_v4(),
-            rule_id: "sql-injection".to_string(),
-            file_path: PathBuf::from("app.py"),
-            line: 1,
-            column: 0,
-            snippet: original.to_string(),
-            severity: Severity::High,
-            reachable: true,
-            cloud_exposed: None,
-            cwe_id: Some("CWE-89".to_string()),
-            owasp_category: None,
-            confidence_score: 1.0,
-            suppressed: false,
-            execution_trace: None,
-        };
+        let mut vuln = Vulnerability::new(
+            "sql-injection".to_string(),
+            PathBuf::from("app.py"),
+            1,
+            0,
+            original.to_string(),
+            Severity::High,
+        );
+        vuln.reachable = true;
+        vuln.cwe_id = Some("CWE-89".to_string());
 
         let fixed = engine.apply_template_fix(original, &vuln);
         assert_ne!(
@@ -2157,22 +2135,16 @@ mod tests {
         let engine = RemediationEngine::new(dir.path()).unwrap();
 
         let original = "const q = \"SELECT * FROM users WHERE id = \" + userId;\n";
-        let vuln = Vulnerability {
-            id: Uuid::new_v4(),
-            rule_id: "sql-injection".to_string(),
-            file_path: PathBuf::from("app.js"),
-            line: 1,
-            column: 0,
-            snippet: original.to_string(),
-            severity: Severity::High,
-            reachable: true,
-            cloud_exposed: None,
-            cwe_id: Some("CWE-89".to_string()),
-            owasp_category: None,
-            confidence_score: 1.0,
-            suppressed: false,
-            execution_trace: None,
-        };
+        let mut vuln = Vulnerability::new(
+            "sql-injection".to_string(),
+            PathBuf::from("app.js"),
+            1,
+            0,
+            original.to_string(),
+            Severity::High,
+        );
+        vuln.reachable = true;
+        vuln.cwe_id = Some("CWE-89".to_string());
 
         let fixed = engine.apply_template_fix(original, &vuln);
         assert_ne!(
@@ -2191,22 +2163,16 @@ mod tests {
         let engine = RemediationEngine::new(dir.path()).unwrap();
 
         let original = "element.innerHTML = userInput;\n";
-        let vuln = Vulnerability {
-            id: Uuid::new_v4(),
-            rule_id: "xss".to_string(),
-            file_path: PathBuf::from("app.js"),
-            line: 1,
-            column: 0,
-            snippet: original.to_string(),
-            severity: Severity::High,
-            reachable: true,
-            cloud_exposed: None,
-            cwe_id: Some("CWE-79".to_string()),
-            owasp_category: None,
-            confidence_score: 1.0,
-            suppressed: false,
-            execution_trace: None,
-        };
+        let mut vuln = Vulnerability::new(
+            "xss".to_string(),
+            PathBuf::from("app.js"),
+            1,
+            0,
+            original.to_string(),
+            Severity::High,
+        );
+        vuln.reachable = true;
+        vuln.cwe_id = Some("CWE-79".to_string());
 
         let fixed = engine.apply_template_fix(original, &vuln);
         assert_ne!(fixed, original, "XSS template must differ from original");
@@ -2222,22 +2188,16 @@ mod tests {
         let engine = RemediationEngine::new(dir.path()).unwrap();
 
         let original = "os.system('rm -rf ' + user_input)\n";
-        let vuln = Vulnerability {
-            id: Uuid::new_v4(),
-            rule_id: "command-injection".to_string(),
-            file_path: PathBuf::from("app.py"),
-            line: 1,
-            column: 0,
-            snippet: original.to_string(),
-            severity: Severity::Critical,
-            reachable: true,
-            cloud_exposed: None,
-            cwe_id: Some("CWE-78".to_string()),
-            owasp_category: None,
-            confidence_score: 1.0,
-            suppressed: false,
-            execution_trace: None,
-        };
+        let mut vuln = Vulnerability::new(
+            "command-injection".to_string(),
+            PathBuf::from("app.py"),
+            1,
+            0,
+            original.to_string(),
+            Severity::Critical,
+        );
+        vuln.reachable = true;
+        vuln.cwe_id = Some("CWE-78".to_string());
 
         let fixed = engine.apply_template_fix(original, &vuln);
         assert_ne!(
@@ -2256,22 +2216,16 @@ mod tests {
         let engine = RemediationEngine::new(dir.path()).unwrap();
 
         let original = "some_dangerous_call(user_input)\n";
-        let vuln = Vulnerability {
-            id: Uuid::new_v4(),
-            rule_id: "unknown-vuln-type".to_string(),
-            file_path: PathBuf::from("app.py"),
-            line: 1,
-            column: 0,
-            snippet: original.to_string(),
-            severity: Severity::Medium,
-            reachable: true,
-            cloud_exposed: None,
-            cwe_id: Some("CWE-999".to_string()),
-            owasp_category: None,
-            confidence_score: 1.0,
-            suppressed: false,
-            execution_trace: None,
-        };
+        let mut vuln = Vulnerability::new(
+            "unknown-vuln-type".to_string(),
+            PathBuf::from("app.py"),
+            1,
+            0,
+            original.to_string(),
+            Severity::Medium,
+        );
+        vuln.reachable = true;
+        vuln.cwe_id = Some("CWE-999".to_string());
 
         let fixed = engine.apply_template_fix(original, &vuln);
         assert_ne!(
@@ -2286,34 +2240,23 @@ mod tests {
 
     #[test]
     fn test_classify_vulnerability_by_cwe() {
-        let vuln_sql = Vulnerability {
-            id: Uuid::new_v4(),
-            rule_id: "some-rule".to_string(),
-            file_path: PathBuf::from("app.py"),
-            line: 1,
-            column: 0,
-            snippet: String::new(),
-            severity: Severity::High,
-            reachable: false,
-            cloud_exposed: None,
-            cwe_id: Some("CWE-89".to_string()),
-            owasp_category: None,
-            confidence_score: 1.0,
-            suppressed: false,
-            execution_trace: None,
-        };
+        let mut vuln_sql = Vulnerability::new(
+            "some-rule".to_string(),
+            PathBuf::from("app.py"),
+            1,
+            0,
+            String::new(),
+            Severity::High,
+        );
+        vuln_sql.cwe_id = Some("CWE-89".to_string());
         assert_eq!(classify_vulnerability(&vuln_sql), VulnType::SqlInjection);
 
-        let vuln_xss = Vulnerability {
-            cwe_id: Some("CWE-79".to_string()),
-            ..vuln_sql.clone()
-        };
+        let mut vuln_xss = vuln_sql.clone();
+        vuln_xss.cwe_id = Some("CWE-79".to_string());
         assert_eq!(classify_vulnerability(&vuln_xss), VulnType::Xss);
 
-        let vuln_cmd = Vulnerability {
-            cwe_id: Some("CWE-78".to_string()),
-            ..vuln_sql.clone()
-        };
+        let mut vuln_cmd = vuln_sql.clone();
+        vuln_cmd.cwe_id = Some("CWE-78".to_string());
         assert_eq!(
             classify_vulnerability(&vuln_cmd),
             VulnType::CommandInjection
@@ -2322,36 +2265,22 @@ mod tests {
 
     #[test]
     fn test_classify_vulnerability_by_rule_id() {
-        let vuln = Vulnerability {
-            id: Uuid::new_v4(),
-            rule_id: "sql-injection-concat".to_string(),
-            file_path: PathBuf::from("app.py"),
-            line: 1,
-            column: 0,
-            snippet: String::new(),
-            severity: Severity::High,
-            reachable: false,
-            cloud_exposed: None,
-            cwe_id: None,
-            owasp_category: None,
-            confidence_score: 1.0,
-            suppressed: false,
-            execution_trace: None,
-        };
+        let vuln = Vulnerability::new(
+            "sql-injection-concat".to_string(),
+            PathBuf::from("app.py"),
+            1,
+            0,
+            String::new(),
+            Severity::High,
+        );
         assert_eq!(classify_vulnerability(&vuln), VulnType::SqlInjection);
 
-        let vuln_xss = Vulnerability {
-            rule_id: "xss-reflected".to_string(),
-            cwe_id: None,
-            ..vuln.clone()
-        };
+        let mut vuln_xss = vuln.clone();
+        vuln_xss.rule_id = "xss-reflected".to_string();
         assert_eq!(classify_vulnerability(&vuln_xss), VulnType::Xss);
 
-        let vuln_cmd = Vulnerability {
-            rule_id: "command-injection-os".to_string(),
-            cwe_id: None,
-            ..vuln.clone()
-        };
+        let mut vuln_cmd = vuln.clone();
+        vuln_cmd.rule_id = "command-injection-os".to_string();
         assert_eq!(
             classify_vulnerability(&vuln_cmd),
             VulnType::CommandInjection

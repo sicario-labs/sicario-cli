@@ -5,6 +5,31 @@ use serde::{Deserialize, Serialize};
 use super::{OwaspCategory, Severity};
 use crate::parser::Language;
 
+/// Confidence level for a security rule.
+///
+/// Indicates how likely a match is to be a true positive.
+/// Used by `--confidence-threshold` to filter scan output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ConfidenceLevel {
+    /// Low confidence — pattern is broad and may produce false positives.
+    Low,
+    /// Medium confidence — pattern is reasonably specific.
+    Medium,
+    /// High confidence — pattern is precise and rarely produces false positives.
+    High,
+}
+
+impl std::fmt::Display for ConfidenceLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConfidenceLevel::High => write!(f, "high"),
+            ConfidenceLevel::Medium => write!(f, "medium"),
+            ConfidenceLevel::Low => write!(f, "low"),
+        }
+    }
+}
+
 /// Expected outcome for a rule test case.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TestExpectation {
@@ -39,6 +64,9 @@ pub struct SecurityRule {
     /// Embedded TP/TN test cases for rule quality enforcement.
     #[serde(default)]
     pub test_cases: Option<Vec<RuleTestCase>>,
+    /// Confidence level for this rule: high, medium, or low.
+    /// Required field — rules missing this field are rejected by the SAST engine.
+    pub confidence: ConfidenceLevel,
 }
 
 /// Tree-sitter query pattern for matching code
@@ -72,6 +100,7 @@ id: "test-rule"
 name: "Test Rule"
 description: "A test rule"
 severity: High
+confidence: high
 languages:
   - JavaScript
 pattern:
@@ -92,6 +121,7 @@ test_cases:
             rule.help_uri,
             Some("https://example.com/rules/test-rule".to_string())
         );
+        assert_eq!(rule.confidence, ConfidenceLevel::High);
         let cases = rule.test_cases.unwrap();
         assert_eq!(cases.len(), 2);
         assert_eq!(cases[0].expected, TestExpectation::TruePositive);
@@ -105,6 +135,7 @@ id: "basic-rule"
 name: "Basic Rule"
 description: "No optional fields"
 severity: Low
+confidence: medium
 languages:
   - Python
 pattern:
@@ -115,5 +146,38 @@ pattern:
         let rule: SecurityRule = serde_yaml::from_str(yaml).unwrap();
         assert!(rule.help_uri.is_none());
         assert!(rule.test_cases.is_none());
+        assert_eq!(rule.confidence, ConfidenceLevel::Medium);
+    }
+
+    #[test]
+    fn test_confidence_level_ordering() {
+        assert!(ConfidenceLevel::Low < ConfidenceLevel::Medium);
+        assert!(ConfidenceLevel::Medium < ConfidenceLevel::High);
+        assert!(ConfidenceLevel::Low < ConfidenceLevel::High);
+    }
+
+    #[test]
+    fn test_confidence_level_display() {
+        assert_eq!(ConfidenceLevel::High.to_string(), "high");
+        assert_eq!(ConfidenceLevel::Medium.to_string(), "medium");
+        assert_eq!(ConfidenceLevel::Low.to_string(), "low");
+    }
+
+    #[test]
+    fn test_security_rule_missing_confidence_fails_deserialization() {
+        let yaml = r#"
+id: "no-confidence-rule"
+name: "No Confidence Rule"
+description: "Missing confidence field"
+severity: High
+languages:
+  - JavaScript
+pattern:
+  query: "(identifier) @id"
+  captures:
+    - "id"
+"#;
+        let result: Result<SecurityRule, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_err(), "Rule without confidence should fail deserialization");
     }
 }

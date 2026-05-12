@@ -8,6 +8,7 @@
   name: "Django Model.objects.create() with **kwargs"
   description: "Passing unvalidated **kwargs to Django model creation allows mass assignment attacks. Explicitly specify allowed fields."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -35,6 +36,7 @@
   name: "Django Model() Constructor with **kwargs"
   description: "Passing unvalidated **kwargs to Django model constructor allows mass assignment attacks. Explicitly specify allowed fields."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -62,6 +64,7 @@
   name: "Django QuerySet.update() with **kwargs"
   description: "Passing unvalidated **kwargs to Django QuerySet.update() allows mass assignment attacks. Explicitly specify allowed fields."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -89,6 +92,7 @@
   name: "Flask-SQLAlchemy Bulk Update from Request Data"
   description: "Updating model attributes from unvalidated request data allows mass assignment. Explicitly specify allowed fields."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -116,6 +120,7 @@
   name: "setattr() in Loop with Unvalidated Data"
   description: "Using setattr() in a loop with unvalidated data allows mass assignment. Validate attribute names against an allowlist."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -138,3 +143,5 @@
       expected: TrueNegative
     - code: "for item in items:\n    process(item)"
       expected: TrueNegative
+
+

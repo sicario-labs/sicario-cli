@@ -8,6 +8,7 @@
   name: "Password Logged via logging Module"
   description: "Logging passwords exposes credentials in log files. Remove sensitive data from log statements."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -35,6 +36,7 @@
   name: "Token Logged via logging Module"
   description: "Logging tokens exposes authentication credentials in log files. Remove sensitive data from log statements."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -62,6 +64,7 @@
   name: "API Key Logged via logging Module"
   description: "Logging API keys exposes credentials in log files. Remove sensitive data from log statements."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -89,6 +92,7 @@
   name: "Password Logged via print()"
   description: "Printing passwords exposes credentials in stdout/logs. Remove sensitive data from print statements."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -116,6 +120,7 @@
   name: "Token Logged via print()"
   description: "Printing tokens exposes authentication credentials in stdout/logs. Remove sensitive data from print statements."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -143,6 +148,7 @@
   name: "API Key Logged via print()"
   description: "Printing API keys exposes credentials in stdout/logs. Remove sensitive data from print statements."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -170,6 +176,7 @@
   name: "Password in logging % Format"
   description: "Logging passwords via % formatting exposes credentials in log files. Remove sensitive data from log statements."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -197,6 +204,7 @@
   name: "Sensitive Data in Logging String Concatenation"
   description: "Concatenating sensitive data into log messages exposes credentials. Remove sensitive data from log statements."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -224,6 +232,7 @@
   name: "Sensitive Data in print() String Concatenation"
   description: "Concatenating sensitive data into print statements exposes credentials. Remove sensitive data from print calls."
   severity: Medium
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -246,3 +255,5 @@
       expected: TrueNegative
     - code: "msg = \"password: \" + pwd"
       expected: TrueNegative
+
+

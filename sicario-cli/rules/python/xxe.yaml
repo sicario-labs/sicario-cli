@@ -8,6 +8,7 @@
   name: "xml.etree.ElementTree.parse() with Untrusted Input"
   description: "xml.etree.ElementTree.parse() is vulnerable to XXE attacks. Use defusedxml.ElementTree instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -35,6 +36,7 @@
   name: "xml.etree.ElementTree.fromstring() with Untrusted Input"
   description: "xml.etree.ElementTree.fromstring() is vulnerable to XXE attacks. Use defusedxml.ElementTree.fromstring() instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -62,6 +64,7 @@
   name: "lxml.etree.parse() with Untrusted Input"
   description: "lxml.etree.parse() processes external entities by default. Use defusedxml or disable entity resolution."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -89,6 +92,7 @@
   name: "lxml.etree.fromstring() with Untrusted Input"
   description: "lxml.etree.fromstring() processes external entities by default. Use defusedxml or disable entity resolution."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -116,6 +120,7 @@
   name: "xml.sax.parse() with Untrusted Input"
   description: "xml.sax.parse() is vulnerable to XXE attacks. Use defusedxml.sax.parse() instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -143,6 +148,7 @@
   name: "xml.dom.minidom.parse() with Untrusted Input"
   description: "xml.dom.minidom.parse() is vulnerable to XXE attacks. Use defusedxml.minidom instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -170,6 +176,7 @@
   name: "xml.dom.pulldom.parse() with Untrusted Input"
   description: "xml.dom.pulldom.parse() is vulnerable to XXE attacks. Use defusedxml.pulldom instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -197,6 +204,7 @@
   name: "xmlrpc.server Usage (XXE Vulnerable)"
   description: "Python's xmlrpc module uses vulnerable XML parsers. Consider using JSON-RPC or gRPC instead."
   severity: Medium
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -219,3 +227,5 @@
       expected: TrueNegative
     - code: "json.loads(data)"
       expected: TrueNegative
+
+

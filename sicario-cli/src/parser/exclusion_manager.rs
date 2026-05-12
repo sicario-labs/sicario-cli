@@ -213,6 +213,27 @@ impl ExclusionManager {
             || self.gitignore_patterns.is_match(normalized_path)
             || self.sicarioignore_patterns.is_match(normalized_path)
     }
+
+    /// Disable .gitignore pattern matching (Task 52.7: --no-git-ignore flag).
+    /// After calling this, `.gitignore` patterns are no longer applied.
+    /// `.sicarioignore` patterns and default excludes are still active.
+    pub fn disable_gitignore(&mut self) {
+        self.gitignore_patterns = GlobSet::empty();
+    }
+
+    /// Add extra exclude glob patterns (Task 60.2: --exclude flag).
+    /// Patterns are added on top of existing exclusions.
+    pub fn add_exclude_patterns(&mut self, patterns: &[String]) -> Result<()> {
+        let mut builder = GlobSetBuilder::new();
+        for pattern in patterns {
+            if let Ok(glob) = Glob::new(pattern) {
+                builder.add(glob);
+            }
+        }
+        let extra = builder.build()?;
+        self.sicarioignore_patterns = extra;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

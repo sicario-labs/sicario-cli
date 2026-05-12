@@ -20,6 +20,9 @@ pub enum ReportAction {
     Compliance(ComplianceArgs),
     /// Display per-rule MTTR (Mean Time To Remediate) metrics.
     Mttr(MttrArgs),
+    /// Fetch and print dashboard metrics as JSON from Sicario Cloud.
+    /// Requires SICARIO_API_KEY and SICARIO_ORG_ID.
+    Dashboard(DashboardArgs),
 }
 
 /// Arguments for `sicario report compliance`.
@@ -48,4 +51,20 @@ pub struct MttrArgs {
     /// Restrict computation to findings detected after this ISO 8601 date.
     #[arg(long)]
     pub since: Option<String>,
+}
+
+/// Arguments for `sicario report dashboard`.
+#[derive(Parser, Debug)]
+pub struct DashboardArgs {
+    /// Organization ID (overrides SICARIO_ORG_ID env var)
+    #[arg(long)]
+    pub org: Option<String>,
+
+    /// Date range start (ISO-8601, e.g. 2026-01-01)
+    #[arg(long)]
+    pub since: Option<String>,
+
+    /// Project ID to scope metrics
+    #[arg(long)]
+    pub project: Option<String>,
 }

@@ -22,6 +22,7 @@
   name: "md5::compute Usage for Hashing"
   description: "MD5 is cryptographically broken and must not be used for password hashing or integrity verification. Use argon2, bcrypt, or sha2 crate instead."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -49,6 +50,7 @@
   name: "md5::Md5::new Digest Usage"
   description: "MD5 is cryptographically broken and must not be used for security-sensitive hashing. Use SHA-256 or stronger algorithms from the sha2 crate."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -76,6 +78,7 @@
   name: "sha1::Sha1::new Usage"
   description: "SHA-1 is cryptographically broken and must not be used for password hashing or digital signatures. Use SHA-256 or stronger from the sha2 crate."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -104,6 +107,7 @@
   name: "Hardcoded Cryptographic Key"
   description: "Hardcoded encryption keys in source code can be extracted by attackers. Use environment variables, key management services, or secure vaults for key storage."
   severity: Critical
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -131,6 +135,7 @@
   name: "rand::thread_rng for Security-Sensitive Operations"
   description: "thread_rng uses a non-cryptographic PRNG that is predictable. Use OsRng or rand::rngs::StdRng seeded from OsRng for security-sensitive random number generation."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -158,6 +163,7 @@
   name: "DES/3DES Cipher Usage"
   description: "DES and 3DES are deprecated ciphers with insufficient key lengths. Use AES-256-GCM or ChaCha20-Poly1305 instead."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -185,6 +191,7 @@
   name: "ECB Mode Cipher Usage"
   description: "ECB mode does not provide semantic security — identical plaintext blocks produce identical ciphertext. Use GCM, CTR, or CBC with HMAC instead."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -212,6 +219,7 @@
   name: "Hardcoded IV/Nonce Value"
   description: "Hardcoded initialization vectors or nonces destroy the security of encryption. Generate a fresh random IV/nonce for each encryption operation using OsRng."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -239,6 +247,7 @@
   name: "Direct Hash as Key Derivation (No KDF)"
   description: "Using a simple hash function for key derivation is insecure. Use PBKDF2, Argon2, or bcrypt with proper salt and iteration count for deriving keys from passwords."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -266,6 +275,7 @@
   name: "HMAC with Hardcoded Key"
   description: "Using a hardcoded key for HMAC allows attackers to forge signatures. Load HMAC keys from secure configuration or key management services."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -293,6 +303,7 @@
   name: "Deprecated crypto Crate Usage"
   description: "The 'crypto' crate is deprecated and unmaintained. Use RustCrypto crates (aes, sha2, chacha20poly1305) or ring for modern cryptographic operations."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -325,6 +336,7 @@
   name: "serde_json::from_str with Untrusted Input"
   description: "Deserializing untrusted JSON input without size limits can lead to denial of service or arbitrary type instantiation. Validate input size and use strict type definitions."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -352,6 +364,7 @@
   name: "serde_yaml::from_str with Untrusted Input"
   description: "Deserializing untrusted YAML input can lead to denial of service via billion laughs attack or arbitrary type instantiation. Validate input size and restrict allowed types."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -379,6 +392,7 @@
   name: "serde_json::from_slice with Untrusted Input"
   description: "Deserializing untrusted byte slices without size validation can lead to denial of service or memory exhaustion. Enforce maximum payload size before deserialization."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -406,6 +420,7 @@
   name: "bincode::deserialize with Untrusted Input"
   description: "Deserializing untrusted binary data with bincode can lead to memory corruption or arbitrary code execution. Use bincode::Options with size limits and validate input source."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -433,6 +448,7 @@
   name: "rmp_serde::from_slice (MessagePack) with Untrusted Input"
   description: "Deserializing untrusted MessagePack data can lead to denial of service or type confusion attacks. Validate input size and use strict type definitions."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -460,6 +476,7 @@
   name: "ciborium::from_reader (CBOR) with Untrusted Input"
   description: "Deserializing untrusted CBOR data can lead to denial of service or memory exhaustion. Wrap the reader with a size-limiting adapter before deserialization."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -487,6 +504,7 @@
   name: "toml::from_str with Untrusted Input"
   description: "Deserializing untrusted TOML input can lead to denial of service via deeply nested structures. Validate input size and source before deserialization."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -514,6 +532,7 @@
   name: "serde_json::from_reader with Untrusted Input"
   description: "Deserializing from an untrusted reader without size limits can lead to memory exhaustion. Use a BufReader with take() to limit input size before deserialization."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -546,6 +565,7 @@
   name: "Raw Pointer Dereference in Unsafe Block"
   description: "Dereferencing raw pointers without bounds checking can lead to buffer overflows, use-after-free, or null pointer dereferences. Validate pointer validity and bounds before dereferencing."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -573,6 +593,7 @@
   name: "std::mem::transmute Usage"
   description: "transmute reinterprets bits of one type as another without any safety checks. This can cause undefined behavior, memory corruption, and type confusion. Use safe alternatives like From/Into traits or bytemuck."
   severity: Critical
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -600,6 +621,7 @@
   name: "std::slice::from_raw_parts Usage"
   description: "from_raw_parts creates a slice from a raw pointer without validating the pointer or length. Invalid pointer or incorrect length causes buffer overflows and undefined behavior."
   severity: Critical
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -627,6 +649,7 @@
   name: "std::ptr::read / std::ptr::write Usage"
   description: "std::ptr::read and std::ptr::write bypass Rust's ownership and borrowing rules. Incorrect usage can cause double-free, use-after-free, or uninitialized memory reads."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -654,6 +677,7 @@
   name: "Box::from_raw Usage"
   description: "Box::from_raw takes ownership of a raw pointer. If the pointer was not originally created by Box::into_raw, or if it's used after being freed, this causes undefined behavior."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -681,6 +705,7 @@
   name: "std::mem::forget Usage (Resource Leak)"
   description: "mem::forget prevents destructors from running, which can leak resources like file handles, network connections, or memory. Use ManuallyDrop or explicit drop() instead."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -708,6 +733,7 @@
   name: "ManuallyDrop with Unsafe Access"
   description: "Accessing the inner value of ManuallyDrop via unsafe methods like take() or into_inner() after the value has been dropped causes use-after-free. Ensure the value is still valid before access."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -735,6 +761,7 @@
   name: "Raw Pointer Cast (as *const / as *mut)"
   description: "Casting references to raw pointers bypasses the borrow checker and can lead to aliasing violations, data races, and undefined behavior if the pointer outlives the reference."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -762,6 +789,7 @@
   name: "std::mem::uninitialized / std::mem::zeroed Usage"
   description: "mem::uninitialized creates uninitialized memory which is instant UB for most types. mem::zeroed is UB for types where zero is not a valid bit pattern (references, enums, bools). Use MaybeUninit instead."
   severity: Critical
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -789,6 +817,7 @@
   name: "Vec::set_len Without Proper Initialization"
   description: "Vec::set_len changes the length without initializing elements, exposing uninitialized memory. Always initialize memory (e.g., with write or copy_from_slice) before calling set_len."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -816,6 +845,7 @@
   name: "String::from_raw_parts Usage"
   description: "String::from_raw_parts constructs a String from a raw pointer, length, and capacity without validating UTF-8 or memory ownership. Invalid inputs cause undefined behavior."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -843,6 +873,7 @@
   name: "std::ptr::null / std::ptr::null_mut Patterns"
   description: "Creating null pointers that may later be dereferenced causes undefined behavior. Use Option<NonNull<T>> or Option<&T> instead of nullable raw pointers."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -875,6 +906,7 @@
   name: "static mut Variable Usage (Data Race)"
   description: "Accessing static mut variables is inherently unsafe and causes data races in multi-threaded programs. Use std::sync::Mutex, RwLock, or atomic types instead."
   severity: Critical
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -902,6 +934,7 @@
   name: "Unsafe Send Impl on Types with Raw Pointers"
   description: "Implementing Send on types containing raw pointers can cause data races and use-after-free when the type is sent across threads. Only implement Send if the type truly owns the pointed-to data."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -929,6 +962,7 @@
   name: "Unsafe Sync Impl on Types with Interior Mutability"
   description: "Implementing Sync on types with interior mutability (UnsafeCell, Cell, RefCell) without proper synchronization causes data races. Use Mutex or RwLock for thread-safe interior mutability."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -956,6 +990,7 @@
   name: "UnsafeCell Shared Across Threads"
   description: "UnsafeCell provides interior mutability without synchronization. Sharing it across threads without external synchronization causes data races. Use Mutex<T> or RwLock<T> instead."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -983,6 +1018,7 @@
   name: "Arc with UnsafeCell Without Synchronization"
   description: "Wrapping UnsafeCell in Arc allows shared access across threads without synchronization, causing data races. Use Arc<Mutex<T>> or Arc<RwLock<T>> for thread-safe shared state."
   severity: Critical
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -1010,6 +1046,7 @@
   name: "Shared Mutable State in tokio::spawn Without Mutex"
   description: "Sharing mutable state across tokio::spawn tasks without Mutex or RwLock causes data races. Wrap shared state in Arc<Mutex<T>> or use message passing with channels."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -1037,6 +1074,7 @@
   name: "std::thread::spawn with Raw Pointer Capture"
   description: "Capturing raw pointers in thread::spawn closures can cause use-after-free and data races since raw pointers are not Send. Use Arc<T> or channels for cross-thread data sharing."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -1064,6 +1102,7 @@
   name: "Rc Used Across Thread Boundaries"
   description: "Rc is not thread-safe — it uses non-atomic reference counting. Using Rc across threads causes data races and memory corruption. Use Arc for thread-safe reference counting."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -1091,6 +1130,7 @@
   name: "Cell/RefCell in static Without Thread Safety"
   description: "Cell and RefCell are not Sync — placing them in static variables without thread-safe wrappers causes data races when accessed from multiple threads. Use Mutex or RwLock in static context."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -1118,6 +1158,7 @@
   name: "lazy_static! with Mutable State Without Mutex"
   description: "Using lazy_static! with mutable collections without Mutex or RwLock causes data races. Always wrap mutable state in Mutex or RwLock within lazy_static!."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -1145,6 +1186,7 @@
   name: "Raw Pointer in Crossbeam Scoped Thread"
   description: "Using raw pointers in crossbeam scoped threads bypasses lifetime guarantees and can cause data races. Use references or Arc for safe cross-thread data sharing."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -1172,6 +1214,7 @@
   name: "Relaxed Ordering for Synchronization"
   description: "Using Ordering::Relaxed for atomic operations that synchronize between threads provides no ordering guarantees and can cause subtle data races. Use Acquire/Release or SeqCst for synchronization."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -1194,4 +1237,6 @@
       expected: TrueNegative
     - code: "state.compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst);"
       expected: TrueNegative
+
+
 

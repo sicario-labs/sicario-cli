@@ -16,6 +16,7 @@
   name: "Global Variable Write in Goroutine"
   description: "Writing to a global variable inside a goroutine without synchronization causes data races. Use a mutex, atomic operations, or channels."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -43,6 +44,7 @@
   name: "Map Access in Goroutine Without Mutex"
   description: "Concurrent map read/write in goroutines causes runtime panics in Go. Use sync.Map or protect access with a sync.RWMutex."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -70,6 +72,7 @@
   name: "Shared Counter Without Atomic Operations"
   description: "Incrementing a shared counter in a goroutine without atomic operations causes data races. Use atomic.AddInt64 or sync.Mutex."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -97,6 +100,7 @@
   name: "WaitGroup Add Inside Goroutine"
   description: "Calling wg.Add() inside a goroutine creates a race condition where Wait() may return before all goroutines are registered. Call wg.Add() before launching the goroutine."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -124,6 +128,7 @@
   name: "Slice Append in Goroutine"
   description: "Appending to a shared slice in a goroutine without synchronization causes data races. Use a mutex or channel to collect results."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -151,6 +156,7 @@
   name: "Shared Struct Field Write in Goroutine"
   description: "Writing to a shared struct field in a goroutine without synchronization causes data races. Use a mutex or atomic operations."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -178,6 +184,7 @@
   name: "Global Map Write Without sync.Map"
   description: "Writing to a package-level map variable without synchronization causes data races when accessed from multiple goroutines. Use sync.Map or protect with a mutex."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -205,6 +212,7 @@
   name: "Goroutine Closure Over Loop Variable"
   description: "Capturing a loop variable in a goroutine closure causes all goroutines to share the same variable, leading to race conditions. Pass the variable as a parameter."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -232,6 +240,7 @@
   name: "Shared Bool Flag Without Atomic"
   description: "Reading/writing a shared boolean flag across goroutines without atomic operations causes data races. Use atomic.LoadInt32/StoreInt32 or sync.Mutex."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -259,6 +268,7 @@
   name: "Potential Channel Send After Close"
   description: "Sending on a closed channel causes a runtime panic. Ensure channels are only closed by the sender and use select with a done channel for coordination."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -281,3 +291,5 @@
       expected: TrueNegative
     - code: "go func() { defer close(ch); ch <- result }()"
       expected: TrueNegative
+
+

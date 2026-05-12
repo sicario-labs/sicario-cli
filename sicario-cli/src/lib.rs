@@ -10,6 +10,8 @@
 #![allow(unused_doc_comments)]
 #![allow(unused_mut)]
 
+pub mod audit;
+pub mod audit_log;
 pub mod auth;
 pub mod cloud;
 pub mod config;
@@ -25,7 +27,6 @@ pub mod scanner;
 pub mod tui;
 
 // New modules added by CLI overhaul
-pub mod audit;
 pub mod baseline;
 pub mod benchmark;
 pub mod cache;
@@ -37,6 +38,7 @@ pub mod exorcist;
 pub mod guard;
 pub mod hook;
 pub mod key_manager;
+pub mod known_vulnerable_apps;
 pub mod lsp;
 pub mod output;
 pub mod poc;

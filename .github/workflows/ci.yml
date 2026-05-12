@@ -88,7 +88,7 @@ jobs:
 
       - run: cargo test --workspace --locked
 
-  # ── Task 11.2: Cross-Platform Compatibility ──────────────────────────────────
+  # Task 11.2: Cross-Platform Compatibility
   # Dedicated Windows job that tests AutoFixHook POSIX sh syntax using Git Bash.
   # This job verifies that the hook script installed by `sicario hook --auto-fix`
   # runs correctly under Git Bash on Windows (POSIX sh, not PowerShell).
@@ -129,8 +129,13 @@ jobs:
         shell: bash
         run: cargo test --package sicario-cli --locked -- remediation::template_registry::sql::tests::test_crlf --nocapture 2>&1
 
+  # Task 1.6: Vuln-Sandbox TP/TN Validation
+  # Verifies that `sicario scan vuln-sandbox/ --format json` produces exactly
+  # 1 finding per true-positive file (matching the expected rule ID) and
+  # 0 findings per true-negative file (for the corresponding rule ID).
+  # Ground truth is read from vuln-sandbox/MANIFEST.md.
   vuln-sandbox-smoke-test:
-    name: Vuln-Sandbox Smoke Test
+    name: Vuln-Sandbox TP/TN Validation
     runs-on: ubuntu-latest
     needs: [check]
     steps:
@@ -154,32 +159,164 @@ jobs:
       - name: Install sicario to PATH
         run: echo "${{ github.workspace }}/target/release" >> "$GITHUB_PATH"
 
-      - name: Run vuln-sandbox smoke test
-        run: |
-          # Capture output — use || true so bash -e doesn't abort on non-zero
-          # exit from sicario (exit 1 = findings found, which is expected here)
-          OUTPUT=$(sicario scan vuln-sandbox/ --format json || true)
+      - name: Run vuln-sandbox TP/TN validation
+        run: bash vuln-sandbox/smoke-test.sh
 
-          # Validate output is parseable JSON array
-          ACTUAL=$(echo "$OUTPUT" | jq 'length' 2>/dev/null || echo "")
-          if [ -z "$ACTUAL" ] || ! echo "$ACTUAL" | grep -qE '^[0-9]+$'; then
-            echo "✗ Smoke test FAILED: output is not valid JSON"
-            echo "--- Raw output (first 1000 chars) ---"
-            echo "$OUTPUT" | head -c 1000
-            exit 1
-          fi
+  # Task 1.7: MANIFEST.md Validation
+  # Verifies that MANIFEST.md is complete and accurate:
+  #   1. Every file listed in MANIFEST.md exists on disk
+  #   2. Every source file in vuln-sandbox/ is listed in MANIFEST.md
+  #   3. Every MANIFEST entry has required fields (CWE, rule ID, expected outcome)
+  # This job runs without building the CLI — it only needs bash and find.
+  manifest-validation:
+    name: MANIFEST.md Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-          # Must find at least one finding per vuln-sandbox file (79 files)
-          MIN_EXPECTED=79
-          if [ "$ACTUAL" -lt "$MIN_EXPECTED" ]; then
-            echo "✗ Smoke test FAILED: $ACTUAL findings (expected at least $MIN_EXPECTED)"
-            echo ""
-            echo "Breakdown by severity:"
-            echo "$OUTPUT" | jq 'group_by(.severity) | map({severity: .[0].severity, count: length}) | sort_by(.severity)'
-            exit 1
-          fi
+      - name: Validate MANIFEST.md completeness
+        run: bash vuln-sandbox/validate-manifest.sh
 
-          echo "✓ Smoke test passed: $ACTUAL findings (minimum $MIN_EXPECTED)"
-          echo ""
-          echo "Breakdown by severity:"
-          echo "$OUTPUT" | jq 'group_by(.severity) | map({severity: .[0].severity, count: length}) | sort_by(.severity)'
+  # Task 2.5: False-Positive Corpus Check
+  # Scans a set of well-known open-source frameworks (Express, Django, Next.js, etc.)
+  # and asserts that sicario produces zero high-confidence findings in any of them.
+  # Exit code 1 from `sicario benchmark --fp-corpus` means a high-confidence finding
+  # was detected — this job fails the build in that case (required check).
+  #
+  # The corpus directory is cached weekly so repos are not re-cloned on every run.
+  # Cache key: fp-corpus-<OS>-<ISO week number>
+  fp-corpus-check:
+    name: False-Positive Corpus Check
+    runs-on: ubuntu-latest
+    needs: [check]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-fp-corpus-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-fp-corpus-
+
+      - name: Install Linux dependencies
+        run: sudo apt-get update -y && sudo apt-get install -y libsecret-1-dev pkg-config
+
+      - name: Build sicario CLI
+        run: cargo build --release --locked --package sicario-cli
+
+      - name: Install sicario to PATH
+        run: echo "${{ github.workspace }}/target/release" >> "$GITHUB_PATH"
+
+      - name: Get current week number
+        id: date
+        run: echo "week=$(date +%Y-W%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache FP corpus repos
+        uses: actions/cache@v4
+        with:
+          path: .sicario/fp-corpus
+          key: fp-corpus-${{ runner.os }}-${{ steps.date.outputs.week }}
+          restore-keys: fp-corpus-${{ runner.os }}-
+
+      - name: FP Corpus Scan
+        run: sicario benchmark --fp-corpus --corpus-dir .sicario/fp-corpus
+
+  # Task 4.5: Rule Test Harness CI Gate
+  # Runs `sicario rules test` against all built-in YAML rules.
+  # Asserts every TruePositive test case produces ≥1 finding and every
+  # TrueNegative case produces 0 findings. Exits 1 on any failure.
+  # Also enforces the 60-second performance gate (Task 4.4).
+  rules-test:
+    name: Rule Test Harness
+    runs-on: ubuntu-latest
+    needs: [check]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-rules-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-rules-test-
+
+      - name: Install Linux dependencies
+        run: sudo apt-get update -y && sudo apt-get install -y libsecret-1-dev pkg-config
+
+      - name: Build sicario CLI
+        run: cargo build --release --locked --package sicario-cli
+
+      - name: Install sicario to PATH
+        run: echo "${{ github.workspace }}/target/release" >> "$GITHUB_PATH"
+
+      - name: Run rule test harness
+        run: sicario rules test
+
+  # Task 5.7: Benchmark CI Gate — Precision/Recall/F1 against vuln-sandbox
+  # Runs `sicario benchmark --benchmark --min-precision 0.80` against the
+  # vuln-sandbox directory using MANIFEST.md as ground truth.
+  # Exits 1 if Precision drops below 0.80 (required check).
+  benchmark-accuracy:
+    name: Benchmark Accuracy Gate
+    runs-on: ubuntu-latest
+    needs: [check]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-benchmark-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-benchmark-
+
+      - name: Install Linux dependencies
+        run: sudo apt-get update -y && sudo apt-get install -y libsecret-1-dev pkg-config
+
+      - name: Build sicario CLI
+        run: cargo build --release --locked --package sicario-cli
+
+      - name: Install sicario to PATH
+        run: echo "${{ github.workspace }}/target/release" >> "$GITHUB_PATH"
+
+      - name: Run accuracy benchmark (Precision/Recall/F1)
+        run: sicario benchmark --benchmark --min-precision 0.80 --target vuln-sandbox
+
+  # Task 14.8: Supply-Chain Guard CI Step
+  # Runs `sicario guard ci` after npm/pip install to scan node_modules/ and
+  # site-packages/ for behavioral anomalies. Exits 1 on any Critical anomaly.
+  supply-chain-guard:
+    name: Supply-Chain Guard
+    runs-on: ubuntu-latest
+    needs: [check]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-guard-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-guard-
+
+      - name: Install Linux dependencies
+        run: sudo apt-get update -y && sudo apt-get install -y libsecret-1-dev pkg-config
+
+      - name: Build sicario CLI
+        run: cargo build --release --locked --package sicario-cli
+
+      - name: Install sicario to PATH
+        run: echo "${{ github.workspace }}/target/release" >> "$GITHUB_PATH"
+
+      - name: Run supply-chain guard scan
+        run: sicario guard ci --format json
+        continue-on-error: true

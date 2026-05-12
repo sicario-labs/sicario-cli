@@ -8,6 +8,7 @@
   name: "Flask render_template_string() with Dynamic Input"
   description: "Passing user-controlled input to render_template_string() allows server-side template injection. Use render_template() with a file-based template instead."
   severity: Critical
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -35,6 +36,7 @@
   name: "Flask render_template_string() with .format()"
   description: "Passing .format()-constructed strings to render_template_string() allows SSTI. Use render_template() with a file-based template instead."
   severity: Critical
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -62,6 +64,7 @@
   name: "Flask render_template_string() with % Formatting"
   description: "Passing %-formatted strings to render_template_string() allows SSTI. Use render_template() with a file-based template instead."
   severity: Critical
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -89,6 +92,7 @@
   name: "Flask render_template_string() with String Concatenation"
   description: "Concatenating user input into render_template_string() allows SSTI. Use render_template() with a file-based template instead."
   severity: Critical
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -116,6 +120,7 @@
   name: "Jinja2 Environment with Unsafe Settings"
   description: "Creating a Jinja2 Environment without autoescape or with autoescape=False can lead to XSS and SSTI. Enable autoescape."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -143,6 +148,7 @@
   name: "Jinja2 Template.from_string() with User Input"
   description: "Using from_string() with user-controlled input allows SSTI. Use file-based templates instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -165,3 +171,5 @@
       expected: TrueNegative
     - code: "env.from_string(\"Hello World\")"
       expected: TrueNegative
+
+

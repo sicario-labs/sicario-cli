@@ -13,6 +13,7 @@
   name: "HttpURLConnection with Concatenated URL"
   description: "Constructing URLs from user input for HttpURLConnection enables SSRF. Validate URLs against an allowlist of permitted hosts."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -40,6 +41,7 @@
   name: "HttpURLConnection with Variable URL"
   description: "Passing a variable URL to HttpURLConnection may enable SSRF if the variable is user-controlled. Validate URLs against an allowlist."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -71,6 +73,7 @@
   name: "URL.openStream with Variable URL"
   description: "Calling openStream() on a URL constructed from user input enables SSRF. Validate URLs against an allowlist of permitted hosts."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -98,6 +101,7 @@
   name: "URL.openConnection with Variable URL"
   description: "Calling openConnection() on a URL constructed from user input enables SSRF. Validate URLs against an allowlist of permitted hosts."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -129,6 +133,7 @@
   name: "RestTemplate with Concatenated URL"
   description: "Concatenating user input into RestTemplate URLs enables SSRF. Validate URLs against an allowlist of permitted hosts."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -156,6 +161,7 @@
   name: "RestTemplate with Variable URL"
   description: "Passing a variable URL to RestTemplate may enable SSRF if the variable is user-controlled. Validate URLs against an allowlist."
   severity: Medium
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -188,6 +194,7 @@
   name: "WebClient with Concatenated URL"
   description: "Concatenating user input into WebClient URLs enables SSRF. Validate URLs against an allowlist of permitted hosts."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -215,6 +222,7 @@
   name: "WebClient with Variable URL"
   description: "Passing a variable URL to WebClient may enable SSRF if the variable is user-controlled. Validate URLs against an allowlist."
   severity: Medium
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -246,6 +254,7 @@
   name: "HttpClient.send with Variable URI"
   description: "Passing a variable URI to HttpClient.send may enable SSRF if the URI is user-controlled. Validate URIs against an allowlist."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -273,6 +282,7 @@
   name: "OkHttp Request with Variable URL"
   description: "Building OkHttp requests with user-controlled URLs enables SSRF. Validate URLs against an allowlist of permitted hosts."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -304,6 +314,7 @@
   name: "Apache HttpClient with Variable URI"
   description: "Passing a variable URI to Apache HttpClient methods enables SSRF if the URI is user-controlled. Validate URIs against an allowlist."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -326,3 +337,5 @@
       expected: TrueNegative
     - code: "httpClient.execute(request);"
       expected: TrueNegative
+
+

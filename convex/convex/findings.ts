@@ -73,6 +73,8 @@ export const triage = mutation({
     assignedTo: v.optional(v.string()),
     userId: v.optional(v.string()),
     orgId: v.optional(v.string()),
+    ignoreReason: v.optional(v.string()), // Req 22.1: required when triageState === "Ignored"
+    note: v.optional(v.string()),         // Req 27.3: note_added event
   },
   handler: async (ctx, args) => {
     // Enforce RBAC when auth context is provided
@@ -86,14 +88,54 @@ export const triage = mutation({
       .first();
     if (!finding) return null;
 
-    const updates: Record<string, string> = {
-      updatedAt: new Date().toISOString(),
-    };
+    // Req 22.2: enforce ignoreReason when triageState === "Ignored"
+    if (args.triageState === "Ignored" && !args.ignoreReason) {
+      throw new Error("ignoreReason is required when triageState is 'Ignored'. Valid values: false_positive, acceptable_risk, no_time_to_fix");
+    }
+
+    const now = new Date().toISOString();
+    const fromState = finding.triageState;
+
+    // Req 27.3: note_added event without changing triage state
+    if (args.note && !args.triageState) {
+      await ctx.db.insert("findingEvents", {
+        eventId: `evt-${args.id}-${Date.now()}`,
+        findingId: args.id,
+        orgId: finding.orgId ?? args.orgId ?? "",
+        eventType: "note_added",
+        fromState,
+        toState: fromState,
+        userId: args.userId,
+        note: args.note,
+        timestamp: now,
+      });
+      await ctx.db.patch(finding._id, { updatedAt: now });
+      return mapFinding(finding);
+    }
+
+    const updates: Record<string, unknown> = { updatedAt: now };
     if (args.triageState) updates.triageState = args.triageState;
     if (args.triageNote !== undefined) updates.triageNote = args.triageNote;
     if (args.assignedTo !== undefined) updates.assignedTo = args.assignedTo;
+    if (args.ignoreReason !== undefined) updates.ignoreReason = args.ignoreReason;
 
     await ctx.db.patch(finding._id, updates);
+
+    // Req 22.4: append findingEvents record on every triage mutation
+    if (args.triageState && args.triageState !== fromState) {
+      await ctx.db.insert("findingEvents", {
+        eventId: `evt-${args.id}-${Date.now()}`,
+        findingId: args.id,
+        orgId: finding.orgId ?? args.orgId ?? "",
+        eventType: "triaged",
+        fromState,
+        toState: args.triageState,
+        ignoreReason: args.ignoreReason,
+        userId: args.userId,
+        note: args.triageNote,
+        timestamp: now,
+      });
+    }
 
     return { ...mapFinding(finding), ...updates };
   },
@@ -545,5 +587,226 @@ export const deduplicateByRuleAndFile = mutation({
     }
 
     return { deduplicated };
+  },
+});
+
+// ── Task 22.8: triage_state in CLI JSON output (already in mapFinding) ────────
+
+// ── Task 22.6: Fixed vs Removed distinction ───────────────────────────────────
+// Auto-set by scans.insert based on why finding disappeared.
+// "Fixed" = code changed; "Removed" = rule disabled or file deleted.
+// This is handled in scans.ts auto-resolution logic.
+
+// ── Task 22.7: Preserve Reviewing / To Fix state on rescan ───────────────────
+// Handled in scans.ts: when auto-resolving, skip findings in Reviewing/ToFix.
+
+// ── Task 28.1: groupByRule ────────────────────────────────────────────────────
+export const groupByRule = query({
+  args: {
+    orgId: v.string(),
+    branch: v.optional(v.string()),
+    projectId: v.optional(v.string()),
+  },
+  handler: async (ctx, { orgId, branch, projectId }) => {
+    const allFindings = await ctx.db
+      .query("findings")
+      .withIndex("by_orgId", (q) => q.eq("orgId", orgId))
+      .collect();
+
+    const filtered = allFindings.filter((f) => {
+      if (branch && f.branch !== branch) return false;
+      if (projectId && f.projectId !== projectId) return false;
+      return true;
+    });
+
+    const groups = new Map<string, {
+      ruleId: string; ruleName: string; severity: string;
+      cweId: string | null; owaspCategory: string | null;
+      openCount: number; affectedFiles: Set<string>; oldestFindingDate: string;
+    }>();
+
+    for (const f of filtered) {
+      if (!["Open", "Reviewing", "ToFix"].includes(f.triageState)) continue;
+      const key = f.ruleId;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          ruleId: f.ruleId, ruleName: f.ruleName, severity: f.severity,
+          cweId: f.cweId ?? null, owaspCategory: f.owaspCategory ?? null,
+          openCount: 0, affectedFiles: new Set(), oldestFindingDate: f.createdAt,
+        });
+      }
+      const g = groups.get(key)!;
+      g.openCount++;
+      g.affectedFiles.add(f.filePath);
+      if (f.createdAt < g.oldestFindingDate) g.oldestFindingDate = f.createdAt;
+    }
+
+    return [...groups.values()]
+      .map((g) => ({ ...g, affectedFiles: [...g.affectedFiles].slice(0, 10) }))
+      .sort((a, b) => b.openCount - a.openCount);
+  },
+});
+
+// ── Task 28.2–28.5: listAdvanced with additional filters ─────────────────────
+// (cweId, language, dateFrom/dateTo, committedBy added to existing listAdvanced)
+export const listAdvancedV2 = query({
+  args: {
+    orgId: v.string(),
+    severity: v.optional(v.array(v.string())),
+    triageState: v.optional(v.array(v.string())),
+    cweId: v.optional(v.string()),
+    language: v.optional(v.string()),
+    dateFrom: v.optional(v.string()),
+    dateTo: v.optional(v.string()),
+    committedBy: v.optional(v.string()),
+    branch: v.optional(v.string()),
+    branchType: v.optional(v.string()),
+    projectId: v.optional(v.string()),
+    search: v.optional(v.string()),
+    cursor: v.optional(v.number()),
+    perPage: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const LANGUAGE_EXTENSIONS: Record<string, string[]> = {
+      javascript: [".js", ".jsx", ".mjs", ".cjs"],
+      typescript: [".ts", ".tsx"],
+      python: [".py"],
+      go: [".go"],
+      rust: [".rs"],
+      java: [".java"],
+      ruby: [".rb"],
+      php: [".php"],
+      csharp: [".cs"],
+    };
+
+    const allFindings = await ctx.db
+      .query("findings")
+      .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId))
+      .collect();
+
+    const filtered = allFindings.filter((f) => {
+      if (args.severity?.length && !args.severity.includes(f.severity)) return false;
+      if (args.triageState?.length && !args.triageState.includes(f.triageState)) return false;
+      if (args.cweId && f.cweId !== args.cweId) return false;
+      if (args.language) {
+        const exts = LANGUAGE_EXTENSIONS[args.language.toLowerCase()] ?? [];
+        if (!exts.some((ext) => f.filePath.endsWith(ext))) return false;
+      }
+      if (args.dateFrom && f.createdAt < args.dateFrom) return false;
+      if (args.dateTo && f.createdAt > args.dateTo) return false;
+      if (args.committedBy && f.committedBy !== args.committedBy) return false;
+      if (args.branch && f.branch !== args.branch) return false;
+      if (args.projectId && f.projectId !== args.projectId) return false;
+      if (args.search) {
+        const term = args.search.toLowerCase();
+        if (!f.ruleId.toLowerCase().includes(term) &&
+            !f.filePath.toLowerCase().includes(term) &&
+            !f.snippet.toLowerCase().includes(term)) return false;
+      }
+      return true;
+    });
+
+    const total = filtered.length;
+    const cursor = args.cursor ?? 0;
+    const perPage = args.perPage ?? 20;
+    const items = filtered.slice(cursor, cursor + perPage).map(mapFinding);
+    const nextCursor = cursor + perPage < total ? cursor + perPage : null;
+    return { items, total, nextCursor };
+  },
+});
+
+// ── Task 28.6: savedFilters CRUD ──────────────────────────────────────────────
+export const saveFilter = mutation({
+  args: {
+    orgId: v.string(),
+    userId: v.string(),
+    name: v.string(),
+    filters: v.any(),
+  },
+  handler: async (ctx, { orgId, userId, name, filters }) => {
+    const now = new Date().toISOString();
+    return await ctx.db.insert("savedFilters", {
+      filterId: `filter-${orgId}-${Date.now()}`,
+      orgId, userId, name, filters, createdAt: now,
+    });
+  },
+});
+
+export const listSavedFilters = query({
+  args: { orgId: v.string(), userId: v.string() },
+  handler: async (ctx, { orgId, userId }) => {
+    return await ctx.db
+      .query("savedFilters")
+      .withIndex("by_orgId_userId", (q) => q.eq("orgId", orgId).eq("userId", userId))
+      .collect();
+  },
+});
+
+export const deleteSavedFilter = mutation({
+  args: { filterId: v.string() },
+  handler: async (ctx, { filterId }) => {
+    const f = await ctx.db.query("savedFilters")
+      .filter((q) => q.eq(q.field("filterId"), filterId)).first();
+    if (f) await ctx.db.delete(f._id);
+  },
+});
+
+// ── Task 32.1–32.3: exportSarif ───────────────────────────────────────────────
+export const exportSarif = query({
+  args: {
+    orgId: v.string(),
+    severity: v.optional(v.array(v.string())),
+    triageState: v.optional(v.array(v.string())),
+    projectId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const allFindings = await ctx.db
+      .query("findings")
+      .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId))
+      .collect();
+
+    const filtered = allFindings.filter((f) => {
+      if (args.severity?.length && !args.severity.includes(f.severity)) return false;
+      if (args.triageState?.length && !args.triageState.includes(f.triageState)) return false;
+      if (args.projectId && f.projectId !== args.projectId) return false;
+      return true;
+    });
+
+    const SEVERITY_TO_SARIF: Record<string, string> = {
+      Critical: "error", High: "error",
+      Medium: "warning", Low: "note", Info: "note",
+    };
+
+    const results = filtered.map((f) => ({
+      ruleId: f.ruleId,
+      level: SEVERITY_TO_SARIF[f.severity] ?? "note",
+      message: { text: f.ruleName },
+      locations: [{
+        physicalLocation: {
+          artifactLocation: { uri: f.filePath },
+          region: { startLine: f.line, startColumn: f.column },
+        },
+      }],
+      fingerprints: {
+        matchBasedId: f.matchBasedId ?? f.fingerprint,
+      },
+      // Req 32.5: no snippet unless explicitly opted in
+    }));
+
+    return {
+      version: "2.1.0",
+      $schema: "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+      runs: [{
+        tool: {
+          driver: {
+            name: "Sicario",
+            version: "0.3.5",
+            informationUri: "https://usesicario.xyz",
+            rules: [],
+          },
+        },
+        results,
+      }],
+    };
   },
 });

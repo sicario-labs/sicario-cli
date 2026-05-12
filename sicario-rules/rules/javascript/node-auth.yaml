@@ -8,6 +8,7 @@
   name: "JWT Decoded Without Verification"
   description: "Using jwt.decode() instead of jwt.verify() skips signature verification, allowing attackers to forge tokens. Always use jwt.verify() with a secret or public key."
   severity: Critical
+  confidence: high
   languages:
     - JavaScript
     - TypeScript
@@ -28,6 +29,7 @@
   name: "JWT Accepts 'none' Algorithm"
   description: "Accepting the 'none' algorithm in JWT verification allows attackers to forge tokens without a signature. Always specify allowed algorithms explicitly."
   severity: Critical
+  confidence: high
   languages:
     - JavaScript
     - TypeScript
@@ -48,6 +50,7 @@
   name: "Session Cookie Missing HttpOnly Flag"
   description: "Session cookies without the HttpOnly flag are accessible via JavaScript, enabling theft through XSS. Always set httpOnly: true on session cookies."
   severity: Medium
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -68,6 +71,7 @@
   name: "Hardcoded JWT Secret"
   description: "Hardcoding a JWT secret in source code exposes it to anyone with repository access. Store secrets in environment variables or a secrets manager."
   severity: Critical
+  confidence: high
   languages:
     - JavaScript
     - TypeScript

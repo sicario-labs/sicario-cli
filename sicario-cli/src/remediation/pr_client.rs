@@ -646,6 +646,99 @@ pub fn create_pull_request_auto(patch: &Patch, rule_id: &str) -> Result<String> 
     }
 }
 
+/// Create a GitHub PR for an already-pushed branch (used by --auto-pr).
+///
+/// Unlike `create_github_pr`, this function does NOT commit files — it assumes
+/// the branch has already been pushed by the caller. It only opens the PR.
+pub fn create_github_pr_with_branch(branch_name: &str, title: &str, body: &str) -> Result<String> {
+    let token = std::env::var("GITHUB_TOKEN").map_err(|_| {
+        anyhow!("GITHUB_TOKEN environment variable is not set.")
+    })?;
+
+    let remote_url = get_remote_url()?;
+    let (owner, repo) = parse_owner_repo(&remote_url)?;
+
+    let client = Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .context("Failed to build HTTP client")?;
+
+    let api_base = "https://api.github.com";
+    let default_branch = get_github_default_branch(&client, &token, api_base, &owner, &repo)?;
+
+    let pr_url = format!("{}/repos/{}/{}/pulls", api_base, owner, repo);
+    let pr_body_req = GitHubCreatePrRequest {
+        title: title.to_string(),
+        body: body.to_string(),
+        head: branch_name.to_string(),
+        base: default_branch,
+    };
+
+    let resp = client
+        .post(&pr_url)
+        .bearer_auth(&token)
+        .header("User-Agent", "sicario-cli")
+        .header("Accept", "application/vnd.github+json")
+        .json(&pr_body_req)
+        .send()
+        .context("Failed to create GitHub PR")?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body_text = resp.text().unwrap_or_default();
+        return Err(anyhow!("GitHub PR creation failed ({}): {}", status, body_text));
+    }
+
+    let pr_response: GitHubPrResponse = resp.json().context("Failed to parse GitHub PR response")?;
+    Ok(pr_response.html_url)
+}
+
+/// Create a GitLab MR for an already-pushed branch (used by --auto-pr).
+pub fn create_gitlab_mr_with_branch(branch_name: &str, title: &str, body: &str) -> Result<String> {
+    let token = std::env::var("GITLAB_TOKEN").map_err(|_| {
+        anyhow!("GITLAB_TOKEN environment variable is not set.")
+    })?;
+
+    let remote_url = get_remote_url()?;
+    let (namespace, project) = parse_owner_repo(&remote_url)?;
+
+    let client = Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .context("Failed to build HTTP client")?;
+
+    let api_base = "https://gitlab.com/api/v4";
+    let project_id = format!("{}/{}", namespace, project);
+    let encoded_project_id = project_id.replace('/', "%2F");
+    let default_branch = get_gitlab_default_branch(&client, &token, api_base, &encoded_project_id)?;
+
+    let mr_url = format!("{}/projects/{}/merge_requests", api_base, encoded_project_id);
+    let mr_body = GitLabCreateMrRequest {
+        source_branch: branch_name.to_string(),
+        target_branch: default_branch,
+        title: title.to_string(),
+        description: body.to_string(),
+        remove_source_branch: true,
+    };
+
+    let resp = client
+        .post(&mr_url)
+        .header("PRIVATE-TOKEN", &token)
+        .header("Content-Type", "application/json")
+        .json(&mr_body)
+        .send()
+        .context("Failed to create GitLab MR")?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body_text = resp.text().unwrap_or_default();
+        return Err(anyhow!("GitLab MR creation failed ({}): {}", status, body_text));
+    }
+
+    let mr_response: GitLabMrResponse = resp.json().context("Failed to parse GitLab MR response")?;
+    Ok(mr_response.web_url)
+}
+
 //  Tests
 
 #[cfg(test)]

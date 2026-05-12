@@ -9,6 +9,7 @@
   name: "requests.get() with f-string URL"
   description: "Using f-strings to construct URLs in requests.get() allows SSRF. Validate and allowlist URLs before making requests."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -36,6 +37,7 @@
   name: "requests.get() with Concatenated URL"
   description: "Concatenating user input into URLs for requests allows SSRF. Validate and allowlist URLs before making requests."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -63,6 +65,7 @@
   name: "urllib.request.urlopen() with f-string URL"
   description: "Using f-strings to construct URLs in urllib.request.urlopen() allows SSRF. Validate and allowlist URLs."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -90,6 +93,7 @@
   name: "Flask redirect() with User Input"
   description: "Passing user-controlled input to redirect() allows open redirect attacks. Validate the URL against an allowlist."
   severity: Medium
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -117,6 +121,7 @@
   name: "Django redirect() with User Input"
   description: "Passing user-controlled input to Django's redirect() allows open redirect attacks. Validate the URL against an allowlist."
   severity: Medium
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -144,6 +149,7 @@
   name: "httpx Request with f-string URL"
   description: "Using f-strings to construct URLs in httpx requests allows SSRF. Validate and allowlist URLs."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -171,6 +177,7 @@
   name: "aiohttp Request with f-string URL"
   description: "Using f-strings to construct URLs in aiohttp requests allows SSRF. Validate and allowlist URLs."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -198,6 +205,7 @@
   name: "SSL Verification Disabled"
   description: "Disabling SSL verification with verify=False allows man-in-the-middle attacks. Always verify SSL certificates."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -225,6 +233,7 @@
   name: "SSL Context with Disabled Verification"
   description: "Creating an unverified SSL context disables certificate validation. Use ssl.create_default_context() instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -252,6 +261,7 @@
   name: "Flask app.run() with debug=True"
   description: "Running Flask with debug=True in production exposes the Werkzeug debugger, which allows remote code execution. Disable debug mode in production."
   severity: Critical
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -279,6 +289,7 @@
   name: "JWT Decode without Verification"
   description: "Decoding JWT tokens without verification allows token forgery. Always verify the signature with algorithms and key parameters."
   severity: Critical
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -306,6 +317,7 @@
   name: "JWT with 'none' Algorithm"
   description: "Using 'none' as JWT algorithm disables signature verification entirely. Always specify a secure algorithm like HS256 or RS256."
   severity: Critical
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -328,3 +340,5 @@
       expected: TrueNegative
     - code: "jwt.encode(payload, key, algorithm='HS256')"
       expected: TrueNegative
+
+

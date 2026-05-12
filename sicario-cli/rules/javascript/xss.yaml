@@ -11,6 +11,7 @@
   name: "dangerouslySetInnerHTML with Dynamic Content"
   description: "Using dangerouslySetInnerHTML with dynamic content in React/JSX allows XSS. Sanitize HTML with DOMPurify or use safe rendering methods instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -39,6 +40,7 @@
   name: "dangerouslySetInnerHTML with Props Input"
   description: "Passing component props directly to dangerouslySetInnerHTML allows XSS if props contain user-controlled data. Sanitize before rendering."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -67,6 +69,7 @@
   name: "dangerouslySetInnerHTML with State Variables"
   description: "Using React state variables in dangerouslySetInnerHTML can lead to XSS if state is populated from user input. Sanitize HTML before setting state."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -95,6 +98,7 @@
   name: "innerHTML Assignment with Dynamic Content"
   description: "Assigning dynamic content to innerHTML allows XSS. Use textContent for plain text or sanitize HTML with DOMPurify before assignment."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -123,6 +127,7 @@
   name: "outerHTML Assignment with Dynamic Content"
   description: "Assigning dynamic content to outerHTML allows XSS. Use safe DOM manipulation methods instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -151,6 +156,7 @@
   name: "document.write with Dynamic Content"
   description: "Using document.write with dynamic content allows XSS. Use safe DOM manipulation methods like textContent or createElement instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -179,6 +185,7 @@
   name: "document.writeln with Dynamic Content"
   description: "Using document.writeln with dynamic content allows XSS. Use safe DOM manipulation methods instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -207,6 +214,7 @@
   name: "EJS Unescaped Output with User Data"
   description: "Using EJS unescaped output tag <%- %> with user-controlled data allows XSS. Use escaped output tag <%= %> or sanitize data before rendering."
   severity: Low
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -235,6 +243,7 @@
   name: "Handlebars Triple-Stash Unescaped Output"
   description: "Using Handlebars triple-stash {{{ }}} renders content without HTML escaping, allowing XSS. Use double-stash {{ }} for auto-escaped output."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -263,6 +272,7 @@
   name: "Pug Unescaped Interpolation"
   description: "Using Pug unescaped interpolation !{} renders content without HTML escaping, allowing XSS. Use escaped interpolation #{} instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -291,6 +301,7 @@
   name: "Vue v-html Directive with Dynamic Binding"
   description: "Using Vue v-html directive renders raw HTML without escaping, allowing XSS if bound to user-controlled data. Use v-text or {{ }} interpolation for safe rendering."
   severity: Low
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -319,6 +330,7 @@
   name: "jQuery .html() with User Input"
   description: "Using jQuery .html() with user-controlled data allows XSS. Use .text() for plain text content or sanitize HTML before insertion."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -347,6 +359,7 @@
   name: "jQuery .append() with Unsanitized HTML"
   description: "Using jQuery .append() with unsanitized HTML strings allows XSS. Sanitize HTML content or use DOM manipulation methods instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -375,6 +388,7 @@
   name: "insertAdjacentHTML with Dynamic Content"
   description: "Using insertAdjacentHTML with dynamic content allows XSS. Use insertAdjacentText for plain text or sanitize HTML before insertion."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -403,6 +417,7 @@
   name: "DOMParser with User-Controlled HTML String"
   description: "Parsing user-controlled HTML strings with DOMParser can lead to XSS if the parsed DOM is inserted into the page. Sanitize input before parsing or use a sanitization library."
   severity: Medium
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -431,6 +446,7 @@
   name: "React ref.current.innerHTML Assignment"
   description: "Assigning to ref.current.innerHTML in React bypasses React's XSS protections. Use React state and JSX rendering or sanitize with DOMPurify."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -454,3 +470,5 @@
       expected: TrueNegative
     - code: "divRef.current.style.display = 'none';"
       expected: TrueNegative
+
+

@@ -15,6 +15,7 @@
   name: "Runtime.exec with String Concatenation"
   description: "Concatenating user input into Runtime.exec() command strings allows command injection. Use ProcessBuilder with separate arguments and validate input against an allowlist."
   severity: Critical
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -42,6 +43,7 @@
   name: "Runtime.exec with String.format"
   description: "Using String.format to build command strings for Runtime.exec allows command injection. Use ProcessBuilder with an argument array instead."
   severity: Critical
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -69,6 +71,7 @@
   name: "Runtime.exec with Variable Command"
   description: "Passing a variable directly to Runtime.exec() allows command injection if the variable is user-controlled. Validate against an allowlist of permitted commands."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -100,6 +103,7 @@
   name: "ProcessBuilder with Shell Invocation"
   description: "Using ProcessBuilder to invoke a shell (sh, bash, cmd) with user input enables arbitrary command execution. Execute the target binary directly without a shell intermediary."
   severity: Critical
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -127,6 +131,7 @@
   name: "ProcessBuilder with Variable Command"
   description: "Passing a variable as the command to ProcessBuilder allows command injection if the variable is user-controlled. Use a hardcoded command name or validate against an allowlist."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -154,6 +159,7 @@
   name: "ProcessBuilder.command with User Input List"
   description: "Setting ProcessBuilder.command() with a list containing user input allows command injection. Validate all command arguments against an allowlist."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -185,6 +191,7 @@
   name: "JNDI InitialContext.lookup with Variable"
   description: "Passing user-controlled input to InitialContext.lookup() enables JNDI injection (Log4Shell-style attacks). Validate JNDI names against an allowlist of permitted resources."
   severity: Critical
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -212,6 +219,7 @@
   name: "JNDI InitialContext.lookup with String Concatenation"
   description: "Concatenating user input into JNDI lookup strings enables JNDI injection. Use a hardcoded JNDI name or validate against an allowlist."
   severity: Critical
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -234,3 +242,5 @@
       expected: TrueNegative
     - code: "ctx.close();"
       expected: TrueNegative
+
+

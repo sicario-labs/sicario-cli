@@ -17,6 +17,7 @@
   name: "Error Assigned to Blank Identifier"
   description: "Assigning an error to the blank identifier (_ = err) silently discards it. Always check errors to prevent silent failures and security issues."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -44,6 +45,7 @@
   name: "Deferred Close Without Error Check"
   description: "Deferring Close() without checking its error can hide data loss (e.g., unflushed writes). Capture and handle the error from Close."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -71,6 +73,7 @@
   name: "Ignored Error from Write Operation"
   description: "Ignoring the error from Write can lead to silent data corruption or incomplete output. Always check the error return value."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -98,6 +101,7 @@
   name: "Ignored Error from Read Operation"
   description: "Ignoring the error from Read can lead to processing incomplete or corrupted data. Always check the error return value."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -125,6 +129,7 @@
   name: "Panic in Library Code"
   description: "Using panic() in library code crashes the calling application. Return errors instead and let the caller decide how to handle them."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -152,6 +157,7 @@
   name: "Recover Without Logging"
   description: "Using recover() without logging the recovered value silently swallows panics, making debugging impossible. Always log the recovered value."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -179,6 +185,7 @@
   name: "Ignored Error from json.Unmarshal"
   description: "Ignoring the error from json.Unmarshal can lead to processing zero-value or partially populated structs. Always check the error."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -206,6 +213,7 @@
   name: "Ignored Error from json.Marshal"
   description: "Ignoring the error from json.Marshal can lead to sending empty or malformed JSON responses. Always check the error."
   severity: Low
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -233,6 +241,7 @@
   name: "Ignored Error from http.ListenAndServe"
   description: "Ignoring the error from http.ListenAndServe means the server may fail to start without any indication. Always check and log the error."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -260,6 +269,7 @@
   name: "Ignored Error from sql.DB Close"
   description: "Ignoring the error from sql.DB.Close() can hide connection pool cleanup failures. Check the error to ensure proper resource cleanup."
   severity: Low
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -287,6 +297,7 @@
   name: "Ignored Error from File Sync"
   description: "Ignoring the error from file.Sync() can lead to data loss if the OS fails to flush data to disk. Always check the error."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -314,6 +325,7 @@
   name: "Ignored Error from sql.Rows.Err"
   description: "Failing to check rows.Err() after iterating sql.Rows can hide query errors that occurred during iteration. Always check rows.Err() after the loop."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -336,3 +348,5 @@
       expected: TrueNegative
     - code: "rows.Close()"
       expected: TrueNegative
+
+

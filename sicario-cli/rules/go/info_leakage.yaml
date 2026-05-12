@@ -17,6 +17,7 @@
   name: "Sensitive Data in log.Printf"
   description: "Logging sensitive data (passwords, tokens, secrets, keys) exposes them in log files. Mask or redact sensitive values before logging."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -44,6 +45,7 @@
   name: "fmt.Fprintf to ResponseWriter with Error Details"
   description: "Writing error details directly to HTTP ResponseWriter exposes internal information. Return generic error messages to clients."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -71,6 +73,7 @@
   name: "http.Error with Internal Error Message"
   description: "Passing internal error messages to http.Error exposes implementation details. Return generic error messages to clients."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -98,6 +101,7 @@
   name: "Panic Message with Sensitive Data"
   description: "Including sensitive data in panic messages can expose it in stack traces and error logs. Use generic messages in panics."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -125,6 +129,7 @@
   name: "Debug Endpoint Exposed"
   description: "Exposing pprof or debug endpoints in production allows attackers to profile the application and extract sensitive runtime information. Restrict debug endpoints to internal networks."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -152,6 +157,7 @@
   name: "Stack Trace in HTTP Response"
   description: "Including stack traces in HTTP responses exposes internal code structure. Log stack traces server-side and return generic error messages."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -179,6 +185,7 @@
   name: "Database Error in HTTP Response"
   description: "Returning database error messages in HTTP responses exposes database schema, table names, and query details. Return generic error messages."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -206,6 +213,7 @@
   name: "Environment Variables Logged"
   description: "Logging environment variables can expose secrets, API keys, and database credentials. Avoid logging environment variable values."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -233,6 +241,7 @@
   name: "Internal IP Address in HTTP Response"
   description: "Including internal IP addresses in HTTP responses exposes network topology. Remove internal addresses from client-facing responses."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -260,6 +269,7 @@
   name: "Verbose Error Wrapping with Sensitive Context"
   description: "Wrapping errors with sensitive context (connection strings, credentials, internal paths) can leak information if the error reaches the client. Use generic context in error wrapping."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -287,6 +297,7 @@
   name: "Sensitive Data in fmt.Printf"
   description: "Printing sensitive data (passwords, tokens, secrets) to stdout can expose them in logs and terminal history. Mask or redact sensitive values."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -314,6 +325,7 @@
   name: "Sensitive Data in Structured Logging (slog)"
   description: "Logging sensitive data in structured logging fields exposes them in log aggregation systems. Mask or redact sensitive values."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -336,3 +348,5 @@
       expected: TrueNegative
     - code: "slog.Info(\"user\", \"id\", userID)"
       expected: TrueNegative
+
+

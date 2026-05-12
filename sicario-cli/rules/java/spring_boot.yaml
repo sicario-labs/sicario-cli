@@ -17,6 +17,7 @@
   name: "Spring Security CSRF Disabled"
   description: "Disabling CSRF protection exposes the application to cross-site request forgery attacks. Keep CSRF enabled for browser-facing endpoints."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -44,6 +45,7 @@
   name: "Spring Security CSRF Disabled (Lambda DSL)"
   description: "Disabling CSRF via the lambda DSL exposes the application to CSRF attacks. Keep CSRF enabled for browser-facing endpoints."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -75,6 +77,7 @@
   name: "Spring CORS allowedOrigins(\"*\")"
   description: "Allowing all origins in CORS configuration permits any website to make cross-origin requests. Restrict to trusted domains."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -102,6 +105,7 @@
   name: "@CrossOrigin with origins=\"*\""
   description: "Using @CrossOrigin with wildcard origins allows any website to make cross-origin requests. Restrict to trusted domains."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -134,6 +138,7 @@
   name: "Spring Security permitAll on Sensitive Paths"
   description: "Using permitAll() on broad path patterns may expose sensitive endpoints. Restrict access to authenticated users and apply role-based authorization."
   severity: Medium
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -161,6 +166,7 @@
   name: "Spring Actuator Endpoints Exposed"
   description: "Exposing all actuator endpoints can leak sensitive application internals (heap dumps, env vars, beans). Restrict to health and info only."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -192,6 +198,7 @@
   name: "Spring Session Fixation Protection Disabled"
   description: "Disabling session fixation protection allows attackers to hijack sessions. Keep the default migrateSession or changeSessionId strategy."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -219,6 +226,7 @@
   name: "Spring Security Headers Disabled"
   description: "Disabling security headers removes protections like X-Frame-Options, X-Content-Type-Options, and HSTS. Keep default headers enabled."
   severity: Medium
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -250,6 +258,7 @@
   name: "SSL Certificate Verification Disabled"
   description: "Disabling SSL certificate verification allows man-in-the-middle attacks. Use proper certificate validation in production."
   severity: Critical
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -277,6 +286,7 @@
   name: "DEBUG Logging Level in Production Configuration"
   description: "DEBUG logging in production can expose sensitive data in logs. Use INFO or WARN level in production profiles."
   severity: Medium
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -308,6 +318,7 @@
   name: "H2 Console Enabled"
   description: "The H2 console provides direct database access and should never be enabled in production. Disable it or restrict access."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -335,6 +346,7 @@
   name: "Spring Security Frame Options Disabled"
   description: "Disabling frame options allows clickjacking attacks. Use DENY or SAMEORIGIN frame options."
   severity: Medium
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -357,3 +369,5 @@
       expected: TrueNegative
     - code: "http.headers().contentTypeOptions();"
       expected: TrueNegative
+
+

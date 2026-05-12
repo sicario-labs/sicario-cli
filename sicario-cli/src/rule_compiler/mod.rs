@@ -90,6 +90,7 @@ impl RuleCompiler {
                 owasp_category: None,
                 help_uri: None,
                 test_cases: None,
+                confidence: crate::engine::security_rule::ConfidenceLevel::Medium,
             };
 
             match self.engine.validate_and_compile_rule(candidate.clone()) {
@@ -382,6 +383,7 @@ fn build_rule_id(description: &str, language: Language) -> String {
         Language::Java => "java",
         Language::Ruby => "rb",
         Language::Php => "php",
+        Language::CSharp => "csharp",
     };
 
     // Take first 40 chars of description, slugify
@@ -400,6 +402,7 @@ fn language_name(language: Language) -> &'static str {
         Language::Java => "Java",
         Language::Ruby => "Ruby",
         Language::Php => "PHP",
+        Language::CSharp => "C#",
     }
 }
 
@@ -534,6 +537,7 @@ mod tests {
             owasp_category: None,
             help_uri: None,
             test_cases: None,
+            confidence: crate::engine::security_rule::ConfidenceLevel::High,
         };
 
         let path = save_rule(&rule, project_root).unwrap();
@@ -581,6 +585,7 @@ mod tests {
             owasp_category: None,
             help_uri: None,
             test_cases: None,
+            confidence: crate::engine::security_rule::ConfidenceLevel::Medium,
         };
 
         save_rule(&rule, project_root).unwrap();
@@ -666,6 +671,7 @@ mod tests {
             owasp_category: None,
             help_uri: None,
             test_cases: None,
+            confidence: crate::engine::security_rule::ConfidenceLevel::High,
         };
 
         // Validate the rule directly
@@ -696,6 +702,7 @@ mod tests {
             owasp_category: None,
             help_uri: None,
             test_cases: None,
+            confidence: crate::engine::security_rule::ConfidenceLevel::Low,
         };
 
         let result = engine.validate_and_compile_rule(invalid_rule);

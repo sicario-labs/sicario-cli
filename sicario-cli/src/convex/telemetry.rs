@@ -86,22 +86,19 @@ mod tests {
     use uuid::Uuid;
 
     fn make_vuln() -> Vulnerability {
-        Vulnerability {
-            id: Uuid::new_v4(),
-            rule_id: "sql-injection".to_string(),
-            file_path: PathBuf::from("src/db.py"),
-            line: 42,
-            column: 8,
-            snippet: "cursor.execute(query)".to_string(),
-            severity: Severity::High,
-            reachable: true,
-            cloud_exposed: Some(true),
-            cwe_id: Some("CWE-89".to_string()),
-            owasp_category: Some(OwaspCategory::A03_Injection),
-            confidence_score: 1.0,
-            suppressed: false,
-            execution_trace: None,
-        }
+        let mut v = Vulnerability::new(
+            "sql-injection".to_string(),
+            PathBuf::from("src/db.py"),
+            42,
+            8,
+            "cursor.execute(query)".to_string(),
+            Severity::High,
+        );
+        v.reachable = true;
+        v.cloud_exposed = Some(true);
+        v.cwe_id = Some("CWE-89".to_string());
+        v.owasp_category = Some(OwaspCategory::A03_Injection);
+        v
     }
 
     #[test]

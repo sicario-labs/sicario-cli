@@ -61,22 +61,17 @@ mod tests {
         )
             .prop_map(
                 |(rule_id, file_path, line, column, snippet, severity, reachable, owasp)| {
-                    Vulnerability {
-                        id: Uuid::new_v4(),
+                    let mut v = Vulnerability::new(
                         rule_id,
-                        file_path: PathBuf::from(file_path),
+                        PathBuf::from(file_path),
                         line,
                         column,
                         snippet,
                         severity,
-                        reachable,
-                        cloud_exposed: None,
-                        cwe_id: None,
-                        owasp_category: owasp,
-                        confidence_score: 1.0,
-                        suppressed: false,
-                        execution_trace: None,
-                    }
+                    );
+                    v.reachable = reachable;
+                    v.owasp_category = owasp;
+                    v
                 },
             )
     }

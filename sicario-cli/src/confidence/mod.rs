@@ -7,6 +7,6 @@
 pub mod scorer;
 
 pub use scorer::{
-    ConfidenceScorer, ConfidenceScoring, ContextualIndicators, PatternContext, ReachabilityResult,
-    ScoringInput,
+    compute_priority_score, ConfidenceScorer, ConfidenceScoring, ContextualIndicators,
+    PatternContext, ReachabilityResult, ScoringInput,
 };

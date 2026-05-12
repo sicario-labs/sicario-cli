@@ -136,3 +136,22 @@ export const skipOnboarding = mutation({
     return profile._id;
   },
 });
+
+// ── Unsubscribe from marketing/onboarding emails (Task 38.6) ─────────────────
+// Called by the one-click unsubscribe link in onboarding emails.
+// Looks up the profile by userId and sets marketingEmailsOptedOut: true.
+
+export const unsubscribeByUserId = mutation({
+  args: { userId: v.string() },
+  handler: async (ctx, args) => {
+    const profile = await ctx.db
+      .query("userProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .first();
+    if (!profile) return;
+    await ctx.db.patch(profile._id, {
+      marketingEmailsOptedOut: true,
+      updatedAt: new Date().toISOString(),
+    });
+  },
+});

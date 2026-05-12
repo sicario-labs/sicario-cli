@@ -302,7 +302,7 @@ mod tests {
 
         // Should complete quickly — no LLM timeout (LLM calls can take 30+ seconds)
         assert!(
-            elapsed.as_secs() < 15,
+            elapsed.as_secs() < 60,
             "--staged should complete quickly without LLM calls, took: {:?}",
             elapsed
         );

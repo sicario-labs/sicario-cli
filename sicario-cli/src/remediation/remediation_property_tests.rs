@@ -56,12 +56,12 @@ mod property_tests {
     /// Generate a random file content with a "vulnerable" line
     fn arb_file_with_vuln() -> impl Strategy<Value = (String, usize, String)> {
         (
-            prop::collection::vec("[a-z ]{5,20}\n", 1..10usize),
+            prop::collection::vec("const x = 1;\n", 1..10usize),
             "[a-z]{3,8}",
         )
             .prop_map(|(mut lines, vuln_token)| {
                 let vuln_line = lines.len() / 2;
-                let snippet = format!("let secret = \"{}\";", vuln_token);
+                let snippet = format!("const token = Math.random(); // {}", vuln_token);
                 lines[vuln_line] = format!("{}\n", snippet);
                 let content = lines.join("");
                 (content, vuln_line + 1, snippet) // line is 1-indexed
@@ -73,22 +73,17 @@ mod property_tests {
         line: usize,
         snippet: &str,
     ) -> Vulnerability {
-        Vulnerability {
-            id: Uuid::new_v4(),
-            rule_id: "hardcoded-secret".to_string(),
+        let mut v = Vulnerability::new(
+            "js-crypto-math-random".to_string(),
             file_path,
             line,
-            column: 0,
-            snippet: snippet.to_string(),
-            severity: Severity::High,
-            reachable: true,
-            cloud_exposed: None,
-            cwe_id: Some("CWE-798".to_string()),
-            owasp_category: None,
-            confidence_score: 1.0,
-            suppressed: false,
-            execution_trace: None,
-        }
+            0,
+            snippet.to_string(),
+            Severity::High,
+        );
+        v.reachable = true;
+        v.cwe_id = Some("CWE-338".to_string());
+        v
     }
 
     // ── Property 31: LLM-generated patch syntax validity ─────────────────────
@@ -225,7 +220,7 @@ mod property_tests {
             std::env::remove_var("CEREBRAS_API_KEY");
 
             let dir = TempDir::new().unwrap();
-            let engine = RemediationEngine::new(dir.path()).unwrap();
+            let engine = RemediationEngine::new_with_allow_ai(dir.path(), false).unwrap();
 
             let file = dir.path().join("app.js");
             fs::write(&file, &content).unwrap();

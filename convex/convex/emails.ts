@@ -9,6 +9,8 @@
  */
 
 import { Resend } from "resend";
+import { action } from "./_generated/server";
+import { v } from "convex/values";
 
 function getResend(): Resend {
   const key = process.env.RESEND_API_KEY;
@@ -38,34 +40,16 @@ const colors = {
   codeBg: "#0a0a0a",
 };
 
-// ── Logo SVG (inline, email-safe) ─────────────────────────────────────────────
-// The Sicario logo mark: a filled circle with a diagonal slash — rendered as
-// a table-based layout so it works in Outlook and Gmail without SVG support.
+// ── Logo / header ─────────────────────────────────────────────────────────────
+// Centered SICARIO wordmark — no image dependency, renders everywhere.
 
 function logoHtml(): string {
-  return `
-    <table cellpadding="0" cellspacing="0" border="0" role="presentation">
-      <tr>
-        <td style="vertical-align:middle;padding-right:10px">
-          <!--[if !mso]><!-->
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block">
-            <circle cx="14" cy="14" r="14" fill="${colors.accent}"/>
-            <line x1="20" y1="7" x2="8" y2="21" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
-          </svg>
-          <!--<![endif]-->
-          <!--[if mso]>
-          <v:oval xmlns:v="urn:schemas-microsoft-com:vml" style="width:28px;height:28px" fillcolor="${colors.accent}" stroked="f">
-          </v:oval>
-          <![endif]-->
-        </td>
-        <td style="vertical-align:middle">
-          <span style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:18px;font-weight:800;color:#ffffff;letter-spacing:0.08em;text-transform:uppercase">SICARIO</span>
-        </td>
-      </tr>
-    </table>`;
+  return `<p style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:22px;font-weight:800;color:#ffffff;letter-spacing:0.14em;text-transform:uppercase;text-align:center">SICARIO</p>`;
 }
 
 // ── Shared email shell ────────────────────────────────────────────────────────
+// Mobile-first: single-column, fluid width, 16px side padding on small screens,
+// readable font sizes, full-width CTA buttons on mobile.
 
 function emailShell(content: string, previewText: string): string {
   return `<!DOCTYPE html>
@@ -80,73 +64,77 @@ function emailShell(content: string, previewText: string): string {
   <noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>
   <![endif]-->
   <style>
+    /* Reset */
     body, table, td, a { -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; }
     table, td { mso-table-lspace:0pt; mso-table-rspace:0pt; }
-    img { -ms-interpolation-mode:bicubic; border:0; outline:none; text-decoration:none; }
-    body { margin:0; padding:0; background-color:${colors.bg}; }
+    img { -ms-interpolation-mode:bicubic; border:0; outline:none; text-decoration:none; display:block; }
+    body { margin:0; padding:0; background-color:${colors.bg}; width:100% !important; }
     a { color:${colors.accent}; }
+
+    /* Mobile */
     @media only screen and (max-width:600px) {
-      .email-container { width:100% !important; }
-      .stack-column { display:block !important; width:100% !important; }
-      .mobile-padding { padding:24px 20px !important; }
-      .mobile-btn { width:100% !important; text-align:center !important; }
+      .email-container { width:100% !important; min-width:100% !important; }
+      .email-header,
+      .email-body,
+      .email-footer { padding-left:20px !important; padding-right:20px !important; }
+      .email-header { padding-top:20px !important; padding-bottom:16px !important; }
+      .email-body { padding-top:28px !important; padding-bottom:28px !important; }
+      .cta-btn, .mobile-btn { width:100% !important; display:block !important; text-align:center !important; box-sizing:border-box !important; }
+      .stat-cell { display:block !important; width:100% !important; padding:0 0 10px 0 !important; }
+      h1 { font-size:20px !important; }
+      .body-text { font-size:15px !important; }
+      .code-block { font-size:12px !important; }
     }
   </style>
 </head>
-<body style="margin:0;padding:0;background-color:${colors.bg};word-spacing:normal">
-  <!-- Preview text (hidden) -->
-  <div style="display:none;font-size:1px;color:${colors.bg};line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden">${previewText}&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌</div>
+<body style="margin:0;padding:0;background-color:${colors.bg};word-spacing:normal;-webkit-font-smoothing:antialiased">
+
+  <!-- Preview text -->
+  <div style="display:none;font-size:1px;color:${colors.bg};line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden">${previewText}&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌</div>
 
   <!-- Outer wrapper -->
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:${colors.bg}">
     <tr>
-      <td align="center" style="padding:40px 16px">
+      <td align="center" style="padding:32px 12px">
 
-        <!-- Email container -->
+        <!-- Email container — max 560px, fluid on mobile -->
         <table class="email-container" role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="max-width:560px;width:100%">
 
-          <!-- ── HEADER ── -->
+          <!-- HEADER -->
           <tr>
-            <td style="background-color:${colors.surface};border:1px solid ${colors.border};border-bottom:none;border-radius:12px 12px 0 0;padding:28px 40px 24px">
+            <td class="email-header" align="center" style="background-color:${colors.surface};border:1px solid ${colors.border};border-bottom:none;border-radius:12px 12px 0 0;padding:24px 40px 20px">
               ${logoHtml()}
             </td>
           </tr>
 
-          <!-- ── DIVIDER ── -->
+          <!-- DIVIDER -->
           <tr>
-            <td style="background-color:${colors.surface};border-left:1px solid ${colors.border};border-right:1px solid ${colors.border};padding:0 40px">
+            <td style="background-color:${colors.surface};border-left:1px solid ${colors.border};border-right:1px solid ${colors.border}">
               <div style="height:1px;background-color:${colors.borderSubtle};font-size:0;line-height:0">&nbsp;</div>
             </td>
           </tr>
 
-          <!-- ── BODY ── -->
+          <!-- BODY -->
           <tr>
-            <td class="mobile-padding" style="background-color:${colors.surface};border-left:1px solid ${colors.border};border-right:1px solid ${colors.border};padding:36px 40px">
+            <td class="email-body" style="background-color:${colors.surface};border-left:1px solid ${colors.border};border-right:1px solid ${colors.border};padding:32px 40px">
               ${content}
             </td>
           </tr>
 
-          <!-- ── FOOTER ── -->
+          <!-- FOOTER -->
           <tr>
-            <td style="background-color:${colors.surface};border:1px solid ${colors.border};border-top:1px solid ${colors.borderSubtle};border-radius:0 0 12px 12px;padding:20px 40px">
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
-                <tr>
-                  <td>
-                    <p style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;line-height:1.6;color:${colors.textMuted}">
-                      You're receiving this email because you have a Sicario account.
-                      <br>
-                      <a href="https://usesicario.xyz" style="color:${colors.textMuted};text-decoration:underline">usesicario.xyz</a>
-                      &nbsp;·&nbsp;
-                      <a href="https://usesicario.xyz/privacy" style="color:${colors.textMuted};text-decoration:underline">Privacy Policy</a>
-                    </p>
-                  </td>
-                </tr>
-              </table>
+            <td class="email-footer" style="background-color:${colors.surface};border:1px solid ${colors.border};border-top:1px solid ${colors.borderSubtle};border-radius:0 0 12px 12px;padding:18px 40px">
+              <p style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;line-height:1.7;color:${colors.textMuted};text-align:center">
+                You're receiving this because you have a Sicario account.
+                <br>
+                <a href="https://usesicario.xyz" style="color:${colors.textMuted};text-decoration:underline">usesicario.xyz</a>
+                &nbsp;·&nbsp;
+                <a href="https://usesicario.xyz/privacy" style="color:${colors.textMuted};text-decoration:underline">Privacy Policy</a>
+              </p>
             </td>
           </tr>
 
         </table>
-        <!-- /Email container -->
 
       </td>
     </tr>
@@ -706,3 +694,287 @@ export async function sendInactivityNudgeEmail(
     html: emailShell(content, `Run a scan to check for new vulnerabilities`),
   });
 }
+
+// ── First Scan Nudge email (Task 38.2) ────────────────────────────────────────
+// Sent 24h after signup if no scan has been completed yet.
+
+export async function sendFirstScanNudgeEmail(
+  to: string,
+  name: string
+): Promise<void> {
+  const resend = getResend();
+  const displayName = name || to.split("@")[0];
+
+  const content = `
+    <h1 style="margin:0 0 8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:24px;font-weight:700;color:${colors.textPrimary};letter-spacing:-0.02em">
+      Run your first scan
+    </h1>
+    <p style="margin:0 0 24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.7;color:${colors.textSecondary}">
+      Hi <strong style="color:${colors.textPrimary}">${displayName}</strong>, you signed up for Sicario yesterday but haven't run a scan yet. It takes under 30 seconds and you'll see exactly what's lurking in your codebase.
+    </p>
+
+    <!-- Code block -->
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 8px;border-radius:7px;background-color:${colors.codeBg};border:1px solid ${colors.border}">
+      <tr>
+        <td style="padding:14px 18px">
+          <code style="font-family:'Courier New',Courier,monospace;font-size:13px;color:${colors.codeText}">curl -fsSL https://usesicario.xyz/install.sh | sh</code>
+        </td>
+      </tr>
+    </table>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 28px;border-radius:7px;background-color:${colors.codeBg};border:1px solid ${colors.border}">
+      <tr>
+        <td style="padding:14px 18px">
+          <code style="font-family:'Courier New',Courier,monospace;font-size:13px;color:${colors.codeText}">sicario scan . --publish</code>
+        </td>
+      </tr>
+    </table>
+
+    <!-- CTA -->
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 28px">
+      <tr>
+        <td class="mobile-btn" style="border-radius:7px;background-color:${colors.accent}">
+          <a href="https://usesicario.xyz/dashboard" style="display:inline-block;padding:13px 28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;color:#000000;text-decoration:none;letter-spacing:0.01em">
+            Go to Dashboard →
+          </a>
+        </td>
+      </tr>
+    </table>
+
+    <div style="height:1px;background-color:${colors.borderSubtle};margin:0 0 16px;font-size:0;line-height:0">&nbsp;</div>
+    <p style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;line-height:1.6;color:${colors.textMuted}">
+      <a href="https://usesicario.xyz/unsubscribe?email=${encodeURIComponent(to)}" style="color:${colors.textMuted};text-decoration:underline">Unsubscribe</a> from onboarding emails.
+    </p>`;
+
+  await resend.emails.send({
+    from: FROM,
+    to,
+    subject: "Still haven't scanned yet? It takes 30 seconds.",
+    html: emailShell(content, "Run your first Sicario scan in under 30 seconds."),
+  });
+}
+
+// ── Day-3 Re-engagement email (Task 38.3) ─────────────────────────────────────
+// Sent 72h after signup if no scan and nudge already sent.
+
+export async function sendDayThreeReengagementEmail(
+  to: string,
+  name: string
+): Promise<void> {
+  const resend = getResend();
+  const displayName = name || to.split("@")[0];
+
+  const content = `
+    <h1 style="margin:0 0 8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:24px;font-weight:700;color:${colors.textPrimary};letter-spacing:-0.02em">
+      Your code is unscanned
+    </h1>
+    <p style="margin:0 0 24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.7;color:${colors.textSecondary}">
+      Hi <strong style="color:${colors.textPrimary}">${displayName}</strong>, it's been 3 days since you signed up and your codebase still hasn't been scanned. Most teams find at least one critical vulnerability on their first scan.
+    </p>
+
+    <!-- Zero-exfil callout -->
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 28px">
+      <tr>
+        <td style="padding:16px;background-color:#0f1a00;border:1px solid #2a3d00;border-radius:8px">
+          <p style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;line-height:1.6;color:#8aad3a">
+            <strong style="color:${colors.accent}">Zero exfiltration.</strong> Sicario scans run entirely on your machine. Only structured finding metadata is uploaded — your source code never leaves your infrastructure.
+          </p>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Code block -->
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 28px;border-radius:7px;background-color:${colors.codeBg};border:1px solid ${colors.border}">
+      <tr>
+        <td style="padding:14px 18px">
+          <code style="font-family:'Courier New',Courier,monospace;font-size:13px;color:${colors.codeText}">sicario scan . --publish</code>
+        </td>
+      </tr>
+    </table>
+
+    <!-- CTA -->
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 28px">
+      <tr>
+        <td class="mobile-btn" style="border-radius:7px;background-color:${colors.accent}">
+          <a href="https://usesicario.xyz/dashboard" style="display:inline-block;padding:13px 28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;color:#000000;text-decoration:none;letter-spacing:0.01em">
+            Scan My Code →
+          </a>
+        </td>
+      </tr>
+    </table>
+
+    <div style="height:1px;background-color:${colors.borderSubtle};margin:0 0 16px;font-size:0;line-height:0">&nbsp;</div>
+    <p style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;line-height:1.6;color:${colors.textMuted}">
+      <a href="https://usesicario.xyz/unsubscribe?email=${encodeURIComponent(to)}" style="color:${colors.textMuted};text-decoration:underline">Unsubscribe</a> from onboarding emails.
+    </p>`;
+
+  await resend.emails.send({
+    from: FROM,
+    to,
+    subject: "3 days in — your code still hasn't been scanned",
+    html: emailShell(content, "Most teams find a critical vuln on their first scan."),
+  });
+}
+
+// ── First Findings email (Task 38.4) ──────────────────────────────────────────
+// Sent when the user's first scan completes with at least one finding.
+
+export async function sendFirstFindingsEmail(
+  to: string,
+  name: string,
+  findingsCount: number,
+  criticalCount: number,
+  highCount: number,
+  projectName: string
+): Promise<void> {
+  const resend = getResend();
+  const displayName = name || to.split("@")[0];
+
+  const urgencyLine =
+    criticalCount > 0
+      ? `Including <strong style="color:#f87171">${criticalCount} critical</strong> finding${criticalCount !== 1 ? "s" : ""} that need immediate attention.`
+      : highCount > 0
+      ? `Including <strong style="color:#fb923c">${highCount} high-severity</strong> finding${highCount !== 1 ? "s" : ""}.`
+      : "Review them in your dashboard and apply auto-fixes where available.";
+
+  const content = `
+    <h1 style="margin:0 0 8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:24px;font-weight:700;color:${colors.textPrimary};letter-spacing:-0.02em">
+      Your first scan is in
+    </h1>
+    <p style="margin:0 0 24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.7;color:${colors.textSecondary}">
+      Hi <strong style="color:${colors.textPrimary}">${displayName}</strong>, Sicario found <strong style="color:${colors.textPrimary}">${findingsCount} finding${findingsCount !== 1 ? "s" : ""}</strong> in <strong style="color:${colors.textPrimary}">${projectName}</strong>. ${urgencyLine}
+    </p>
+
+    <!-- Stats row -->
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 28px">
+      <tr>
+        <td style="padding:0 6px 0 0" width="33%">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+            <tr>
+              <td style="background-color:${colors.codeBg};border:1px solid ${criticalCount > 0 ? "#4a1010" : colors.border};border-radius:8px;padding:16px 12px;text-align:center">
+                <p style="margin:0 0 4px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#f87171">Critical</p>
+                <span style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:28px;font-weight:800;color:#f87171">${criticalCount}</span>
+              </td>
+            </tr>
+          </table>
+        </td>
+        <td style="padding:0 6px" width="33%">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+            <tr>
+              <td style="background-color:${colors.codeBg};border:1px solid ${highCount > 0 ? "#4a2e10" : colors.border};border-radius:8px;padding:16px 12px;text-align:center">
+                <p style="margin:0 0 4px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#fb923c">High</p>
+                <span style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:28px;font-weight:800;color:#fb923c">${highCount}</span>
+              </td>
+            </tr>
+          </table>
+        </td>
+        <td style="padding:0 0 0 6px" width="33%">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+            <tr>
+              <td style="background-color:${colors.codeBg};border:1px solid ${colors.border};border-radius:8px;padding:16px 12px;text-align:center">
+                <p style="margin:0 0 4px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:${colors.textMuted}">Total</p>
+                <span style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:28px;font-weight:800;color:${colors.textPrimary}">${findingsCount}</span>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <!-- CTA -->
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 28px">
+      <tr>
+        <td class="mobile-btn" style="border-radius:7px;background-color:${colors.accent}">
+          <a href="https://usesicario.xyz/dashboard/findings" style="display:inline-block;padding:13px 28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;color:#000000;text-decoration:none;letter-spacing:0.01em">
+            View Findings →
+          </a>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Auto-fix callout -->
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 8px">
+      <tr>
+        <td style="padding:14px 16px;background-color:#0f1a00;border:1px solid #2a3d00;border-radius:7px">
+          <p style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;line-height:1.6;color:#8aad3a">
+            <strong style="color:${colors.accent}">Auto-fix available.</strong> Run <code style="font-family:'Courier New',Courier,monospace;font-size:12px">sicario fix .</code> to apply deterministic patches — zero tokens burned, zero code exfiltrated.
+          </p>
+        </td>
+      </tr>
+    </table>`;
+
+  await resend.emails.send({
+    from: FROM,
+    to,
+    subject: `Sicario found ${findingsCount} finding${findingsCount !== 1 ? "s" : ""} in ${projectName}`,
+    html: emailShell(content, `${findingsCount} security findings detected in your first scan.`),
+  });
+}
+
+// ── Test email action (dev/staging only) ─────────────────────────────────────
+// Call from the Convex dashboard or CLI:
+//   npx convex run emails:sendTestEmail '{"to":"you@example.com","type":"welcome"}'
+
+export const sendTestEmail = action({
+  args: {
+    to: v.string(),
+    type: v.optional(
+      v.union(
+        v.literal("welcome"),
+        v.literal("password_reset"),
+        v.literal("invitation"),
+        v.literal("critical_findings"),
+        v.literal("weekly_digest")
+      )
+    ),
+  },
+  handler: async (_ctx, args) => {
+    const emailType = args.type ?? "welcome";
+
+    switch (emailType) {
+      case "welcome":
+        await sendWelcomeEmail(args.to, "Test User");
+        break;
+
+      case "password_reset":
+        await sendPasswordResetEmail(args.to, "123456");
+        break;
+
+      case "invitation":
+        await sendInvitationEmail(
+          args.to,
+          "Acme Corp",
+          "developer",
+          "Alice (alice@acme.com)"
+        );
+        break;
+
+      case "critical_findings":
+        await sendCriticalFindingsAlertEmail(
+          args.to,
+          "my-app",
+          "scan_test_001",
+          3,
+          7,
+          14,
+          "https://github.com/acme/my-app"
+        );
+        break;
+
+      case "weekly_digest":
+        await sendWeeklyDigestEmail(args.to, "Acme Corp", {
+          newFindings: 12,
+          criticalOpen: 2,
+          highOpen: 5,
+          fixed: 8,
+          scansRun: 4,
+          topProject: "my-app",
+        });
+        break;
+
+      default:
+        throw new Error(`Unknown email type: ${emailType}`);
+    }
+
+    return { ok: true, type: emailType, to: args.to };
+  },
+});

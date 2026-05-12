@@ -19,6 +19,7 @@
   name: "SQL Query with String Concatenation"
   description: "Building SQL queries via string concatenation with variables allows SQL injection. Use parameterized queries with placeholder arguments instead."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -46,6 +47,7 @@
   name: "fmt.Sprintf in SQL Query Construction"
   description: "Using fmt.Sprintf to build SQL queries allows SQL injection. Use parameterized queries with $1 or ? placeholders instead."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -74,6 +76,7 @@
   name: "database/sql Query with fmt.Sprintf"
   description: "Passing fmt.Sprintf output to database/sql Query or Exec allows SQL injection. Use parameterized queries with placeholder arguments instead."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -101,6 +104,7 @@
   name: "GORM Raw Query with fmt.Sprintf"
   description: "Using fmt.Sprintf to build GORM Raw queries allows SQL injection. Use GORM's built-in parameterized query support instead."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -128,6 +132,7 @@
   name: "GORM Raw Query with String Concatenation"
   description: "Concatenating user input into GORM Raw queries allows SQL injection. Use GORM's parameterized query support with ? placeholders instead."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -155,6 +160,7 @@
   name: "sqlx Query with fmt.Sprintf"
   description: "Using fmt.Sprintf to build sqlx queries allows SQL injection. Use sqlx's named or positional parameter binding instead."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -182,6 +188,7 @@
   name: "database/sql Exec with String Concatenation"
   description: "Concatenating user input into database/sql Exec calls allows SQL injection. Use parameterized queries with placeholder arguments instead."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -214,6 +221,7 @@
   name: "exec.Command with Variable Program Name"
   description: "Using a variable as the program name in exec.Command allows command injection if the variable is user-controlled. Use a hardcoded program name or validate against an allowlist."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -241,6 +249,7 @@
   name: "exec.Command with bash -c Shell Invocation"
   description: "Invoking a shell with -c and a command string via exec.Command allows arbitrary command execution. Avoid shell invocations; use exec.Command with the target binary directly."
   severity: Critical
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -268,6 +277,7 @@
   name: "exec.Command with fmt.Sprintf Argument"
   description: "Using fmt.Sprintf to build command arguments allows injection of unexpected flags or values. Pass arguments individually without string interpolation."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -295,6 +305,7 @@
   name: "os.StartProcess with Variable Program Path"
   description: "Using a variable as the program path in os.StartProcess allows command injection if the variable is user-controlled. Use a hardcoded program path or validate against an allowlist."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -322,6 +333,7 @@
   name: "exec.CommandContext with Variable Program Name"
   description: "Using a variable as the program name in exec.CommandContext allows command injection if the variable is user-controlled. Use a hardcoded program name or validate against an allowlist."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -349,6 +361,7 @@
   name: "syscall.Exec with Variable Program Path"
   description: "Using a variable as the program path in syscall.Exec allows command injection. Validate the program path against an allowlist before use."
   severity: Critical
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -376,6 +389,7 @@
   name: "exec.Command with Concatenated String Argument"
   description: "Concatenating user input into exec.Command arguments allows command injection. Pass arguments as separate strings without concatenation."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -408,6 +422,7 @@
   name: "os.Open with fmt.Sprintf Path"
   description: "Using fmt.Sprintf to construct file paths passed to os.Open allows path traversal attacks. Validate and use filepath.Clean or filepath.Abs before opening files."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -435,6 +450,7 @@
   name: "os.ReadFile with fmt.Sprintf Path"
   description: "Using fmt.Sprintf to construct file paths passed to os.ReadFile allows path traversal attacks. Validate and canonicalize paths before reading files."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -462,6 +478,7 @@
   name: "ioutil.ReadFile with fmt.Sprintf Path"
   description: "Using fmt.Sprintf to construct file paths passed to ioutil.ReadFile allows path traversal attacks. Validate and canonicalize paths before reading files."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -489,6 +506,7 @@
   name: "filepath.Join with Unsanitized User Input"
   description: "Passing user-controlled variables to filepath.Join without validation allows path traversal via ../ sequences. Validate that the resulting path stays within the intended base directory."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -516,6 +534,7 @@
   name: "http.ServeFile with User-Controlled Path"
   description: "Passing user-controlled input to http.ServeFile allows path traversal attacks. Validate the file path against a base directory and ensure it does not contain ../ sequences."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -543,6 +562,7 @@
   name: "os.Open with String Concatenation Path"
   description: "Concatenating user input into file paths passed to os.Open allows path traversal attacks. Validate and canonicalize paths before use."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -575,6 +595,7 @@
   name: "http.Get with fmt.Sprintf URL"
   description: "Using fmt.Sprintf to construct URLs passed to http.Get allows SSRF attacks. Validate URLs against an allowlist of permitted hosts before making requests."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -602,6 +623,7 @@
   name: "http.Post with fmt.Sprintf URL"
   description: "Using fmt.Sprintf to construct URLs passed to http.Post allows SSRF attacks. Validate URLs against an allowlist of permitted hosts before making requests."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -629,6 +651,7 @@
   name: "http.NewRequest with fmt.Sprintf URL"
   description: "Using fmt.Sprintf to construct URLs passed to http.NewRequest allows SSRF attacks. Validate URLs against an allowlist of permitted hosts before making requests."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -656,6 +679,7 @@
   name: "http.Get with Concatenated URL"
   description: "Concatenating user input into URLs passed to http.Get allows SSRF attacks. Validate URLs against an allowlist of permitted hosts before making requests."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -683,6 +707,7 @@
   name: "http.NewRequest with Concatenated URL"
   description: "Concatenating user input into URLs passed to http.NewRequest allows SSRF attacks. Validate URLs against an allowlist of permitted hosts before making requests."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -710,6 +735,7 @@
   name: "Resty Client with fmt.Sprintf URL"
   description: "Using fmt.Sprintf to construct URLs in resty HTTP client calls allows SSRF attacks. Validate URLs against an allowlist of permitted hosts before making requests."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -732,3 +758,5 @@
       expected: TrueNegative
     - code: "client.SetBaseURL(\"https://api.example.com\")"
       expected: TrueNegative
+
+

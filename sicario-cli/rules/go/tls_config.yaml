@@ -17,6 +17,7 @@
   name: "Weak TLS Version 1.0"
   description: "TLS 1.0 has known vulnerabilities (BEAST, POODLE). Set MinVersion to tls.VersionTLS12 or higher."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -44,6 +45,7 @@
   name: "Weak TLS Version 1.1"
   description: "TLS 1.1 is deprecated and has known weaknesses. Set MinVersion to tls.VersionTLS12 or higher."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -71,6 +73,7 @@
   name: "TLS MaxVersion Set Below 1.2"
   description: "Setting MaxVersion below TLS 1.2 forces the use of deprecated protocol versions. Remove MaxVersion or set it to tls.VersionTLS12 or higher."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -98,6 +101,7 @@
   name: "TLS Cipher Suite with RC4"
   description: "RC4 cipher suites are broken and must not be used. Remove RC4 cipher suites from the CipherSuites list."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -125,6 +129,7 @@
   name: "TLS Cipher Suite with 3DES"
   description: "3DES cipher suites are vulnerable to Sweet32 birthday attacks. Remove 3DES cipher suites from the CipherSuites list."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -152,6 +157,7 @@
   name: "TLS Config with Empty RootCAs"
   description: "Setting RootCAs to an empty certificate pool disables server certificate validation. Use the system root CAs or load specific trusted certificates."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -179,6 +185,7 @@
   name: "Custom VerifyPeerCertificate Always Returns Nil"
   description: "A VerifyPeerCertificate function that always returns nil bypasses certificate validation. Implement proper certificate verification logic."
   severity: Critical
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -206,6 +213,7 @@
   name: "GetCertificate Returning Nil"
   description: "A GetCertificate function that returns nil causes TLS handshake failures. Implement proper certificate selection logic."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -233,6 +241,7 @@
   name: "Deprecated PreferServerCipherSuites Usage"
   description: "PreferServerCipherSuites is deprecated in Go 1.22+. The Go TLS stack now automatically prefers server cipher suites. Remove this field."
   severity: Low
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -260,6 +269,7 @@
   name: "TLS Session Tickets Disabled Without Reason"
   description: "Disabling TLS session tickets reduces performance without a clear security benefit in most cases. Only disable if you have specific forward secrecy requirements."
   severity: Low
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -282,3 +292,5 @@
       expected: TrueNegative
     - code: "config := &tls.Config{}"
       expected: TrueNegative
+
+

@@ -3,7 +3,7 @@
 //! Each rule is a `SecurityRule` with an embedded tree-sitter query that
 //! detects a specific suspicious pattern in JavaScript/TypeScript packages.
 
-use crate::engine::security_rule::{QueryPattern, SecurityRule};
+use crate::engine::security_rule::{ConfidenceLevel, QueryPattern, SecurityRule};
 use crate::engine::vulnerability::Severity;
 use crate::parser::Language;
 
@@ -33,6 +33,7 @@ pub fn behavioral_rules() -> Vec<SecurityRule> {
             owasp_category: None,
             help_uri: None,
             test_cases: None,
+            confidence: ConfidenceLevel::High,
         },
 
         // ── Network access ────────────────────────────────────────────────
@@ -55,6 +56,7 @@ pub fn behavioral_rules() -> Vec<SecurityRule> {
             owasp_category: None,
             help_uri: None,
             test_cases: None,
+            confidence: ConfidenceLevel::High,
         },
 
         // ── Filesystem access ─────────────────────────────────────────────
@@ -77,6 +79,7 @@ pub fn behavioral_rules() -> Vec<SecurityRule> {
             owasp_category: None,
             help_uri: None,
             test_cases: None,
+            confidence: ConfidenceLevel::High,
         },
 
         // ── Obfuscated eval ───────────────────────────────────────────────
@@ -106,6 +109,7 @@ pub fn behavioral_rules() -> Vec<SecurityRule> {
             owasp_category: None,
             help_uri: None,
             test_cases: None,
+            confidence: ConfidenceLevel::High,
         },
 
         // ── process.env access ────────────────────────────────────────────
@@ -130,6 +134,7 @@ pub fn behavioral_rules() -> Vec<SecurityRule> {
             owasp_category: None,
             help_uri: None,
             test_cases: None,
+            confidence: ConfidenceLevel::High,
         },
 
         // ── Dynamic require ───────────────────────────────────────────────
@@ -158,6 +163,7 @@ pub fn behavioral_rules() -> Vec<SecurityRule> {
             owasp_category: None,
             help_uri: None,
             test_cases: None,
+            confidence: ConfidenceLevel::Medium,
         },
 
         // ── Hex-encoded string payload ────────────────────────────────────
@@ -178,6 +184,7 @@ pub fn behavioral_rules() -> Vec<SecurityRule> {
             owasp_category: None,
             help_uri: None,
             test_cases: None,
+            confidence: ConfidenceLevel::Medium,
         },
     ]
 }

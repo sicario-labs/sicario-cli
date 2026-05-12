@@ -22,6 +22,7 @@
   name: "SSRF in getServerSideProps via User-Controlled URL"
   description: "Using context.query or context.params directly in fetch/axios calls within getServerSideProps allows SSRF. Validate and allowlist URLs before making server-side requests."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -50,6 +51,7 @@
   name: "SSRF via context.params in Server-Side Fetch"
   description: "Using context.params directly in fetch calls within getServerSideProps or getStaticProps allows SSRF. Validate parameters against an allowlist."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -78,6 +80,7 @@
   name: "Sensitive API Key Exposed in Client Bundle via NEXT_PUBLIC_"
   description: "Environment variables prefixed with NEXT_PUBLIC_ are bundled into client-side JavaScript. Never use this prefix for sensitive API keys, secrets, or tokens."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -106,6 +109,7 @@
   name: "Next.js API Route Without Authentication Check"
   description: "API route handlers in Next.js pages/api/ that directly access request data without authentication checks may expose sensitive operations. Add authentication middleware or checks."
   severity: Medium
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -134,6 +138,7 @@
   name: "Unsafe Redirect in getServerSideProps with User Input"
   description: "Using user-controlled values from context.query in getServerSideProps redirect destination allows open redirect attacks. Validate redirect URLs against an allowlist."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -162,6 +167,7 @@
   name: "Unsanitized Query Params in Database Call"
   description: "Passing context.query values directly to database queries in getServerSideProps allows injection attacks. Validate and sanitize all query parameters before database operations."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -190,6 +196,7 @@
   name: "Next.js API Route with Unvalidated File Path from Query"
   description: "Using req.query values directly in file system operations within API routes allows path traversal. Validate and sanitize file paths, use path.resolve with a base directory."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -218,6 +225,7 @@
   name: "JWT Verification with algorithms: ['none'] Bypass"
   description: "Setting algorithms to ['none'] in JWT verification allows attackers to forge tokens without a signature. Always specify strong algorithms like ['HS256'] or ['RS256']."
   severity: Critical
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -246,6 +254,7 @@
   name: "JWT Sign Without Expiration"
   description: "Signing JWTs without an expiresIn option creates tokens that never expire, increasing the impact of token theft. Always set a reasonable expiration time."
   severity: Medium
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -274,6 +283,7 @@
   name: "Hardcoded JWT Secret in Source Code"
   description: "Hardcoding JWT secrets in source code exposes them in version control. Use environment variables or a secrets manager for JWT signing keys."
   severity: Critical
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -302,6 +312,7 @@
   name: "Insecure Session Configuration"
   description: "Session configuration with secure: false or httpOnly: false exposes session cookies to interception and XSS attacks. Always set secure: true and httpOnly: true in production."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -330,6 +341,7 @@
   name: "JWT Decode Without Verification"
   description: "Using jwt.decode() instead of jwt.verify() does not validate the token signature, allowing forged tokens to be accepted. Always use jwt.verify() for authentication."
   severity: Critical
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -358,6 +370,7 @@
   name: "Session Cookie Without Secure Flag"
   description: "Setting cookies without the secure flag allows them to be transmitted over unencrypted HTTP connections. Always set secure: true for session cookies."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -386,6 +399,7 @@
   name: "Session Cookie with httpOnly Disabled"
   description: "Setting httpOnly: false on session cookies allows JavaScript access, making them vulnerable to XSS-based theft. Always set httpOnly: true for session cookies."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -414,6 +428,7 @@
   name: "Password Comparison Without Constant-Time Function"
   description: "Using === or == to compare passwords or hashes is vulnerable to timing attacks. Use crypto.timingSafeEqual() or a dedicated comparison library like bcrypt.compare()."
   severity: Medium
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -437,3 +452,5 @@
       expected: TrueNegative
     - code: "if (username === 'admin') { checkAdmin(); }"
       expected: TrueNegative
+
+

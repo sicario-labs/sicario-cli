@@ -216,7 +216,7 @@ fn extract_functions_from_file(
 ) -> Result<()> {
     let ts_language = language_to_ts(language)?;
     let mut parser = tree_sitter::Parser::new();
-    parser.set_language(ts_language)?;
+    parser.set_language(&ts_language)?;
 
     let tree = parser
         .parse(source, None)
@@ -224,7 +224,7 @@ fn extract_functions_from_file(
 
     // ── Step 1: collect function definitions ─────────────────────────────
     let func_query_str = function_definition_query(language);
-    if let Ok(func_query) = Query::new(ts_language, func_query_str) {
+    if let Ok(func_query) = Query::new(&ts_language, func_query_str) {
         let mut cursor = QueryCursor::new();
         let matches = cursor.matches(&func_query, tree.root_node(), source.as_bytes());
 
@@ -290,7 +290,7 @@ fn mark_taint_sources(
         Err(_) => return,
     };
     let mut parser = tree_sitter::Parser::new();
-    if parser.set_language(ts_language).is_err() {
+    if parser.set_language(&ts_language).is_err() {
         return;
     }
     let Some(tree) = parser.parse(source, None) else {
@@ -300,7 +300,7 @@ fn mark_taint_sources(
     // Use language-specific patterns to detect framework taint sources
     let patterns = framework_taint_patterns(language);
     for pattern_str in &patterns {
-        let Ok(query) = Query::new(ts_language, pattern_str) else {
+        let Ok(query) = Query::new(&ts_language, pattern_str) else {
             continue;
         };
 
@@ -371,12 +371,9 @@ fn language_to_ts(language: Language) -> Result<tree_sitter::Language> {
         Language::Rust => Ok(tree_sitter_rust::language()),
         Language::Go => Ok(tree_sitter_go::language()),
         Language::Java => Ok(tree_sitter_java::language()),
-        Language::Ruby => {
-            anyhow::bail!("No tree-sitter grammar available for Ruby")
-        }
-        Language::Php => {
-            anyhow::bail!("No tree-sitter grammar available for PHP")
-        }
+        Language::Ruby => Ok(tree_sitter_ruby::language()),
+        Language::Php => Ok(tree_sitter_php::language_php()),
+        Language::CSharp => Ok(tree_sitter_c_sharp::language()),
     }
 }
 
@@ -396,6 +393,7 @@ fn function_definition_query(language: Language) -> &'static str {
         Language::Java => r#"(method_declaration name: (identifier) @name)"#,
         Language::Ruby => r#"(method name: (identifier) @name)"#,
         Language::Php => r#"(function_definition name: (name) @name)"#,
+        Language::CSharp => r#"(method_declaration name: (identifier) @name)"#,
     }
 }
 
@@ -411,6 +409,7 @@ fn call_expression_query(language: Language) -> &'static str {
         Language::Java => r#"(method_invocation name: (identifier) @callee)"#,
         Language::Ruby => r#"(call method: (identifier) @callee)"#,
         Language::Php => r#"(function_call_expression function: (name) @callee)"#,
+        Language::CSharp => r#"(invocation_expression function: (member_access_expression name: (identifier) @callee))"#,
     }
 }
 
@@ -472,12 +471,12 @@ impl ReachabilityAnalyzer {
                 Err(_) => continue,
             };
             let call_query_str = call_expression_query(language);
-            let Ok(call_query) = Query::new(ts_language, call_query_str) else {
+            let Ok(call_query) = Query::new(&ts_language, call_query_str) else {
                 continue;
             };
 
             let mut parser = tree_sitter::Parser::new();
-            if parser.set_language(ts_language).is_err() {
+            if parser.set_language(&ts_language).is_err() {
                 continue;
             }
             let Some(tree) = parser.parse(&source, None) else {
@@ -854,7 +853,7 @@ mod tests {
   (function_declaration name: (identifier) @name)
   (method_definition name: (property_identifier) @name)
 ]"#;
-        let result = Query::new(ts_language, query_str);
+        let result = Query::new(&ts_language, query_str);
         assert!(result.is_ok(), "Query failed: {:?}", result.err());
 
         let source = r#"
@@ -863,7 +862,7 @@ function handler(req) {
 }
 "#;
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(ts_language).unwrap();
+        parser.set_language(&ts_language).unwrap();
         let tree = parser.parse(source, None).unwrap();
         let query = result.unwrap();
         let mut cursor = QueryCursor::new();

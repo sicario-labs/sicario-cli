@@ -110,6 +110,7 @@ impl RuleTestHarness {
                 crate::parser::Language::Java => "java",
                 crate::parser::Language::Ruby => "rb",
                 crate::parser::Language::Php => "php",
+                crate::parser::Language::CSharp => "cs",
             })
             .unwrap_or("txt");
 

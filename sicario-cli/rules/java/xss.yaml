@@ -13,6 +13,7 @@
   name: "JSP Expression with Unescaped Output"
   description: "Using JSP expressions (<%= %>) outputs data without HTML encoding, enabling XSS. Use JSTL <c:out> or fn:escapeXml() for safe output."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -40,6 +41,7 @@
   name: "PrintWriter with HTML Content and User Input"
   description: "Writing HTML content with user input directly to PrintWriter enables XSS. Use output encoding or a template engine with auto-escaping."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -71,6 +73,7 @@
   name: "Servlet getParameter Reflected in Response"
   description: "Reflecting request.getParameter() directly in the HTTP response without encoding enables reflected XSS. Encode output using OWASP Java Encoder or HtmlUtils.htmlEscape()."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -98,6 +101,7 @@
   name: "Response Content-Type text/html with Dynamic Content"
   description: "Setting response content type to text/html and writing dynamic content enables XSS. Ensure all dynamic content is HTML-encoded before writing to the response."
   severity: Medium
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -129,6 +133,7 @@
   name: "Spring @ResponseBody with HTML String Concatenation"
   description: "Returning concatenated HTML strings from @ResponseBody methods enables XSS. Use a template engine with auto-escaping or return JSON responses instead."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -156,6 +161,7 @@
   name: "Spring ModelAndView with Unescaped User Input"
   description: "Adding user input to ModelAndView without encoding can lead to XSS if the view template does not auto-escape. Ensure template auto-escaping is enabled or encode values before adding to the model."
   severity: Medium
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -187,6 +193,7 @@
   name: "Thymeleaf th:utext Unescaped Output"
   description: "Thymeleaf th:utext renders content without HTML escaping, enabling XSS. Use th:text for auto-escaped output instead."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -214,6 +221,7 @@
   name: "Thymeleaf Inline JavaScript with User Data"
   description: "Using th:inline='javascript' with user-controlled data can lead to XSS if not properly escaped. Ensure JavaScript context escaping is applied."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -236,3 +244,5 @@
       expected: TrueNegative
     - code: "\"<script src='/static/app.js'></script>\""
       expected: TrueNegative
+
+

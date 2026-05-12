@@ -7,6 +7,7 @@
   name: "dangerouslySetInnerHTML with Unsanitized Input"
   description: "Passing unsanitized user input to dangerouslySetInnerHTML enables stored or reflected XSS. Always sanitize with DOMPurify or equivalent before rendering."
   severity: High
+  confidence: high
   languages:
     - JavaScript
     - TypeScript
@@ -27,6 +28,7 @@
   name: "javascript: URI in href Attribute"
   description: "Using a javascript: URI in an href attribute allows XSS when the link is clicked. Validate that href values start with http:// or https://."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -45,6 +47,7 @@
   name: "window.location Redirect with User Input"
   description: "Setting window.location.href to a user-controlled value enables open redirect attacks. Validate the URL against an allowlist before redirecting."
   severity: Medium
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -65,6 +68,7 @@
   name: "Sensitive Data Stored in localStorage"
   description: "Storing authentication tokens or sensitive data in localStorage exposes it to XSS attacks. Use httpOnly cookies or sessionStorage with appropriate scope instead."
   severity: Medium
+  confidence: high
   languages:
     - JavaScript
     - TypeScript

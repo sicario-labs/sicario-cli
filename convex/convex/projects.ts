@@ -73,6 +73,14 @@ export const update = mutation({
     team_id: v.optional(v.string()),
     userId: v.optional(v.string()),
     orgId: v.optional(v.string()),
+    // Task 60.4: rootPath for monorepo support
+    rootPath: v.optional(v.string()),
+    // Task 30.1: tags
+    tags: v.optional(v.array(v.string())),
+    // Task 30.2: pathIgnores
+    pathIgnores: v.optional(v.array(v.string())),
+    // Task 26.2: primaryBranch
+    primaryBranch: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Enforce RBAC when auth context is provided
@@ -86,25 +94,18 @@ export const update = mutation({
       .first();
     if (!project) return null;
 
-    const updates: Record<string, string> = {};
+    const updates: Record<string, unknown> = {};
     if (args.name) updates.name = args.name;
     if (args.repository_url) updates.repositoryUrl = args.repository_url;
     if (args.description) updates.description = args.description;
     if (args.team_id) updates.teamId = args.team_id;
+    if (args.rootPath !== undefined) updates.rootPath = args.rootPath;
+    if (args.tags !== undefined) updates.tags = args.tags;
+    if (args.pathIgnores !== undefined) updates.pathIgnores = args.pathIgnores;
+    if (args.primaryBranch !== undefined) updates.primaryBranch = args.primaryBranch;
 
     await ctx.db.patch(project._id, updates);
     return { id: args.id };
-  },
-});
-
-export const listByOrg = query({
-  args: { orgId: v.string() },
-  handler: async (ctx, args) => {
-    const projects = await ctx.db
-      .query("projects")
-      .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId))
-      .collect();
-    return projects.map(mapProject);
   },
 });
 
@@ -345,3 +346,111 @@ function mapProject(p: any) {
     auto_fix_enabled: defaults.autoFixEnabled,
   };
 }
+
+// ── Task 30.1: tags filter in listByOrg ──────────────────────────────────────
+export const listByOrg = query({
+  args: {
+    orgId: v.string(),
+    tags: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, { orgId, tags }) => {
+    const projects = await ctx.db
+      .query("projects")
+      .withIndex("by_orgId", (q) => q.eq("orgId", orgId))
+      .collect();
+
+    const filtered = tags?.length
+      ? projects.filter((p) => {
+          const pTags: string[] = (p as any).tags ?? [];
+          return tags.some((t) => pTags.includes(t));
+        })
+      : projects;
+
+    // Task 30.5: enrich with lastScanAt, lastScanStatus, lastScanType, openFindingsCount
+    const enriched = await Promise.all(
+      filtered.map(async (p) => {
+        const scans = await ctx.db
+          .query("scans")
+          .withIndex("by_projectId", (q) => q.eq("projectId", p.projectId))
+          .collect();
+
+        const lastScan = scans.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+
+        const openFindings = await ctx.db
+          .query("findings")
+          .withIndex("by_projectId", (q) => q.eq("projectId", p.projectId))
+          .collect();
+
+        const openCount = openFindings.filter((f) =>
+          ["Open", "Reviewing", "ToFix"].includes(f.triageState)
+        ).length;
+
+        return {
+          ...mapProject(p),
+          lastScanAt: lastScan?.createdAt ?? null,
+          lastScanStatus: (lastScan as any)?.scanStatus ?? null,
+          lastScanType: (lastScan as any)?.scanType ?? null,
+          openFindingsCount: openCount,
+          primaryBranch: (p as any).primaryBranch ?? "main",
+          tags: (p as any).tags ?? [],
+          pathIgnores: (p as any).pathIgnores ?? [],
+          // Task 60.4: rootPath — subdirectory within repo this project covers
+          rootPath: (p as any).rootPath ?? ".",
+        };
+      })
+    );
+
+    return enriched;
+  },
+});
+
+// ── Task 30.2: pathIgnores enforcement ────────────────────────────────────────
+// Enforced in scans.insert — findings matching pathIgnores are auto-ignored.
+
+// ── Task 30.6: retroactive path ignore ───────────────────────────────────────
+export const applyPathIgnores = mutation({
+  args: {
+    projectId: v.string(),
+    pathIgnores: v.array(v.string()),
+  },
+  handler: async (ctx, { projectId, pathIgnores }) => {
+    if (pathIgnores.length === 0) return { ignored: 0 };
+
+    const findings = await ctx.db
+      .query("findings")
+      .withIndex("by_projectId", (q) => q.eq("projectId", projectId))
+      .collect();
+
+    const openFindings = findings.filter((f) =>
+      ["Open", "Reviewing", "ToFix"].includes(f.triageState)
+    );
+
+    function matchesGlob(filePath: string, pattern: string): boolean {
+      const regex = new RegExp(
+        "^" + pattern
+          .replace(/\*\*/g, "§§")
+          .replace(/\*/g, "[^/]*")
+          .replace(/§§/g, ".*")
+          .replace(/\./g, "\\.") + "$"
+      );
+      return regex.test(filePath);
+    }
+
+    const now = new Date().toISOString();
+    let ignored = 0;
+
+    // Process in batches of 500 to stay within Convex limits
+    for (const f of openFindings.slice(0, 500)) {
+      if (pathIgnores.some((pattern) => matchesGlob(f.filePath, pattern))) {
+        await ctx.db.patch(f._id, {
+          triageState: "AutoIgnored",
+          triageNote: "Auto-ignored: file path matches project ignore pattern.",
+          updatedAt: now,
+        });
+        ignored++;
+      }
+    }
+
+    return { ignored };
+  },
+});

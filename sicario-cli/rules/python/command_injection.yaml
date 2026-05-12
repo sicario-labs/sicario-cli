@@ -8,6 +8,7 @@
   name: "os.system() Usage"
   description: "os.system() executes commands through the shell and is vulnerable to command injection. Use subprocess.run() with a list of arguments instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -35,6 +36,7 @@
   name: "os.popen() Usage"
   description: "os.popen() executes commands through the shell and is vulnerable to command injection. Use subprocess.run() with a list of arguments instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -62,6 +64,7 @@
   name: "subprocess with shell=True"
   description: "Using shell=True in subprocess calls enables shell injection. Pass arguments as a list without shell=True."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -89,6 +92,7 @@
   name: "subprocess with f-string Command"
   description: "Using f-strings to build subprocess commands allows command injection. Pass arguments as a list instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -116,6 +120,7 @@
   name: "subprocess with .format() Command"
   description: "Using .format() to build subprocess commands allows command injection. Pass arguments as a list instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -143,6 +148,7 @@
   name: "os.exec*() Family Usage"
   description: "os.exec*() functions replace the current process with a new one and can be exploited for command injection. Use subprocess.run() with a list of arguments instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -165,3 +171,5 @@
       expected: TrueNegative
     - code: "os.listdir('/tmp')"
       expected: TrueNegative
+
+

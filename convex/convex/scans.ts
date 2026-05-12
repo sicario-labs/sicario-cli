@@ -1,4 +1,5 @@
 import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
 /**
@@ -46,6 +47,12 @@ export const insert = mutation({
       orgId,
       projectId,
       createdAt: now,
+      // Task 47.3 / 48.3: new scan metadata
+      scanType: meta.scan_type ?? "full",
+      scanStatus: meta.scan_status ?? "completed",
+      hookInstalled: meta.hook_installed ?? false,
+      vulnDbVersion: meta.vuln_db_version ?? undefined,
+      customRulesHash: meta.custom_rules_hash ?? undefined,
     });
 
     // Track fingerprints seen in this scan payload (for auto-resolve)
@@ -82,6 +89,13 @@ export const insert = mutation({
           snippet: f.snippet ?? existing.snippet,
           severity,
           updatedAt: now,
+          // Task 48.3: update new fields
+          branch: meta.branch ?? existing.branch,
+          commitSha: meta.commit_sha ?? existing.commitSha,
+          matchBasedId: f.match_based_id ?? existing.matchBasedId,
+          taintPath: f.taint_path ?? existing.taintPath,
+          suppressed: f.suppressed ?? existing.suppressed,
+          suppressionComment: f.suppression_comment ?? existing.suppressionComment,
           // Re-open if it was previously auto-resolved (Fixed by absence)
           ...(existing.triageState === "AutoFixed"
             ? { triageState: "Open", triageNote: "Re-opened: finding reappeared in latest scan." }
@@ -113,6 +127,14 @@ export const insert = mutation({
           triageState: "Open",
           createdAt: now,
           updatedAt: now,
+          // Task 47.1 / 48.3: new finding fields
+          branch: meta.branch ?? undefined,
+          commitSha: meta.commit_sha ?? undefined,
+          matchBasedId: f.match_based_id ?? undefined,
+          taintPath: f.taint_path ?? undefined,
+          suppressed: f.suppressed ?? false,
+          suppressionComment: f.suppression_comment ?? undefined,
+          committedBy: f.committed_by ?? undefined,
         });
       }
     }
@@ -156,6 +178,20 @@ export const insert = mutation({
       if (project && project.provisioningState === "pending") {
         await ctx.db.patch(project._id, { provisioningState: "active" });
       }
+    }
+
+    // Task 38.8: trigger first-findings email check after inserting findings
+    if (orgId && (report.findings ?? []).length > 0) {
+      const findings = report.findings as any[];
+      const criticalCount = findings.filter((f: any) => f.severity === "Critical").length;
+      const highCount = findings.filter((f: any) => f.severity === "High").length;
+      await ctx.scheduler.runAfter(0, internal.emailJobs.triggerFirstFindingsEmail, {
+        orgId,
+        projectId: projectId ?? undefined,
+        findingsCount: findings.length,
+        criticalCount,
+        highCount,
+      });
     }
 
     return { scanId };
@@ -310,5 +346,47 @@ export const list = query({
     }));
 
     return { page, per_page: perPage, total, items };
+  },
+});
+
+// ── Task 70.2: scans.markError ────────────────────────────────────────────────
+// Called by the CLI on scan failure before exiting with non-zero code.
+// Sets scanStatus to "error" with an error message field.
+
+export const markError = mutation({
+  args: {
+    scanId: v.string(),
+    errorMessage: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const scan = await ctx.db
+      .query("scans")
+      .withIndex("by_scanId", (q) => q.eq("scanId", args.scanId))
+      .first();
+
+    if (!scan) {
+      // Scan record may not exist yet if the error occurred before insert.
+      // Insert a minimal error record so the dashboard can show the failure.
+      const now = new Date().toISOString();
+      await ctx.db.insert("scans", {
+        scanId: args.scanId,
+        repository: "",
+        branch: "",
+        commitSha: "",
+        timestamp: now,
+        durationMs: 0,
+        rulesLoaded: 0,
+        filesScanned: 0,
+        languageBreakdown: {},
+        tags: [],
+        createdAt: now,
+        scanStatus: "error",
+      });
+      return;
+    }
+
+    await ctx.db.patch(scan._id, {
+      scanStatus: "error",
+    });
   },
 });

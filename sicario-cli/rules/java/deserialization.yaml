@@ -13,6 +13,7 @@
   name: "ObjectInputStream.readObject on Untrusted Data"
   description: "Calling readObject() on ObjectInputStream with untrusted data enables remote code execution via deserialization gadget chains. Use a safe alternative like JSON serialization, or implement an ObjectInputFilter allowlist."
   severity: Critical
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -40,6 +41,7 @@
   name: "ObjectInputStream Created from Network/File Stream"
   description: "Creating ObjectInputStream from network or file streams to deserialize untrusted data enables RCE. Use JSON/Protobuf serialization or configure ObjectInputFilter to restrict allowed classes."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -67,6 +69,7 @@
   name: "ObjectInputStream.readUnshared on Untrusted Data"
   description: "readUnshared() is equally vulnerable to deserialization attacks as readObject(). Use safe serialization formats or ObjectInputFilter allowlists."
   severity: Critical
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -98,6 +101,7 @@
   name: "XMLDecoder.readObject on Untrusted XML"
   description: "XMLDecoder can execute arbitrary code when processing untrusted XML. Use a safe XML parser (JAXB, Jackson XML) or avoid XMLDecoder entirely."
   severity: Critical
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -125,6 +129,7 @@
   name: "XMLDecoder Created from Untrusted Source"
   description: "Creating XMLDecoder from untrusted input sources enables arbitrary code execution. Use JAXB or Jackson XML for safe XML deserialization."
   severity: Critical
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -156,6 +161,7 @@
   name: "XStream.fromXML without Security Configuration"
   description: "XStream.fromXML() without an allowlist of permitted classes enables remote code execution. Configure XStream.allowTypes() or XStream.addPermission() to restrict deserialization."
   severity: Critical
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -183,6 +189,7 @@
   name: "XStream Instance without Security Framework"
   description: "Creating an XStream instance without configuring the security framework allows deserialization of arbitrary classes. Call XStream.addPermission() or XStream.allowTypes() immediately after construction."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -214,6 +221,7 @@
   name: "SnakeYAML load() without SafeConstructor"
   description: "SnakeYAML's Yaml.load() with the default constructor can instantiate arbitrary Java classes from YAML input, enabling RCE. Use new Yaml(new SafeConstructor()) or Yaml.loadAs() with a specific type."
   severity: Critical
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -241,6 +249,7 @@
   name: "SnakeYAML Yaml() without SafeConstructor"
   description: "Creating a Yaml instance without SafeConstructor allows arbitrary class instantiation from YAML. Always use new Yaml(new SafeConstructor()) for untrusted input."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -263,3 +272,5 @@
       expected: TrueNegative
     - code: "ObjectMapper mapper = new ObjectMapper();"
       expected: TrueNegative
+
+

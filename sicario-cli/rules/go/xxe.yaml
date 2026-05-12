@@ -14,6 +14,7 @@
   name: "xml.NewDecoder Without Entity Restriction"
   description: "Using xml.NewDecoder on untrusted input without disabling external entities can lead to XXE attacks. Set d.Strict = true and use a custom CharsetReader, or use a safe XML library."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -41,6 +42,7 @@
   name: "xml.Unmarshal with Untrusted Input"
   description: "Using xml.Unmarshal on untrusted input without validation can lead to XXE attacks and denial of service via entity expansion. Validate and sanitize XML input before unmarshaling."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -68,6 +70,7 @@
   name: "xml.NewTokenDecoder Without Safe Defaults"
   description: "Using xml.NewTokenDecoder on untrusted input without entity restrictions can lead to XXE attacks. Implement a custom TokenReader that filters entity declarations."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -95,6 +98,7 @@
   name: "etree.ReadFrom Without Entity Limits"
   description: "Using etree.Document.ReadFrom on untrusted input without entity limits can lead to XXE attacks and billion laughs denial of service. Validate XML input before parsing."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -122,6 +126,7 @@
   name: "etree.ReadFromString with Untrusted Input"
   description: "Using etree.Document.ReadFromString on untrusted input without entity limits can lead to XXE attacks. Validate and sanitize XML strings before parsing."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -149,6 +154,7 @@
   name: "xml.Decoder.Decode with Untrusted Input"
   description: "Using xml.Decoder.Decode on untrusted input without entity restrictions can lead to XXE attacks. Validate XML input and consider using a safe XML parser."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -176,6 +182,7 @@
   name: "xml.CopyToken Without Filtering"
   description: "Using xml.CopyToken to process untrusted XML tokens without filtering entity declarations can propagate XXE payloads. Filter out processing instructions and entity declarations."
   severity: Low
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -198,3 +205,5 @@
       expected: TrueNegative
     - code: "json.NewDecoder(r.Body)"
       expected: TrueNegative
+
+

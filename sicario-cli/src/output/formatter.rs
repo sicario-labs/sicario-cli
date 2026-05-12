@@ -46,7 +46,7 @@ impl FormatterConfig {
 
         Self {
             color_enabled,
-            progress_enabled: is_tty && !no_color,
+            progress_enabled: (is_tty && !no_color) || force_color,
             max_lines_per_finding: max_lines,
             max_chars_per_line: max_chars,
             unicode_enabled: is_tty,
@@ -102,7 +102,32 @@ pub fn truncate_snippet(snippet: &str, max_lines: usize, max_chars: usize) -> St
     result.join("\n")
 }
 
-/// Create a progress bar for scanning.
+/// Create a progress bar for the file-discovery phase.
+///
+/// Shows a spinner while files are being collected — we don't know the total
+/// yet so a definite bar would be inaccurate.
+pub fn create_discovery_progress(config: &FormatterConfig) -> ProgressBar {
+    if !config.progress_enabled {
+        return ProgressBar::hidden();
+    }
+
+    let pb = ProgressBar::new_spinner();
+    pb.set_style(
+        ProgressStyle::with_template(
+            "{spinner:.cyan}  Collecting files… {msg}",
+        )
+        .unwrap()
+        .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
+    );
+    pb.enable_steady_tick(std::time::Duration::from_millis(80));
+    pb
+}
+
+/// Create a progress bar for the scanning phase.
+///
+/// Displays a definite bar with file count, elapsed time, ETA, current file
+/// name, and a live findings counter. The bar uses a smooth gradient fill
+/// and ticks at 80 ms for buttery animation even when files are large.
 pub fn create_scan_progress(total_files: u64, config: &FormatterConfig) -> ProgressBar {
     if !config.progress_enabled {
         return ProgressBar::hidden();
@@ -111,11 +136,38 @@ pub fn create_scan_progress(total_files: u64, config: &FormatterConfig) -> Progr
     let pb = ProgressBar::new(total_files);
     pb.set_style(
         ProgressStyle::with_template(
-            "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} files ({eta})",
+            "{spinner:.green}  Scanning [{bar:35.cyan/blue}] {pos}/{len} files  \
+             {elapsed_precise} ({eta})  {msg}",
         )
         .unwrap()
-        .progress_chars("█▓░"),
+        .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
+        .progress_chars("━╸─"),
     );
+    // Steady tick keeps the spinner animating even during long per-file scans,
+    // so the terminal never looks frozen.
+    pb.enable_steady_tick(std::time::Duration::from_millis(80));
+    pb
+}
+
+/// Create a progress bar for post-scan analysis phases (secrets, SCA, taint).
+///
+/// Shows a spinner with a phase label so the user knows what's happening
+/// after the main SAST scan completes.
+pub fn create_phase_progress(phase_label: &str, config: &FormatterConfig) -> ProgressBar {
+    if !config.progress_enabled {
+        return ProgressBar::hidden();
+    }
+
+    let pb = ProgressBar::new_spinner();
+    pb.set_style(
+        ProgressStyle::with_template(
+            "{spinner:.yellow}  {msg}",
+        )
+        .unwrap()
+        .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
+    );
+    pb.set_message(phase_label.to_string());
+    pb.enable_steady_tick(std::time::Duration::from_millis(80));
     pb
 }
 

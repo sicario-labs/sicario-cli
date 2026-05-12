@@ -1,16 +1,18 @@
 import { QueryCtx, MutationCtx } from "./_generated/server";
 
 /**
- * Role hierarchy: admin > manager > developer
+ * Role hierarchy: admin > manager > developer > viewer
  * Higher numeric value = more permissions.
+ * Task 33.5: viewer role (level 0) — read-only, blocks all mutations.
  */
 const ROLE_LEVELS: Record<string, number> = {
+  viewer: 0,
   developer: 1,
   manager: 2,
   admin: 3,
 };
 
-export type Role = "admin" | "manager" | "developer";
+export type Role = "admin" | "manager" | "developer" | "viewer";
 
 /**
  * Look up a user's membership and role within an organization.

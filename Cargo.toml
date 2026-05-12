@@ -11,15 +11,16 @@ repository = "https://github.com/sicario-labs/sicario-cli"
 
 [workspace.dependencies]
 # Tree-sitter parsing
-tree-sitter = "0.20"
-tree-sitter-javascript = "0.20"
-tree-sitter-typescript = "0.20"
-tree-sitter-python = "0.20"
-tree-sitter-rust = "0.20"
-tree-sitter-go = "0.20"
-tree-sitter-java = "0.20"
-# tree-sitter-ruby and tree-sitter-php: no compatible crate at 0.20 API;
-# Ruby/PHP syntax validation falls back to "unknown language" rejection path.
+tree-sitter = "0.22"
+tree-sitter-javascript = "0.21"
+tree-sitter-typescript = "0.21"
+tree-sitter-python = "0.21"
+tree-sitter-rust = "0.21"
+tree-sitter-go = "0.21"
+tree-sitter-java = "0.21"
+tree-sitter-ruby = "0.21"
+tree-sitter-php = "0.22"
+tree-sitter-c-sharp = "0.21"
 
 # TUI
 ratatui = "0.26"

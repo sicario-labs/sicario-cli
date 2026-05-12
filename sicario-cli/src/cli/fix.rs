@@ -95,6 +95,13 @@ pub struct FixArgs {
     /// `git remote get-url origin` output.
     #[arg(long)]
     pub pr: bool,
+
+    /// Create a branch `sicario/autofix-<timestamp>`, apply all fixes, commit,
+    /// push, and open a PR/MR with all fixes in a single pull request.
+    /// Prints the PR/MR URL to stdout on success; exits 2 on failure.
+    /// Branch creation is idempotent: appends a counter suffix if branch exists.
+    #[arg(long)]
+    pub auto_pr: bool,
 }
 
 impl FixArgs {

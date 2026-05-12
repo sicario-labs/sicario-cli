@@ -9,6 +9,7 @@
   name: "child_process.exec with String Concatenation"
   description: "Passing user-controlled input to exec() via string concatenation allows command injection. Use execFile() with an argument array, or validate and sanitize input against a strict allowlist."
   severity: Critical
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -31,6 +32,7 @@
   name: "child_process.spawn with shell:true"
   description: "Using spawn() with shell:true and user-controlled arguments allows shell metacharacter injection. Remove shell:true and pass arguments as an array, or use execFile() instead."
   severity: Critical
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -53,6 +55,7 @@
   name: "child_process.exec with Template Literal"
   description: "Interpolating user input into exec() via template literals allows command injection. Use execFile() with a separate argument array instead."
   severity: Critical
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -70,3 +73,5 @@
       expected: TruePositive
     - code: "exec('ls /tmp');"
       expected: TrueNegative
+
+

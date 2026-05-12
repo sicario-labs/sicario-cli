@@ -20,6 +20,7 @@
   name: "Gin ShouldBind Without Error Check"
   description: "Calling ShouldBind/ShouldBindJSON without checking the error allows processing of malformed or incomplete request data. Always check the error."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -47,6 +48,7 @@
   name: "Gin JSON Response with Raw Error"
   description: "Returning raw error messages in Gin JSON responses exposes internal details to attackers. Return generic error messages instead."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -74,6 +76,7 @@
   name: "Gin Trusted All Proxies"
   description: "Trusting all proxies allows IP spoofing via X-Forwarded-For headers. Set specific trusted proxy IPs or use SetTrustedProxies(nil) to disable."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -101,6 +104,7 @@
   name: "Gin HTML Template with User Input"
   description: "Rendering HTML templates with unsanitized user input can lead to XSS. Ensure user input is properly escaped before rendering."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -128,6 +132,7 @@
   name: "Gin CORS Allow All Origins"
   description: "Allowing all origins in CORS configuration permits any website to make cross-origin requests. Restrict to specific trusted origins."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -155,6 +160,7 @@
   name: "Gin Debug Mode in Production"
   description: "Running Gin in debug mode in production exposes verbose logging and route information. Set gin.SetMode(gin.ReleaseMode) for production."
   severity: Low
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -182,6 +188,7 @@
   name: "Gin c.File with User Input"
   description: "Passing user-controlled input to c.File allows path traversal attacks. Validate the file path against a base directory."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -209,6 +216,7 @@
   name: "Gin Bind Without Validation Tags"
   description: "Using Bind/BindJSON without struct validation tags allows arbitrary input. Add binding validation tags to request structs."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -236,6 +244,7 @@
   name: "Gin Router Without Rate Limiting"
   description: "A Gin router without rate limiting middleware is vulnerable to denial-of-service attacks. Add rate limiting middleware."
   severity: Low
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -263,6 +272,7 @@
   name: "Gin AbortWithStatusJSON with Internal Error"
   description: "Returning internal error details in AbortWithStatusJSON exposes implementation details. Return generic error messages."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -295,6 +305,7 @@
   name: "Echo Logger Fatal with User Data"
   description: "Passing user-controlled data to e.Logger.Fatal can expose sensitive information in logs. Sanitize data before logging."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -322,6 +333,7 @@
   name: "Echo Bind Without Validation"
   description: "Using Echo's Bind without subsequent validation allows processing of malformed request data. Always validate after binding."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -349,6 +361,7 @@
   name: "Echo Verbose Error Handler"
   description: "Returning raw error messages in Echo HTTP error handler exposes internal details. Return generic error messages to clients."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -376,6 +389,7 @@
   name: "Echo Static File Serving with User Path"
   description: "Serving static files using user-controlled paths allows path traversal. Validate paths against a base directory."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -403,6 +417,7 @@
   name: "Echo Missing Secure Middleware"
   description: "Echo's Secure middleware sets important security headers (X-Frame-Options, X-Content-Type-Options, etc.). Add middleware.Secure() to your Echo instance."
   severity: Low
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -430,6 +445,7 @@
   name: "Echo CORS Allow All Origins"
   description: "Allowing all origins in Echo CORS middleware permits any website to make cross-origin requests. Restrict to specific trusted origins."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -461,6 +477,7 @@
   name: "Fiber SendFile with User Input"
   description: "Passing user-controlled input to c.SendFile allows path traversal attacks. Validate the file path against a base directory."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -488,6 +505,7 @@
   name: "Fiber Verbose Error in Response"
   description: "Returning raw error messages in Fiber responses exposes internal details. Return generic error messages to clients."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -515,6 +533,7 @@
   name: "Fiber Missing Helmet Middleware"
   description: "Fiber's Helmet middleware sets important security headers. Add app.Use(helmet.New()) to your Fiber app."
   severity: Low
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -542,6 +561,7 @@
   name: "Fiber Missing CORS Configuration"
   description: "Using Fiber's CORS middleware without explicit configuration allows all origins by default. Specify allowed origins explicitly."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -569,6 +589,7 @@
   name: "Fiber Missing Rate Limiter"
   description: "A Fiber app without rate limiting middleware is vulnerable to denial-of-service attacks. Add limiter.New() middleware."
   severity: Low
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -591,3 +612,5 @@
       expected: TrueNegative
     - code: "echo.New()"
       expected: TrueNegative
+
+

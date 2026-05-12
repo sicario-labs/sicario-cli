@@ -209,9 +209,8 @@ fn language_keywords(lang: Language) -> HashSet<&'static str> {
         Language::Rust => rust_keywords(),
         Language::Go => go_keywords(),
         Language::Java => java_keywords(),
-        Language::Ruby | Language::Php => {
-            // No tree-sitter grammar — stage 2 would have already returned
-            // Discard, so this branch is unreachable in practice.
+        Language::Ruby | Language::Php | Language::CSharp => {
+            // Return empty keyword set for languages without a dedicated keyword list
             HashSet::new()
         }
     }

@@ -9,6 +9,7 @@
   name: "FastAPI CORS Allow All Origins"
   description: "Setting allow_origins=['*'] in CORSMiddleware allows any origin to make cross-origin requests. Specify explicit allowed origins."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -36,6 +37,7 @@
   name: "FastAPI CORS Allow Credentials with Wildcard"
   description: "Using allow_credentials=True with allow_origins=['*'] is a dangerous combination that can expose authenticated endpoints. Specify explicit origins."
   severity: Critical
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -63,6 +65,7 @@
   name: "FastAPI Debug Mode Enabled"
   description: "Running FastAPI with debug=True exposes detailed error information. Disable debug mode in production."
   severity: Medium
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -90,6 +93,7 @@
   name: "FastAPI Route Without Authentication Dependency"
   description: "FastAPI routes handling sensitive operations should use Depends() with an authentication function. Add authentication dependency injection."
   severity: Medium
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -117,6 +121,7 @@
   name: "FastAPI Path Parameter Used in SQL Query"
   description: "Using FastAPI path parameters directly in SQL queries allows SQL injection. Use parameterized queries or ORM methods."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -144,6 +149,7 @@
   name: "Uvicorn with reload=True"
   description: "Running Uvicorn with reload=True in production is a security risk and performance issue. Disable reload in production."
   severity: Medium
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -171,6 +177,7 @@
   name: "FastAPI CORS Allow All Methods"
   description: "Setting allow_methods=['*'] in CORSMiddleware permits all HTTP methods. Specify only the methods your API needs."
   severity: Medium
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -193,3 +200,5 @@
       expected: TrueNegative
     - code: "CORSMiddleware(app, allow_origins=['https://example.com'])"
       expected: TrueNegative
+
+

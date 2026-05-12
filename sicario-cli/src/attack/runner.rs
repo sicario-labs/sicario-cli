@@ -293,22 +293,17 @@ mod tests {
     }
 
     fn make_vulnerability(cwe_id: Option<&str>) -> Vulnerability {
-        Vulnerability {
-            id: Uuid::new_v4(),
-            rule_id: "js-sql-string-concat".to_string(),
-            file_path: PathBuf::from("src/db.js"),
-            line: 42,
-            column: 5,
-            snippet: "db.query('SELECT * FROM users WHERE id = ' + req.body.id)".to_string(),
-            severity: Severity::High,
-            reachable: true,
-            cloud_exposed: None,
-            cwe_id: cwe_id.map(|s| s.to_string()),
-            owasp_category: None,
-            confidence_score: 0.9,
-            suppressed: false,
-            execution_trace: None,
-        }
+        let mut v = Vulnerability::new(
+            "js-sql-string-concat".to_string(),
+            PathBuf::from("src/db.js"),
+            42,
+            5,
+            "db.query('SELECT * FROM users WHERE id = ' + req.body.id)".to_string(),
+            Severity::High,
+        );
+        v.reachable = true;
+        v.cwe_id = cwe_id.map(|s| s.to_string());
+        v
     }
 
     /// Spawn a minimal HTTP server that responds with a fixed response.

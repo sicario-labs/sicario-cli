@@ -24,6 +24,7 @@ pub enum Language {
     Java,
     Ruby,
     Php,
+    CSharp,
 }
 
 impl Language {
@@ -40,6 +41,7 @@ impl Language {
                 "java" => Some(Language::Java),
                 "rb" | "rake" | "gemspec" => Some(Language::Ruby),
                 "php" => Some(Language::Php),
+                "cs" => Some(Language::CSharp),
                 _ => None,
             })
     }

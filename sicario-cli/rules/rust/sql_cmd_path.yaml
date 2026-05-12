@@ -15,10 +15,11 @@
   name: "sqlx::query with format! String"
   description: "Using format! to build SQL strings passed to sqlx::query allows SQL injection. Use sqlx::query with bind parameters ($1, $2) instead."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
-    query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"sqlx\") (#eq? @fn \"query\")) arguments: (arguments (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"sqlx\") (#eq? @fn \"query\")) arguments: (arguments .. (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
     captures:
       - "call"
   cwe_id: "CWE-89"
@@ -42,10 +43,11 @@
   name: "diesel::sql_query with format! String"
   description: "Using format! to build SQL strings passed to diesel::sql_query allows SQL injection. Use .bind() with parameterized queries instead."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
-    query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"diesel\") (#eq? @fn \"sql_query\")) arguments: (arguments (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"diesel\") (#eq? @fn \"sql_query\")) arguments: (arguments .. (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
     captures:
       - "call"
   cwe_id: "CWE-89"
@@ -69,10 +71,11 @@
   name: "rusqlite execute/prepare with format! String"
   description: "Using format! to build SQL strings passed to rusqlite execute or prepare allows SQL injection. Use parameterized queries with params![] instead."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
-    query: "(call_expression function: (field_expression field: (field_identifier) @method (#match? @method \"^(execute|prepare|execute_batch|query_row)$\")) arguments: (arguments (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    query: "(call_expression function: (field_expression field: (field_identifier) @method (#match? @method \"^(execute|prepare|execute_batch|query_row)$\")) arguments: (arguments .. (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
     captures:
       - "call"
   cwe_id: "CWE-89"
@@ -96,10 +99,11 @@
   name: "tokio-postgres query with format! String"
   description: "Using format! to build SQL strings passed to tokio-postgres query/execute allows SQL injection. Use parameterized queries with $1 placeholders instead."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
-    query: "(call_expression function: (field_expression field: (field_identifier) @method (#match? @method \"^(query|query_one|query_opt|execute)$\")) arguments: (arguments . (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    query: "(call_expression function: (field_expression field: (field_identifier) @method (#match? @method \"^(query|query_one|query_opt|execute)$\")) arguments: (arguments .. (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
     captures:
       - "call"
   cwe_id: "CWE-89"
@@ -123,10 +127,11 @@
   name: "SQL String Concatenation in Query"
   description: "Concatenating variables into SQL strings allows SQL injection. Use parameterized queries instead."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
-    query: "(let_declaration value: (binary_expression left: (string_literal) @left (#match? @left \"(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|UNION|FROM|WHERE)\") right: (_) @right)) @decl"
+    query: "(let_declaration value: (binary_expression) @concat (#match? @concat \"(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|UNION|FROM|WHERE)\")) @decl"
     captures:
       - "decl"
   cwe_id: "CWE-89"
@@ -135,9 +140,9 @@
   test_cases:
     - code: "let query = \"SELECT * FROM users WHERE id = \".to_owned() + &user_id;"
       expected: TruePositive
-    - code: "let query = \"DELETE FROM sessions WHERE token = '\" + &token + \"'\";"
+    - code: "let query = \"DELETE FROM sessions WHERE token = '\".to_owned() + &token + \"'\";"
       expected: TruePositive
-    - code: "let query = \"INSERT INTO logs VALUES ('\" + &msg + \"')\";"
+    - code: "let query = \"INSERT INTO logs VALUES ('\".to_owned() + &msg + \"')\";"
       expected: TruePositive
     - code: "let query = \"SELECT * FROM users WHERE id = $1\";"
       expected: TrueNegative
@@ -150,10 +155,11 @@
   name: "sea-orm Raw SQL with format! String"
   description: "Using format! to build SQL strings in sea-orm raw queries allows SQL injection. Use Statement::from_sql_and_values with parameterized queries instead."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
-    query: "(call_expression function: (scoped_identifier name: (identifier) @fn (#match? @fn \"^(from_raw_sql|execute_unprepared)$\")) arguments: (arguments (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    query: "(call_expression function: [(scoped_identifier name: (identifier) @fn) (field_expression field: (field_identifier) @fn)] (#match? @fn \"^(from_raw_sql|execute_unprepared)$\") arguments: (arguments .. (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
     captures:
       - "call"
   cwe_id: "CWE-89"
@@ -177,6 +183,7 @@
   name: "format! Macro Producing SQL String"
   description: "Using format! to construct SQL strings with interpolated values ({}) is a strong indicator of SQL injection vulnerability. Use parameterized queries instead."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -208,6 +215,7 @@
   name: "Command::new with Variable Program Name"
   description: "Using a variable as the program name in Command::new allows command injection if the variable is user-controlled. Use a hardcoded program name or validate against an allowlist."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -235,10 +243,11 @@
   name: "Command .arg() with format! Macro"
   description: "Using format! to build command arguments allows injection of unexpected flags or values. Pass arguments individually without string interpolation."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
-    query: "(call_expression function: (field_expression field: (field_identifier) @method (#eq? @method \"arg\")) arguments: (arguments (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    query: "(call_expression function: (field_expression field: (field_identifier) @method (#eq? @method \"arg\")) arguments: (arguments .. (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
     captures:
       - "call"
   cwe_id: "CWE-78"
@@ -262,10 +271,11 @@
   name: "Command::new(\"sh\") with -c Flag"
   description: "Invoking a shell with -c and a command string allows arbitrary command execution. Avoid shell invocations; use Command::new with the target binary directly."
   severity: Critical
+  confidence: medium
   languages:
     - Rust
   pattern:
-    query: "(call_expression function: (scoped_identifier name: (identifier) @fn (#eq? @fn \"new\")) arguments: (arguments (string_literal) @prog (#match? @prog \"^\\\"(sh|bash|zsh|dash)\\\"$\"))) @call"
+    query: "(call_expression function: (scoped_identifier path: [ (identifier) (scoped_identifier) ] @path (#match? @path \"Command$\") name: (identifier) @fn (#eq? @fn \"new\")) arguments: (arguments (string_literal) @prog (#match? @prog \"^\\\"(sh|bash|zsh|dash)\\\"$\"))) @call"
     captures:
       - "call"
   cwe_id: "CWE-78"
@@ -289,10 +299,11 @@
   name: "Command::new(\"cmd\") with /c Flag"
   description: "Invoking cmd.exe with /c and a command string allows arbitrary command execution on Windows. Avoid shell invocations; use Command::new with the target binary directly."
   severity: Critical
+  confidence: medium
   languages:
     - Rust
   pattern:
-    query: "(call_expression function: (scoped_identifier name: (identifier) @fn (#eq? @fn \"new\")) arguments: (arguments (string_literal) @prog (#match? @prog \"^\\\"(cmd|cmd\\\\.exe)\\\"$\"))) @call"
+    query: "(call_expression function: (scoped_identifier path: [ (identifier) (scoped_identifier) ] @path (#match? @path \"Command$\") name: (identifier) @fn (#eq? @fn \"new\")) arguments: (arguments (string_literal) @prog (#match? @prog \"^\\\"(cmd|cmd\\\\.exe)\\\"$\"))) @call"
     captures:
       - "call"
   cwe_id: "CWE-78"
@@ -316,10 +327,11 @@
   name: "Command::new with Environment Variable"
   description: "Using an environment variable as the program in Command::new allows command injection if the environment is attacker-controlled. Validate or hardcode the program path."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
-    query: "(call_expression function: (scoped_identifier name: (identifier) @fn (#eq? @fn \"new\")) arguments: (arguments (call_expression function: (scoped_identifier name: (identifier) @env_fn (#match? @env_fn \"^(var|var_os)$\"))))) @call"
+    query: "(call_expression function: (scoped_identifier path: [ (identifier) (scoped_identifier) ] @path (#match? @path \"Command$\") name: (identifier) @fn (#eq? @fn \"new\")) arguments: (arguments .. (call_expression function: (scoped_identifier name: (identifier) @env_fn (#match? @env_fn \"^(var|var_os)$\"))))) @call"
     captures:
       - "call"
   cwe_id: "CWE-78"
@@ -343,6 +355,7 @@
   name: "Command with Web Framework User Input"
   description: "Passing user input from web framework extractors directly to Command allows command injection. Validate and sanitize all user input before use in commands."
   severity: Critical
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -370,6 +383,7 @@
   name: "Shell Command String Building with format!"
   description: "Building shell command strings with format! for later execution enables command injection. Use Command::new with separate arguments instead of shell strings."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -401,10 +415,11 @@
   name: "std::fs::read with format! Path"
   description: "Using format! to construct file paths passed to std::fs::read allows path traversal attacks. Validate and canonicalize paths before use."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
-    query: "(call_expression function: (scoped_identifier path: (scoped_identifier) @path name: (identifier) @fn (#eq? @fn \"read\")) arguments: (arguments (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    query: "(call_expression function: (scoped_identifier name: (identifier) @fn (#eq? @fn \"read\")) arguments: (arguments .. (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
     captures:
       - "call"
   cwe_id: "CWE-22"
@@ -428,10 +443,11 @@
   name: "std::fs::write with format! Path"
   description: "Using format! to construct file paths passed to std::fs::write allows path traversal attacks. Validate and canonicalize paths before use."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
-    query: "(call_expression function: (scoped_identifier path: (scoped_identifier) @path name: (identifier) @fn (#eq? @fn \"write\")) arguments: (arguments . (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    query: "(call_expression function: (scoped_identifier name: (identifier) @fn (#eq? @fn \"write\")) arguments: (arguments .. (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
     captures:
       - "call"
   cwe_id: "CWE-22"
@@ -455,10 +471,11 @@
   name: "File::open with format! Path"
   description: "Using format! to construct file paths passed to File::open allows path traversal attacks. Validate and canonicalize paths before use."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
-    query: "(call_expression function: (scoped_identifier path: (scoped_identifier) @path name: (identifier) @fn (#match? @fn \"^(open|create)$\")) arguments: (arguments (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    query: "(call_expression function: (scoped_identifier name: (identifier) @fn (#match? @fn \"^(open|create)$\")) arguments: (arguments .. (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
     captures:
       - "call"
   cwe_id: "CWE-22"
@@ -482,10 +499,11 @@
   name: "tokio::fs Operations with format! Path"
   description: "Using format! to construct file paths in tokio::fs async operations allows path traversal attacks. Validate and canonicalize paths before use."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
-    query: "(call_expression function: (scoped_identifier path: (scoped_identifier) @path (#match? @path \"fs\") name: (identifier) @fn (#match? @fn \"^(read|write|read_to_string|remove_file|copy|rename)$\")) arguments: (arguments . (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    query: "(call_expression function: (scoped_identifier name: (identifier) @fn (#match? @fn \"^(read|write|read_to_string|remove_file|copy|rename)$\")) arguments: (arguments .. (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
     captures:
       - "call"
   cwe_id: "CWE-22"
@@ -509,10 +527,11 @@
   name: "std::fs::read_to_string with Unsanitized Variable"
   description: "Passing user-controlled variables directly to std::fs::read_to_string allows path traversal. Validate paths against a base directory and canonicalize before use."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
-    query: "(call_expression function: (scoped_identifier path: (scoped_identifier) @path name: (identifier) @fn (#eq? @fn \"read_to_string\")) arguments: (arguments (field_expression object: (identifier) @obj (#match? @obj \"^(params|query|body|payload|path|form|req|request|input)$\")))) @call"
+    query: "(call_expression function: (scoped_identifier name: (identifier) @fn (#eq? @fn \"read_to_string\")) arguments: (arguments (field_expression object: (identifier) @obj (#match? @obj \"^(params|query|body|payload|path|form|req|request|input)$\")))) @call"
     captures:
       - "call"
   cwe_id: "CWE-22"
@@ -536,10 +555,11 @@
   name: "Path::new with User Input from Web Framework"
   description: "Constructing paths from user-controlled web framework input allows path traversal. Validate input does not contain '..' and canonicalize the resulting path."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
-    query: "(call_expression function: (scoped_identifier path: (scoped_identifier) @path name: (identifier) @fn (#eq? @fn \"new\")) arguments: (arguments (field_expression object: (identifier) @obj (#match? @obj \"^(params|query|body|payload|path|form|req|request|input)$\")))) @call"
+    query: "(call_expression function: (scoped_identifier path: [ (identifier) (scoped_identifier) ] @path (#match? @path \"Command$\") name: (identifier) @fn (#eq? @fn \"new\")) arguments: (arguments (field_expression object: (identifier) @obj (#match? @obj \"^(params|query|body|payload|path|form|req|request|input)$\")))) @call"
     captures:
       - "call"
   cwe_id: "CWE-22"
@@ -563,10 +583,11 @@
   name: "std::fs::remove_file with format! Path"
   description: "Using format! to construct file paths passed to std::fs::remove_file allows path traversal attacks leading to arbitrary file deletion. Validate and canonicalize paths before use."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
-    query: "(call_expression function: (scoped_identifier path: (scoped_identifier) @path name: (identifier) @fn (#match? @fn \"^(remove_file|remove_dir|remove_dir_all)$\")) arguments: (arguments (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
+    query: "(call_expression function: (scoped_identifier name: (identifier) @fn (#match? @fn \"^(remove_file|remove_dir|remove_dir_all)$\")) arguments: (arguments .. (macro_invocation macro: (identifier) @mac (#eq? @mac \"format\")))) @call"
     captures:
       - "call"
   cwe_id: "CWE-22"
@@ -585,3 +606,13 @@
       expected: TrueNegative
     - code: "std::fs::remove_file(validated_path).unwrap();"
       expected: TrueNegative
+
+
+
+
+
+
+
+
+
+

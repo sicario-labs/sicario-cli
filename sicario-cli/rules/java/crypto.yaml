@@ -16,6 +16,7 @@
   name: "MessageDigest.getInstance(\"MD5\")"
   description: "MD5 is cryptographically broken and must not be used for password hashing or integrity verification. Use SHA-256 or bcrypt instead."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -43,6 +44,7 @@
   name: "MessageDigest.getInstance(\"SHA-1\")"
   description: "SHA-1 is cryptographically weak and must not be used for password hashing or digital signatures. Use SHA-256 or bcrypt instead."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -70,6 +72,7 @@
   name: "MessageDigest.getInstance(\"MD2\")"
   description: "MD2 is obsolete and cryptographically broken. Use SHA-256 or stronger hash algorithms."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -102,6 +105,7 @@
   name: "Cipher.getInstance with DES"
   description: "DES uses a 56-bit key and is trivially breakable. Use AES-256 with GCM mode instead."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -129,6 +133,7 @@
   name: "Cipher.getInstance with ECB Mode"
   description: "ECB mode does not provide semantic security — identical plaintext blocks produce identical ciphertext. Use GCM or CBC with a random IV."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -156,6 +161,7 @@
   name: "Cipher.getInstance with RC4/ARCFOUR"
   description: "RC4 has known biases and is prohibited by RFC 7465. Use AES-256-GCM instead."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -187,6 +193,7 @@
   name: "Hardcoded SecretKeySpec"
   description: "Hardcoding encryption keys in source code exposes them to anyone with access to the binary. Use a key management service or derive keys from a secure source."
   severity: Critical
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -214,6 +221,7 @@
   name: "java.util.Random for Security Operations"
   description: "java.util.Random is not cryptographically secure. Use java.security.SecureRandom for tokens, keys, nonces, and other security-sensitive values."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -241,6 +249,7 @@
   name: "SecureRandom with Static Seed"
   description: "Seeding SecureRandom with a static value makes its output predictable. Let SecureRandom self-seed from the OS entropy source."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -272,6 +281,7 @@
   name: "RSA Key Size Below 2048 Bits"
   description: "RSA keys shorter than 2048 bits are considered insecure. Use at least 2048-bit keys, preferably 4096-bit."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -299,6 +309,7 @@
   name: "PBKDF2 with Low Iteration Count"
   description: "PBKDF2 with fewer than 600,000 iterations is vulnerable to brute-force attacks. Use at least 600,000 iterations per OWASP recommendations."
   severity: Medium
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -326,6 +337,7 @@
   name: "NullCipher Usage"
   description: "NullCipher performs no encryption at all. It is only intended for testing. Use a real cipher like AES-GCM in production."
   severity: Critical
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -348,3 +360,5 @@
       expected: TrueNegative
     - code: "cipher.doFinal(data);"
       expected: TrueNegative
+
+

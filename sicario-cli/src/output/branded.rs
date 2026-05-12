@@ -169,15 +169,52 @@ pub fn print_scan_summary(
     let duration_secs = summary.scan_duration.as_secs_f64();
     let semgrep_estimate = duration_secs * 10.0;
 
+    let total_f = summary.total_findings as f64;
+    let crit_pct = if total_f > 0.0 { (summary.critical_count as f64 / total_f) * 100.0 } else { 0.0 };
+    let high_pct = if total_f > 0.0 { (summary.high_count as f64 / total_f) * 100.0 } else { 0.0 };
+    let med_pct = if total_f > 0.0 { (summary.medium_count as f64 / total_f) * 100.0 } else { 0.0 };
+    let low_pct = if total_f > 0.0 { (summary.low_count as f64 / total_f) * 100.0 } else { 0.0 };
+    let info_pct = if total_f > 0.0 { (summary.info_count as f64 / total_f) * 100.0 } else { 0.0 };
+
     let findings_line = format!(
-        "Findings: {} total  (C:{} H:{} M:{} L:{} I:{})",
-        summary.total_findings,
-        summary.critical_count,
-        summary.high_count,
-        summary.medium_count,
-        summary.low_count,
-        summary.info_count,
+        "Findings: {} total",
+        summary.total_findings
     );
+    let breakdown_line = format!(
+        "Severity: C:{}({:.0}%) H:{}({:.0}%) M:{}({:.0}%) L:{}({:.0}%) I:{}({:.0}%)",
+        summary.critical_count, crit_pct,
+        summary.high_count, high_pct,
+        summary.medium_count, med_pct,
+        summary.low_count, low_pct,
+        summary.info_count, info_pct
+    );
+
+    let bar_width = 30;
+    let crit_len = if total_f > 0.0 { (crit_pct / 100.0 * bar_width as f64).round() as usize } else { 0 };
+    let high_len = if total_f > 0.0 { (high_pct / 100.0 * bar_width as f64).round() as usize } else { 0 };
+    let med_len = if total_f > 0.0 { (med_pct / 100.0 * bar_width as f64).round() as usize } else { 0 };
+    let low_len = if total_f > 0.0 { (low_pct / 100.0 * bar_width as f64).round() as usize } else { 0 };
+    
+    let (crit_char, high_char, med_char, low_char, info_char) = if unicode {
+        ("█", "▓", "▒", "░", "-")
+    } else {
+        ("C", "H", "M", "L", "-")
+    };
+
+    let mut visual_bar = String::new();
+    visual_bar.push_str(&crit_char.repeat(crit_len));
+    visual_bar.push_str(&high_char.repeat(high_len));
+    visual_bar.push_str(&med_char.repeat(med_len));
+    visual_bar.push_str(&low_char.repeat(low_len));
+    
+    let current_len = crit_len + high_len + med_len + low_len;
+    if current_len < bar_width && total_f > 0.0 {
+        visual_bar.push_str(&info_char.repeat(bar_width - current_len));
+    } else if total_f == 0.0 {
+        visual_bar.push_str(&info_char.repeat(bar_width));
+    }
+
+    let bar_line = format!("Visual:   [{}]", visual_bar);
 
     let duration_line = format!("Duration: {:.2}s", duration_secs);
     let files_line = format!("Files scanned: {}", summary.files_scanned);
@@ -186,10 +223,35 @@ pub fn print_scan_summary(
     let min_sev_line = format!("Minimum Severity: {}", summary.min_severity);
     let semgrep_line = format!("Semgrep estimate: ~{:.1}s (10x slower)", semgrep_estimate);
 
+    // Task 16.8: throughput — N files scanned in X.Xs (Y files/s, Z KLOC/s)
+    // KLOC/s is estimated at ~100 LOC per file average
+    let files_per_sec = if duration_secs > 0.0 {
+        summary.files_scanned as f64 / duration_secs
+    } else {
+        summary.files_scanned as f64
+    };
+    let kloc_per_sec = files_per_sec * 0.1; // ~100 LOC/file average
+    let throughput_line = format!(
+        "Throughput: {:.0} files/s  ({:.1} KLOC/s)",
+        files_per_sec, kloc_per_sec
+    );
+
     writeln!(
         writer,
         "{v_char}  {:<width$}{v_char}",
         findings_line,
+        width = width - 2
+    )?;
+    writeln!(
+        writer,
+        "{v_char}  {:<width$}{v_char}",
+        breakdown_line,
+        width = width - 2
+    )?;
+    writeln!(
+        writer,
+        "{v_char}  {:<width$}{v_char}",
+        bar_line,
         width = width - 2
     )?;
     writeln!(
@@ -228,7 +290,33 @@ pub fn print_scan_summary(
         semgrep_line,
         width = width - 2
     )?;
+    writeln!(
+        writer,
+        "{v_char}  {:<width$}{v_char}",
+        throughput_line,
+        width = width - 2
+    )?;
     writeln!(writer, "{bl}{bar}{br}")?;
+
+    // Task 3.2: Actionable "What to do next" block
+    writeln!(writer)?;
+    let next_steps_title = "What to do next:";
+    if color {
+        writeln!(writer, "  {}", next_steps_title.bold().bright_blue())?;
+    } else {
+        writeln!(writer, "  {next_steps_title}")?;
+    }
+
+    let steps = [
+        "1. Fix critical issues instantly: Run sicario fix --rule <ID> --file <PATH>",
+        "2. Interactively triage in your browser: Run sicario dashboard",
+        "3. Suppress false positives inline: Add // sicario-ignore: <rule-id> above the line",
+    ];
+
+    for step in steps {
+        writeln!(writer, "    {}", step)?;
+    }
+    writeln!(writer)?;
 
     Ok(())
 }

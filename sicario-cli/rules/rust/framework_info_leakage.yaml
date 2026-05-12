@@ -29,6 +29,7 @@
   name: "Actix-web Route Handler Without Authentication"
   description: "Route handler accepts HttpRequest or web::Json but has no Identity, Session, or custom auth extractor parameter. Sensitive endpoints should require authentication."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -56,6 +57,7 @@
   name: "Actix-web Path Parameter in SQL Query"
   description: "Using actix-web Path<> extractor value directly in a format! SQL string allows SQL injection. Use parameterized queries instead."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -83,6 +85,7 @@
   name: "Actix-web App Without CORS Middleware"
   description: "Actix-web application created with App::new() without .wrap(Cors::...) middleware. APIs accessed by browsers need explicit CORS configuration."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -110,6 +113,7 @@
   name: "Actix-web Exposed Debug/Admin Endpoint"
   description: "Route registered at /debug or /admin path without authentication middleware. Debug and admin endpoints must be protected or removed in production."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -137,6 +141,7 @@
   name: "Actix-web HttpResponse with format! User Input (XSS)"
   description: "Using format! to embed user input into HttpResponse body without escaping enables XSS. Use a template engine with auto-escaping or return JSON."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -164,6 +169,7 @@
   name: "Actix-web Missing CSRF Protection"
   description: "Actix-web application with form-handling POST routes but no CSRF middleware. State-changing endpoints accepting form data should have CSRF protection."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -191,6 +197,7 @@
   name: "Actix-web Verbose Error Response"
   description: "Returning InternalServerError with debug-formatted error details exposes internal information to clients. Return generic error messages and log details server-side."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -218,6 +225,7 @@
   name: "Actix-web Session Without Secure Cookie Settings"
   description: "Session cookie configured without secure=true or http_only=true. Session cookies must be marked Secure and HttpOnly to prevent interception and XSS theft."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -245,6 +253,7 @@
   name: "Actix-web Missing Rate Limiting"
   description: "Actix-web application without rate limiting middleware. Public-facing APIs should implement rate limiting to prevent abuse and DoS."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -272,6 +281,7 @@
   name: "Actix-web Static Files from User-Controlled Path"
   description: "Serving static files using a path derived from user input enables path traversal attacks. Validate and sanitize file paths before serving."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -299,6 +309,7 @@
   name: "Actix-web Permissive CORS (allow_any_origin)"
   description: "Using Cors::permissive() or .allow_any_origin() allows any website to make authenticated requests to your API. Restrict origins to trusted domains."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -326,6 +337,7 @@
   name: "Actix-web Missing Content-Security-Policy Header"
   description: "HttpResponse returned without Content-Security-Policy header. CSP helps prevent XSS by restricting resource loading sources."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -358,6 +370,7 @@
   name: "Axum Route Handler Without Authentication"
   description: "Axum handler function for sensitive endpoint without authentication extractor or middleware layer. Use Extension<User> or custom auth extractor."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -385,6 +398,7 @@
   name: "Axum Path Parameter in SQL Query"
   description: "Using axum Path<> extractor value directly in a format! SQL string allows SQL injection. Use parameterized queries with bind parameters."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -412,6 +426,7 @@
   name: "Axum Router Without CORS Layer"
   description: "Axum Router created without CorsLayer from tower-http. APIs accessed by browsers need explicit CORS configuration."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -439,6 +454,7 @@
   name: "Axum Exposed Debug/Admin Route"
   description: "Route registered at /debug or /admin path without authentication layer. Debug and admin endpoints must be protected or removed in production."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -466,6 +482,7 @@
   name: "Axum Response with format! User Input"
   description: "Using format! to embed user input into HTML response body enables XSS. Use a template engine with auto-escaping or return JSON."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -493,6 +510,7 @@
   name: "Axum Verbose Error Response"
   description: "Returning detailed error information in IntoResponse implementation exposes internal details to clients. Return generic error messages and log details server-side."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -520,6 +538,7 @@
   name: "Axum Missing Rate Limiting Layer"
   description: "Axum Router without rate limiting layer. Public-facing APIs should implement rate limiting to prevent abuse and denial of service."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -547,6 +566,7 @@
   name: "Axum Serving Static Files from User-Controlled Path"
   description: "Using ServeFile or ServeDir with user-controlled path enables path traversal. Validate and sanitize file paths before serving."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -574,6 +594,7 @@
   name: "Axum Permissive CORS (CorsLayer::permissive)"
   description: "Using CorsLayer::permissive() allows any origin to make requests including with credentials. Restrict to specific trusted origins."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -601,6 +622,7 @@
   name: "Axum Missing Content-Security-Policy Header"
   description: "HTML response returned without Content-Security-Policy header. CSP helps prevent XSS by restricting resource loading sources."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -628,6 +650,7 @@
   name: "Axum Extracting Raw Body Without Size Limit"
   description: "Extracting request body as Bytes or String without DefaultBodyLimit layer allows clients to send arbitrarily large payloads causing OOM."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -655,6 +678,7 @@
   name: "Axum Server Without TLS Configuration"
   description: "Axum server binding to address without TLS. Production servers should use HTTPS to encrypt traffic in transit."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -687,6 +711,7 @@
   name: "Debug Trait Derived on Type Containing Secrets"
   description: "Deriving Debug on a struct with fields named password, secret, token, api_key, or private_key will print sensitive values in logs and error messages. Implement Debug manually to redact secrets."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -714,6 +739,7 @@
   name: "Display Implementation Exposing Sensitive Fields"
   description: "Implementing Display on a type that formats secret fields (password, token, key) exposes sensitive data when the value is printed or converted to string."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -741,6 +767,7 @@
   name: "Logging Sensitive Data (Passwords/Tokens/Keys)"
   description: "Logging sensitive fields like passwords, tokens, or API keys writes secrets to log files where they may be accessed by unauthorized parties."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -768,6 +795,7 @@
   name: "Tracing Span/Event with Sensitive Data"
   description: "Including sensitive fields in tracing spans or events writes secrets to structured logs and distributed tracing systems."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -795,6 +823,7 @@
   name: "println!/eprintln! with Sensitive Data"
   description: "Using println! or eprintln! to output sensitive data like passwords, tokens, or keys writes secrets to stdout/stderr where they may be captured in CI logs."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -822,6 +851,7 @@
   name: "Serializable Struct with Secret Fields"
   description: "Deriving Serialize on a struct containing secret fields (password, token, key, secret) may expose sensitive data in JSON/YAML output, API responses, or logs."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -849,6 +879,7 @@
   name: "Error Chain Exposed to Client Response"
   description: "Converting an error chain to string and returning it in an HTTP response exposes internal implementation details including database errors, file paths, and stack traces."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -876,6 +907,7 @@
   name: "Debug Format ({:?}) in HTTP Response Body"
   description: "Using {:?} debug formatting in HTTP response bodies exposes internal type names, memory addresses, and implementation details to clients."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -903,6 +935,7 @@
   name: "Panic Message Containing Sensitive Context"
   description: "Using panic!, unwrap(), or expect() with messages containing sensitive variable names may expose secrets in crash reports and error handlers that forward panic info to clients."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -930,6 +963,7 @@
   name: "Environment Variable Secret Logged or Printed"
   description: "Reading a secret from an environment variable and immediately logging or printing it exposes the secret in log output."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -962,6 +996,7 @@
   name: "Actix-web Hardcoded Secret Key"
   description: "Using a hardcoded byte array or string literal as a session/cookie signing key. Secret keys must be loaded from environment variables or a secrets manager."
   severity: Critical
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -989,6 +1024,7 @@
   name: "Actix-web JSON Extractor Without Size Limit"
   description: "Using web::Json<T> extractor without configuring JsonConfig with a size limit allows clients to send arbitrarily large JSON payloads causing OOM."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -1016,6 +1052,7 @@
   name: "Actix-web Default Server Header Exposed"
   description: "Actix-web exposes a Server header revealing framework name and version by default. Disable or customize it to prevent information disclosure."
   severity: Low
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -1043,6 +1080,7 @@
   name: "Actix-web Unvalidated Redirect"
   description: "Redirecting to a URL derived from user input without validation enables open redirect attacks. Validate redirect targets against an allowlist of trusted domains."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -1074,6 +1112,7 @@
   name: "Axum State with Hardcoded Secret"
   description: "Passing a hardcoded secret string or byte array as Axum shared state. Secrets must be loaded from environment variables or a secrets manager at runtime."
   severity: Critical
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -1101,6 +1140,7 @@
   name: "Axum Unvalidated Redirect Response"
   description: "Constructing a redirect response using user-supplied URL without validation enables open redirect attacks. Validate redirect targets against trusted domains."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -1128,6 +1168,7 @@
   name: "Axum Router Without Request ID Middleware"
   description: "Axum Router without request ID propagation makes it difficult to correlate logs and trace security incidents across distributed services."
   severity: Low
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -1155,6 +1196,7 @@
   name: "Axum Multipart Upload Without Validation"
   description: "Processing multipart file uploads without validating file type, size, or content allows malicious file uploads that may lead to RCE or storage exhaustion."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -1187,6 +1229,7 @@
   name: "Backtrace Exposed in HTTP Response"
   description: "Including std::backtrace::Backtrace or RUST_BACKTRACE output in HTTP responses exposes internal code structure, file paths, and function names to attackers."
   severity: High
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -1214,6 +1257,7 @@
   name: "Actix-web Cookie Without SameSite Attribute"
   description: "Setting cookies without SameSite attribute allows cross-site request forgery. Set SameSite to Strict or Lax for session and authentication cookies."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -1241,6 +1285,7 @@
   name: "Axum Extension Without Type-Safe State"
   description: "Using Extension<T> for shared state instead of State<T> loses compile-time guarantees that all routes have access to required state, potentially causing runtime panics."
   severity: Low
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -1268,6 +1313,7 @@
   name: "Sensitive Headers Not Redacted in Logs"
   description: "Using tower-http TraceLayer without configuring sensitive header redaction logs Authorization, Cookie, and Set-Cookie headers in plain text."
   severity: Medium
+  confidence: medium
   languages:
     - Rust
   pattern:
@@ -1290,3 +1336,4 @@
       expected: TrueNegative
     - code: "Router::new()\n    .layer(\n        ServiceBuilder::new()\n            .layer(SetSensitiveHeadersLayer::new([AUTHORIZATION]))\n            .layer(TraceLayer::new_for_http())\n    )"
       expected: TrueNegative
+

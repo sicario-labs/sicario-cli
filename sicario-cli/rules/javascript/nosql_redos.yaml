@@ -13,6 +13,7 @@
   name: "MongoDB $where with User Input"
   description: "Using $where with user-controlled input allows NoSQL injection via JavaScript execution. Use standard query operators instead of $where, or validate input strictly."
   severity: Critical
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -41,6 +42,7 @@
   name: "MongoDB $where with String Concatenation"
   description: "Concatenating user input into $where strings allows arbitrary JavaScript execution in MongoDB. Use parameterized queries with standard operators."
   severity: Critical
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -69,6 +71,7 @@
   name: "MongoDB $regex with User Input (ReDoS + Injection)"
   description: "Using user input directly in MongoDB $regex allows both ReDoS attacks and regex injection. Escape special regex characters or use exact match operators."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -97,6 +100,7 @@
   name: "Mongoose Query with User-Controlled Operators"
   description: "Passing user input directly as query objects to Mongoose allows operator injection ($gt, $ne, $in). Sanitize input by stripping $ prefixed keys or use explicit field matching."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -125,6 +129,7 @@
   name: "Mongoose findOne with Unvalidated Query Object"
   description: "Passing unvalidated request data directly to Mongoose findOne allows NoSQL injection. Validate input schema and strip MongoDB operators before querying."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -153,6 +158,7 @@
   name: "MongoDB Aggregate with User-Controlled $match"
   description: "Passing user input directly to MongoDB aggregate $match stage allows operator injection. Validate and sanitize all fields before using in aggregation pipelines."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -181,6 +187,7 @@
   name: "Redis EVAL with User Input (Lua Injection)"
   description: "Passing user input to Redis EVAL command allows Lua script injection. Use parameterized EVALSHA with pre-loaded scripts, or validate input strictly."
   severity: Critical
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -209,6 +216,7 @@
   name: "Redis Command Injection via String Concatenation"
   description: "Concatenating user input into Redis commands allows command injection. Use parameterized Redis client methods instead of raw command strings."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -237,6 +245,7 @@
   name: "MongoDB updateOne with User-Controlled $set"
   description: "Passing user input directly to MongoDB $set in updateOne allows field injection. Validate and whitelist fields before update operations."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -265,6 +274,7 @@
   name: "new RegExp() with User Input (ReDoS)"
   description: "Creating RegExp from user input without sanitization allows ReDoS attacks via catastrophic backtracking patterns. Escape special regex characters or use a safe regex library."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -293,6 +303,7 @@
   name: "new RegExp() with Request Data"
   description: "Creating RegExp directly from request parameters allows ReDoS attacks. Sanitize and escape regex special characters before constructing patterns."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -321,6 +332,7 @@
   name: "Regex with Nested Quantifiers (Catastrophic Backtracking)"
   description: "Regular expressions with nested quantifiers like (a+)+ or (a*)*b cause exponential backtracking. Refactor to use atomic groups or possessive quantifiers."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -349,6 +361,7 @@
   name: "Regex with Overlapping Alternation"
   description: "Regular expressions with overlapping alternation patterns like (a|a)+ or (.+|.+) cause exponential backtracking. Use non-overlapping alternatives."
   severity: Medium
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -377,6 +390,7 @@
   name: "String.match/replace/search with User-Controlled Regex"
   description: "Using user-controlled strings in String.match(), replace(), or search() creates regex from user input, enabling ReDoS. Escape input or use indexOf/includes instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -405,6 +419,7 @@
   name: "Regex with Exponential Backtracking Pattern"
   description: "Patterns like (a+)+ or ([a-zA-Z]+)* cause exponential time complexity on non-matching inputs. Use atomic grouping or rewrite to avoid nested repetition."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -428,3 +443,5 @@
       expected: TrueNegative
     - code: "const numRegex = /^\\d+$/;"
       expected: TrueNegative
+
+

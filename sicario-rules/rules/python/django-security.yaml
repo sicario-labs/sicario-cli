@@ -7,6 +7,7 @@
   name: "Django DEBUG=True in Production"
   description: "Running Django with DEBUG=True exposes stack traces, local variables, and settings to anyone who triggers an error. Always set DEBUG=False in production."
   severity: High
+  confidence: high
   languages:
     - Python
   pattern:
@@ -28,6 +29,7 @@
   name: "Django View Exempt from CSRF Protection"
   description: "The @csrf_exempt decorator disables CSRF protection for a view, making it vulnerable to cross-site request forgery attacks. Remove the decorator or implement an alternative CSRF mechanism."
   severity: High
+  confidence: high
   languages:
     - Python
   pattern:
@@ -53,6 +55,7 @@
   name: "Django ALLOWED_HOSTS Contains Wildcard"
   description: "Setting ALLOWED_HOSTS = ['*'] allows requests from any host, enabling host header injection attacks. Specify exact hostnames in production."
   severity: Medium
+  confidence: high
   languages:
     - Python
   pattern:
@@ -72,6 +75,7 @@
   name: "Django SECRET_KEY Hardcoded"
   description: "Hardcoding the Django SECRET_KEY exposes it to anyone with repository access. Generate a unique key and store it in an environment variable."
   severity: Critical
+  confidence: high
   languages:
     - Python
   pattern:

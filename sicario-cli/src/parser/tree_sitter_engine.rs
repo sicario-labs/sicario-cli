@@ -42,37 +42,48 @@ impl TreeSitterEngine {
     fn init_parsers(&mut self) -> Result<()> {
         // JavaScript
         let mut js_parser = Parser::new();
-        js_parser.set_language(tree_sitter_javascript::language())?;
+        js_parser.set_language(&tree_sitter_javascript::language())?;
         self.parsers.insert(Language::JavaScript, js_parser);
 
         // TypeScript
         let mut ts_parser = Parser::new();
-        ts_parser.set_language(tree_sitter_typescript::language_typescript())?;
+        ts_parser.set_language(&tree_sitter_typescript::language_typescript())?;
         self.parsers.insert(Language::TypeScript, ts_parser);
 
         // Python
         let mut py_parser = Parser::new();
-        py_parser.set_language(tree_sitter_python::language())?;
+        py_parser.set_language(&tree_sitter_python::language())?;
         self.parsers.insert(Language::Python, py_parser);
 
         // Rust
         let mut rust_parser = Parser::new();
-        rust_parser.set_language(tree_sitter_rust::language())?;
+        rust_parser.set_language(&tree_sitter_rust::language())?;
         self.parsers.insert(Language::Rust, rust_parser);
 
         // Go
         let mut go_parser = Parser::new();
-        go_parser.set_language(tree_sitter_go::language())?;
+        go_parser.set_language(&tree_sitter_go::language())?;
         self.parsers.insert(Language::Go, go_parser);
 
         // Java
         let mut java_parser = Parser::new();
-        java_parser.set_language(tree_sitter_java::language())?;
+        java_parser.set_language(&tree_sitter_java::language())?;
         self.parsers.insert(Language::Java, java_parser);
 
-        // Ruby and PHP: no tree-sitter grammar crate available at compatible version.
-        // These languages are detected by Language::from_path but validation
-        // falls through to the "unknown language" rejection path in validate_syntax.
+        // Ruby
+        let mut ruby_parser = Parser::new();
+        ruby_parser.set_language(&tree_sitter_ruby::language())?;
+        self.parsers.insert(Language::Ruby, ruby_parser);
+
+        // PHP
+        let mut php_parser = Parser::new();
+        php_parser.set_language(&tree_sitter_php::language_php())?;
+        self.parsers.insert(Language::Php, php_parser);
+
+        // C#
+        let mut cs_parser = Parser::new();
+        cs_parser.set_language(&tree_sitter_c_sharp::language())?;
+        self.parsers.insert(Language::CSharp, cs_parser);
 
         Ok(())
     }
@@ -140,15 +151,12 @@ impl TreeSitterEngine {
             Language::Rust => tree_sitter_rust::language(),
             Language::Go => tree_sitter_go::language(),
             Language::Java => tree_sitter_java::language(),
-            Language::Ruby => {
-                anyhow::bail!("No tree-sitter grammar available for Ruby")
-            }
-            Language::Php => {
-                anyhow::bail!("No tree-sitter grammar available for PHP")
-            }
+            Language::Ruby => tree_sitter_ruby::language(),
+            Language::Php => tree_sitter_php::language_php(),
+            Language::CSharp => tree_sitter_c_sharp::language(),
         };
 
-        parser.set_language(ts_language)?;
+        parser.set_language(&ts_language)?;
 
         // Parse the source code
         let tree = parser.parse(source_code, None).ok_or_else(|| {
@@ -176,14 +184,17 @@ mod tests {
         let temp_dir = std::env::temp_dir();
         let engine = TreeSitterEngine::new(&temp_dir).unwrap();
 
-        // Verify all parsers are initialized (Ruby and PHP excluded — no compatible crate)
-        assert_eq!(engine.parsers.len(), 6);
+        // Verify all parsers are initialized
+        assert_eq!(engine.parsers.len(), 9);
         assert!(engine.parsers.contains_key(&Language::JavaScript));
         assert!(engine.parsers.contains_key(&Language::TypeScript));
         assert!(engine.parsers.contains_key(&Language::Python));
         assert!(engine.parsers.contains_key(&Language::Rust));
         assert!(engine.parsers.contains_key(&Language::Go));
         assert!(engine.parsers.contains_key(&Language::Java));
+        assert!(engine.parsers.contains_key(&Language::Ruby));
+        assert!(engine.parsers.contains_key(&Language::Php));
+        assert!(engine.parsers.contains_key(&Language::CSharp));
     }
 
     #[test]

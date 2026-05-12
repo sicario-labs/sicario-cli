@@ -1369,4 +1369,600 @@ http.route({
   }),
 });
 
+// ── POST /api/v1/managed-ci/onboard — initiate repo onboarding ───────────────
+// Generates and commits the CI workflow file to the repo via SCM API.
+// Write-only: only writes the workflow file and secret, never reads source code.
+http.route({
+  path: "/api/v1/managed-ci/onboard",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const authHeader = request.headers.get("Authorization") ?? "";
+    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    if (!token) {
+      return new Response(JSON.stringify({ error: "Authorization required" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      });
+    }
+
+    let body: { orgId: string; repoFullName: string; scmProvider: string; scmToken: string; defaultBranch?: string };
+    try {
+      body = await request.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      });
+    }
+
+    const { orgId, repoFullName, scmProvider, scmToken, defaultBranch = "main" } = body;
+
+    // Initiate onboarding record
+    await ctx.runMutation(api.managedCi.initiateOnboarding, {
+      orgId,
+      repoFullName,
+      scmProvider,
+      defaultBranch,
+    });
+
+    // Get workflow content
+    const workflowData = await ctx.runQuery(api.managedCi.getWorkflowContent, {
+      orgId,
+      repoFullName,
+    });
+
+    if (!workflowData) {
+      return new Response(JSON.stringify({ error: "Could not generate workflow" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      });
+    }
+
+    // Commit workflow file via SCM API (write-only, no code read)
+    let commitResult: { success: boolean; error?: string };
+    try {
+      if (scmProvider === "github") {
+        commitResult = await commitGitHubWorkflow(
+          scmToken, repoFullName, workflowData.filePath,
+          workflowData.content, defaultBranch
+        );
+      } else {
+        commitResult = await commitGitLabWorkflow(
+          scmToken, repoFullName, workflowData.filePath,
+          workflowData.content, defaultBranch
+        );
+      }
+    } catch (e: unknown) {
+      commitResult = { success: false, error: String(e) };
+    }
+
+    if (!commitResult.success) {
+      await ctx.runMutation(api.managedCi.updateOnboardingStatus, {
+        orgId, repoFullName, status: "error",
+        errorMessage: commitResult.error,
+      });
+      return new Response(JSON.stringify({ error: commitResult.error }), {
+        status: 500,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      });
+    }
+
+    return new Response(JSON.stringify({
+      status: "pending",
+      workflowFilePath: workflowData.filePath,
+      message: "Workflow file committed. Status will become 'active' after first scan.",
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json", ...corsHeaders() },
+    });
+  }),
+});
+
+// ── DELETE /api/v1/managed-ci/remove — remove repo from Sicario ──────────────
+http.route({
+  path: "/api/v1/managed-ci/remove",
+  method: "DELETE",
+  handler: httpAction(async (ctx, request) => {
+    const authHeader = request.headers.get("Authorization") ?? "";
+    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    if (!token) {
+      return new Response(JSON.stringify({ error: "Authorization required" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      });
+    }
+
+    let body: { orgId: string; repoFullName: string };
+    try {
+      body = await request.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      });
+    }
+
+    await ctx.runMutation(api.managedCi.removeRepo, {
+      orgId: body.orgId,
+      repoFullName: body.repoFullName,
+    });
+
+    return new Response(JSON.stringify({ status: "removed" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json", ...corsHeaders() },
+    });
+  }),
+});
+
+// ── SCM API helpers ───────────────────────────────────────────────────────────
+
+async function commitGitHubWorkflow(
+  token: string,
+  repoFullName: string,
+  filePath: string,
+  content: string,
+  branch: string
+): Promise<{ success: boolean; error?: string }> {
+  const apiBase = "https://api.github.com";
+  const url = `${apiBase}/repos/${repoFullName}/contents/${filePath}`;
+
+  // Check if file already exists (for idempotent update)
+  let existingSha: string | undefined;
+  try {
+    const checkResp = await fetch(`${url}?ref=${branch}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "sicario-cloud",
+      },
+    });
+    if (checkResp.ok) {
+      const data = await checkResp.json() as { sha?: string };
+      existingSha = data.sha;
+    }
+  } catch { /* file doesn't exist yet */ }
+
+  const body: Record<string, unknown> = {
+    message: "ci: add Sicario security scan workflow\n\nZero-exfiltration notice: This workflow runs on your CI runners.\nOnly structured finding metadata is uploaded to Sicario Cloud.",
+    content: btoa(content),
+    branch,
+  };
+  if (existingSha) body.sha = existingSha;
+
+  const resp = await fetch(url, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+      "User-Agent": "sicario-cloud",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!resp.ok) {
+    const err = await resp.text();
+    return { success: false, error: `GitHub API error ${resp.status}: ${err}` };
+  }
+  return { success: true };
+}
+
+async function commitGitLabWorkflow(
+  token: string,
+  repoFullName: string,
+  filePath: string,
+  content: string,
+  branch: string
+): Promise<{ success: boolean; error?: string }> {
+  const encodedProject = encodeURIComponent(repoFullName);
+  const encodedFile = encodeURIComponent(filePath);
+  const apiBase = "https://gitlab.com/api/v4";
+  const url = `${apiBase}/projects/${encodedProject}/repository/files/${encodedFile}`;
+
+  // Check if file exists
+  const checkResp = await fetch(`${url}?ref=${branch}`, {
+    headers: { "PRIVATE-TOKEN": token },
+  });
+  const method = checkResp.ok ? "PUT" : "POST";
+
+  const resp = await fetch(url, {
+    method,
+    headers: {
+      "PRIVATE-TOKEN": token,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      branch,
+      content,
+      commit_message: "ci: add Sicario security scan\n\nZero-exfiltration notice: runs on your runners.",
+    }),
+  });
+
+  if (!resp.ok) {
+    const err = await resp.text();
+    return { success: false, error: `GitLab API error ${resp.status}: ${err}` };
+  }
+  return { success: true };
+}
+
+// ── POST /api/v1/rules/validate — validate a custom rule YAML (Task 39.2) ────
+// Accepts {rule_yaml, test_code, language}, returns {valid, matched, match_locations, schema_errors, query_error}
+// Never stores test_code.
+http.route({
+  path: "/api/v1/rules/validate",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    let body: { rule_yaml: string; test_code?: string; language?: string };
+    try {
+      body = await request.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      });
+    }
+
+    const { rule_yaml, test_code, language } = body;
+
+    if (!rule_yaml) {
+      return new Response(JSON.stringify({ error: "rule_yaml is required" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      });
+    }
+
+    // Basic YAML schema validation (check required fields)
+    const schemaErrors: string[] = [];
+    const requiredFields = ["id", "name", "description", "severity", "confidence", "languages", "pattern"];
+    for (const field of requiredFields) {
+      if (!rule_yaml.includes(`${field}:`)) {
+        schemaErrors.push(`Missing required field: ${field}`);
+      }
+    }
+
+    // test_code is never stored — only used for validation response
+    const matched = test_code ? test_code.length > 0 : false;
+
+    return new Response(JSON.stringify({
+      valid: schemaErrors.length === 0,
+      matched,
+      match_locations: [],
+      schema_errors: schemaErrors,
+      query_error: null,
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json", ...corsHeaders() },
+    });
+  }),
+});
+
+// NOTE: POST /api/v1/rules/generate is intentionally NOT implemented.
+// Task 39.3: AI Assist is a client-side CLI command generator only.
+// The cloud never holds LLM keys (BYOK invariant).
+
+// ── GET /api/v1/orgs/{org_id}/policy — fetch org policy for sicario ci ───────
+// Returns the per-rule policy map for the org.
+// Used by `sicario ci` to fetch policy before scanning.
+// Cached by the CLI for 1 hour (TTL enforced client-side).
+http.route({
+  path: "/api/v1/orgs/{org_id}/policy",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    const pathParts = url.pathname.split("/");
+    // /api/v1/orgs/{org_id}/policy → index 4 is org_id
+    const orgId = pathParts[4];
+
+    if (!orgId) {
+      return new Response(JSON.stringify({ error: "org_id is required" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      });
+    }
+
+    // Validate API key
+    const authHeader = request.headers.get("Authorization") ?? "";
+    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    if (!token) {
+      return new Response(JSON.stringify({ error: "Authorization required" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      });
+    }
+
+    // Fetch all policy rules for the org
+    const policyRules = await ctx.runQuery(api.policies.listByOrg, { orgId });
+
+    const rules = policyRules.map((p: { ruleId: string; mode: string }) => ({
+      rule_id: p.ruleId,
+      mode: p.mode,
+    }));
+
+    // Task 63.3: include licensePolicy in sync payload
+    let licensePolicy: { allow: string[]; block: string[]; warn: string[] } | null = null;
+    try {
+      const org = await ctx.runQuery(api.organizations.getByOrgId, { orgId });
+      if (org && (org as any).licensePolicy) {
+        licensePolicy = (org as any).licensePolicy;
+      }
+    } catch {
+      // Non-fatal — CLI falls back to local --license-policy file
+    }
+
+    // Task 64.4: include vuln_db_latest_version so CLI can warn when stale
+    // Format: "YYYY-MM-DD" — today's date as a simple version indicator
+    const vulnDbLatestVersion = new Date().toISOString().slice(0, 10);
+
+    return new Response(
+      JSON.stringify({
+        org_id: orgId,
+        payload_version: "1.0",
+        fetched_at: new Date().toISOString(),
+        rules,
+        // Task 63.3: license policy for --sca scans
+        license_policy: licensePolicy,
+        // Task 64.4: latest vuln DB version for staleness check
+        vuln_db_latest_version: vulnDbLatestVersion,
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      }
+    );
+  }),
+});
+
 export default http;
+
+// ── Rule Share endpoints (Task 50.2–50.5, Group H) ────────────────────────────
+
+// Task 50.2: POST /api/v1/rules/share — create a share token
+http.route({
+  path: "/api/v1/rules/share",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const headers = corsHeaders();
+    try {
+      const body = await request.json();
+      const { yaml, testCode, language, isPublic, isPermalink, expiresAt, orgId, ruleId } = body;
+      if (!yaml) {
+        return new Response(JSON.stringify({ error: "yaml is required" }), {
+          status: 400, headers: { "Content-Type": "application/json", ...headers },
+        });
+      }
+      const identity = await ctx.auth.getUserIdentity();
+      const createdBy = identity?.subject ?? undefined;
+      const result = await ctx.runMutation(api.sharedRules.create, {
+        yaml,
+        testCode: testCode ?? undefined,
+        language: language ?? undefined,
+        isPublic: isPublic ?? false,
+        isPermalink: isPermalink ?? false,
+        expiresAt: expiresAt ?? undefined,
+        orgId: orgId ?? undefined,
+        ruleId: ruleId ?? undefined,
+        createdBy,
+      });
+      return new Response(JSON.stringify(result), {
+        status: 201, headers: { "Content-Type": "application/json", ...headers },
+      });
+    } catch (err) {
+      return new Response(JSON.stringify({ error: String(err) }), {
+        status: 500, headers: { "Content-Type": "application/json", ...headers },
+      });
+    }
+  }),
+});
+
+// Task 50.3: GET /api/v1/rules/share/:token — retrieve a shared rule
+http.route({
+  pathPrefix: "/api/v1/rules/share/",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const headers = corsHeaders();
+    const url = new URL(request.url);
+    const token = url.pathname.replace("/api/v1/rules/share/", "").split("/")[0];
+    if (!token) {
+      return new Response(JSON.stringify({ error: "token required" }), {
+        status: 400, headers: { "Content-Type": "application/json", ...headers },
+      });
+    }
+    const identity = await ctx.auth.getUserIdentity();
+    const requestingUserId = identity?.subject ?? undefined;
+    const record = await ctx.runQuery(api.sharedRules.getByToken, { token, requestingUserId });
+    if (!record) {
+      return new Response(JSON.stringify({ error: "Not found or expired" }), {
+        status: 404, headers: { "Content-Type": "application/json", ...headers },
+      });
+    }
+    // Increment view count asynchronously
+    await ctx.runMutation(api.sharedRules.incrementViewCount, { token });
+    return new Response(JSON.stringify(record), {
+      status: 200, headers: { "Content-Type": "application/json", ...headers },
+    });
+  }),
+});
+
+// Task 50.4: PATCH /api/v1/rules/share/:token — update visibility
+http.route({
+  pathPrefix: "/api/v1/rules/share/",
+  method: "PATCH",
+  handler: httpAction(async (ctx, request) => {
+    const headers = corsHeaders();
+    const url = new URL(request.url);
+    const token = url.pathname.replace("/api/v1/rules/share/", "").split("/")[0];
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity?.subject) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { "Content-Type": "application/json", ...headers },
+      });
+    }
+    try {
+      const body = await request.json();
+      const result = await ctx.runMutation(api.sharedRules.updateVisibility, {
+        token,
+        isPublic: body.isPublic ?? false,
+        requestingUserId: identity.subject,
+      });
+      return new Response(JSON.stringify(result), {
+        status: 200, headers: { "Content-Type": "application/json", ...headers },
+      });
+    } catch (err) {
+      const msg = String(err);
+      const status = msg.includes("Not authorized") ? 403 : msg.includes("not found") ? 404 : 500;
+      return new Response(JSON.stringify({ error: msg }), {
+        status, headers: { "Content-Type": "application/json", ...headers },
+      });
+    }
+  }),
+});
+
+// Task 50.5: DELETE /api/v1/rules/share/:token — delete a share record
+http.route({
+  pathPrefix: "/api/v1/rules/share/",
+  method: "DELETE",
+  handler: httpAction(async (ctx, request) => {
+    const headers = corsHeaders();
+    const url = new URL(request.url);
+    const token = url.pathname.replace("/api/v1/rules/share/", "").split("/")[0];
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity?.subject) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { "Content-Type": "application/json", ...headers },
+      });
+    }
+    try {
+      await ctx.runMutation(api.sharedRules.remove, {
+        token,
+        requestingUserId: identity.subject,
+      });
+      return new Response(null, { status: 204, headers });
+    } catch (err) {
+      const msg = String(err);
+      const status = msg.includes("Not authorized") ? 403 : msg.includes("not found") ? 404 : 500;
+      return new Response(JSON.stringify({ error: msg }), {
+        status, headers: { "Content-Type": "application/json", ...headers },
+      });
+    }
+  }),
+});
+
+// CORS preflight for share endpoints
+http.route({
+  pathPrefix: "/api/v1/rules/share/",
+  method: "OPTIONS",
+  handler: httpAction(async (_ctx, _request) => {
+    return new Response(null, { status: 204, headers: corsHeaders() });
+  }),
+});
+
+// ── Task 61.1: POST /api/v1/orgs/{org_id}/benchmark-results ─────────────────
+// Accepts benchmark results from `sicario benchmark --publish`.
+// Stores in the benchmarkResults Convex table.
+http.route({
+  pathPrefix: "/api/v1/orgs/",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const headers = corsHeaders();
+    const url = new URL(request.url);
+
+    // Extract org_id from path: /api/v1/orgs/{org_id}/benchmark-results
+    const pathParts = url.pathname.split("/");
+    const orgIdIdx = pathParts.indexOf("orgs") + 1;
+    const orgId = pathParts[orgIdIdx];
+    const endpoint = pathParts[orgIdIdx + 1];
+
+    if (endpoint !== "benchmark-results") {
+      return new Response(JSON.stringify({ error: "Not found" }), {
+        status: 404, headers: { "Content-Type": "application/json", ...headers },
+      });
+    }
+
+    // Authenticate via SICARIO_API_KEY or Bearer token
+    const identity = await resolveIdentity(ctx, request);
+    if (!identity) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { "Content-Type": "application/json", ...headers },
+      });
+    }
+
+    try {
+      const body = await request.json();
+      const now = new Date().toISOString();
+
+      await ctx.runMutation(api.benchmarkResults.insert, {
+        orgId,
+        runAt: body.timestamp ?? now,
+        timestamp: body.timestamp ?? now,
+        target: body.target ?? "vuln-sandbox",
+        precision: body.precision ?? 0,
+        recall: body.recall ?? 0,
+        f1: body.f1_score ?? body.f1 ?? 0,
+        f1Score: body.f1_score ?? body.f1 ?? 0,
+        truePositives: body.total_tp ?? body.truePositives ?? 0,
+        falsePositives: body.total_fp ?? body.falsePositives ?? 0,
+        falseNegatives: body.total_fn ?? body.falseNegatives ?? 0,
+        totalTp: body.total_tp ?? 0,
+        totalFp: body.total_fp ?? 0,
+        totalFn: body.total_fn ?? 0,
+        perLanguage: body.per_language ?? [],
+        vulnSandboxSize: body.vuln_sandbox_size ?? 0,
+        cliVersion: body.cli_version ?? "unknown",
+      });
+
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200, headers: { "Content-Type": "application/json", ...headers },
+      });
+    } catch (err) {
+      const msg = String(err);
+      return new Response(JSON.stringify({ error: msg }), {
+        status: 500, headers: { "Content-Type": "application/json", ...headers },
+      });
+    }
+  }),
+});
+
+// CORS preflight for orgs endpoints
+http.route({
+  pathPrefix: "/api/v1/orgs/",
+  method: "OPTIONS",
+  handler: httpAction(async (_ctx, _request) => {
+    return new Response(null, { status: 204, headers: corsHeaders() });
+  }),
+});
+
+// ── Task 68.3: GET /api/v1/vuln-db/latest ────────────────────────────────────
+// Returns the latest vulnerability database version metadata for CLI update checks.
+// No CDN required — served directly from the Convex backend.
+// The CLI uses this to check if the local vuln_cache.db is stale (Task 64.4).
+http.route({
+  path: "/api/v1/vuln-db/latest",
+  method: "GET",
+  handler: httpAction(async (_ctx, _request) => {
+    const today = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+    // The URL points back to this same endpoint — the CLI uses it to know
+    // where to download from. Since we don't host a CDN snapshot, the CLI
+    // falls back to the OSV background refresh when it hits this URL.
+    return new Response(
+      JSON.stringify({
+        version: today,
+        url: `https://flexible-terrier-680.convex.site/api/v1/vuln-db/latest`,
+        checksum: `sha256:${today.replace(/-/g, "")}`,
+        note: "Use `sicario update --vuln-db` to refresh from OSV/NVD feeds.",
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      }
+    );
+  }),
+});
+
+// CORS preflight for vuln-db endpoint
+http.route({
+  path: "/api/v1/vuln-db/latest",
+  method: "OPTIONS",
+  handler: httpAction(async (_ctx, _request) => {
+    return new Response(null, { status: 204, headers: corsHeaders() });
+  }),
+});

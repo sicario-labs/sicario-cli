@@ -326,3 +326,54 @@ export const getByOrgId = query({
     return { orgId: org.orgId, name: org.name, createdAt: org.createdAt };
   },
 });
+
+// ── Task 63.1: updateLicensePolicy ───────────────────────────────────────────
+// Updates the licensePolicy JSON field on the organizations table.
+// Called from the License Policy settings tab in the dashboard.
+
+export const updateLicensePolicy = mutation({
+  args: {
+    orgId: v.string(),
+    licensePolicy: v.object({
+      allow: v.array(v.string()),
+      block: v.array(v.string()),
+      warn: v.array(v.string()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const org = await ctx.db
+      .query("organizations")
+      .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId))
+      .first();
+    if (!org) throw new Error("Organization not found");
+    await ctx.db.patch(org._id, { licensePolicy: args.licensePolicy });
+  },
+});
+
+// ── Task 67.3: updateNotificationSettings ────────────────────────────────────
+// Updates Slack webhook URL, alert threshold, and email notification toggles.
+
+export const updateNotificationSettings = mutation({
+  args: {
+    orgId: v.string(),
+    slackWebhookUrl: v.optional(v.string()),
+    slackAlertSeverityThreshold: v.optional(v.string()),
+    weeklyDigestEnabled: v.optional(v.boolean()),
+    criticalAlertsEnabled: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const org = await ctx.db
+      .query("organizations")
+      .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId))
+      .first();
+    if (!org) throw new Error("Organization not found");
+
+    const updates: Record<string, unknown> = {};
+    if (args.slackWebhookUrl !== undefined) updates.slackWebhookUrl = args.slackWebhookUrl;
+    if (args.slackAlertSeverityThreshold !== undefined) updates.slackAlertSeverityThreshold = args.slackAlertSeverityThreshold;
+    if (args.weeklyDigestEnabled !== undefined) updates.weeklyDigestEnabled = args.weeklyDigestEnabled;
+    if (args.criticalAlertsEnabled !== undefined) updates.criticalAlertsEnabled = args.criticalAlertsEnabled;
+
+    await ctx.db.patch(org._id, updates);
+  },
+});

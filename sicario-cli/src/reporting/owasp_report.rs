@@ -230,22 +230,17 @@ mod tests {
     use uuid::Uuid;
 
     fn make_vuln(severity: Severity, owasp: Option<OwaspCategory>) -> Vulnerability {
-        Vulnerability {
-            id: Uuid::new_v4(),
-            rule_id: "test-rule".to_string(),
-            file_path: PathBuf::from("src/main.rs"),
-            line: 1,
-            column: 1,
-            snippet: "code".to_string(),
+        let mut v = Vulnerability::new(
+            "test-rule".to_string(),
+            PathBuf::from("src/main.rs"),
+            1,
+            1,
+            "code".to_string(),
             severity,
-            reachable: true,
-            cloud_exposed: None,
-            cwe_id: None,
-            owasp_category: owasp,
-            confidence_score: 1.0,
-            suppressed: false,
-            execution_trace: None,
-        }
+        );
+        v.reachable = true;
+        v.owasp_category = owasp;
+        v
     }
 
     #[test]

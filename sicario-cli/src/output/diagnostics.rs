@@ -9,7 +9,11 @@ use owo_colors::OwoColorize;
 
 use crate::engine::vulnerability::{Severity, Vulnerability};
 
-/// Render all vulnerabilities as miette/rustc-style diagnostics.
+/// Render all vulnerabilities as miette/rustc-style diagnostics, grouped by file.
+/// Files are sorted by the maximum severity of their findings to ensure critical
+/// issues appear first. Inline remediation commands are appended to help developers
+/// immediately fix detected issues.
+/// Implements Tasks 2.1 and 3.1 of the DX Improvement Plan.
 pub fn render_diagnostics(
     vulns: &[Vulnerability],
     color_enabled: bool,
@@ -20,13 +24,199 @@ pub fn render_diagnostics(
         return Ok(());
     }
 
-    for vuln in vulns {
-        if is_sca_finding(vuln) {
-            render_sca(vuln, color_enabled, writer)?;
+    // Separate normal file-based SAST/Secrets findings from pure synthetic SCA findings
+    let mut normal_vulns = Vec::new();
+    let mut sca_vulns = Vec::new();
+
+    for v in vulns {
+        if is_sca_finding(v) {
+            sca_vulns.push(v);
         } else {
-            render_one(vuln, color_enabled, writer)?;
+            normal_vulns.push(v);
+        }
+    }
+
+    // Group normal findings by file path
+    // Using std::collections::BTreeMap preserves a deterministic base ordering
+    let mut groups: std::collections::BTreeMap<std::path::PathBuf, Vec<&Vulnerability>> =
+        std::collections::BTreeMap::new();
+    for v in &normal_vulns {
+        groups.entry(v.file_path.clone()).or_default().push(v);
+    }
+
+    // Convert groups into a list so we can sort them by maximum severity descending
+    struct FileGroup<'a> {
+        path: std::path::PathBuf,
+        findings: Vec<&'a Vulnerability>,
+        max_severity: Severity,
+        crit_count: usize,
+        high_count: usize,
+        med_count: usize,
+        low_count: usize,
+        info_count: usize,
+    }
+
+    let mut sorted_groups = Vec::new();
+    for (path, findings) in groups {
+        let mut max_severity = Severity::Info;
+        let mut crit_count = 0;
+        let mut high_count = 0;
+        let mut med_count = 0;
+        let mut low_count = 0;
+        let mut info_count = 0;
+
+        for v in &findings {
+            if v.severity > max_severity {
+                max_severity = v.severity;
+            }
+            match v.severity {
+                Severity::Critical => crit_count += 1,
+                Severity::High => high_count += 1,
+                Severity::Medium => med_count += 1,
+                Severity::Low => low_count += 1,
+                Severity::Info => info_count += 1,
+            }
+        }
+
+        sorted_groups.push(FileGroup {
+            path,
+            findings,
+            max_severity,
+            crit_count,
+            high_count,
+            med_count,
+            low_count,
+            info_count,
+        });
+    }
+
+    // Sort file groups: highest maximum severity first, then by finding count descending, then path ascending
+    sorted_groups.sort_by(|a, b| {
+        let sev_cmp = b.max_severity.cmp(&a.max_severity);
+        if sev_cmp != std::cmp::Ordering::Equal {
+            return sev_cmp;
+        }
+        let count_cmp = b.findings.len().cmp(&a.findings.len());
+        if count_cmp != std::cmp::Ordering::Equal {
+            return count_cmp;
+        }
+        a.path.cmp(&b.path)
+    });
+
+    // Check if multiple scan types exist for prefixing lines where needed
+    let scan_types: std::collections::HashSet<&str> = vulns
+        .iter()
+        .map(|v| v.scan_type.as_str())
+        .collect();
+    let multi_scan_type = scan_types.len() > 1;
+
+    // Instantiate deterministic template registry once to check auto-fixability
+    let registry = crate::remediation::TemplateRegistry::default();
+
+    // Render grouped file blocks
+    for group in sorted_groups {
+        let file_display = group.path.display().to_string();
+        let total = group.findings.len();
+        let findings_str = if total == 1 { "finding" } else { "findings" };
+
+        // Construct concise breakdown summary e.g. "(2 Critical, 1 High)"
+        let mut breakdown = Vec::new();
+        if group.crit_count > 0 {
+            breakdown.push(format!("{} Critical", group.crit_count));
+        }
+        if group.high_count > 0 {
+            breakdown.push(format!("{} High", group.high_count));
+        }
+        if group.med_count > 0 {
+            breakdown.push(format!("{} Medium", group.med_count));
+        }
+        if group.low_count > 0 {
+            breakdown.push(format!("{} Low", group.low_count));
+        }
+        if group.info_count > 0 {
+            breakdown.push(format!("{} Info", group.info_count));
+        }
+        let breakdown_str = if breakdown.is_empty() {
+            String::new()
+        } else {
+            format!(" ({})", breakdown.join(", "))
+        };
+
+        let header_text = format!("━━ {} ━━━━━━━━━━━━━━━━━━━━━━━ {} {}{}", file_display, total, findings_str, breakdown_str);
+        if color_enabled {
+            writeln!(writer, "{}", header_text.bright_blue().bold())?;
+        } else {
+            writeln!(writer, "{header_text}")?;
         }
         writeln!(writer)?;
+
+        for vuln in group.findings {
+            if multi_scan_type {
+                let prefix = match vuln.scan_type.as_str() {
+                    "secrets" => "[SECRETS]",
+                    "sca" => "[SCA]",
+                    "license" => "[LICENSE]",
+                    _ => "[SAST]",
+                };
+                if color_enabled {
+                    write!(writer, "{} ", prefix.bright_black())?;
+                } else {
+                    write!(writer, "{prefix} ")?;
+                }
+            }
+
+            render_one(vuln, color_enabled, writer)?;
+
+            // Append inline remediation / fix command hint (Task 3.1)
+            let has_template = registry.lookup(&vuln.rule_id, vuln.cwe_id.as_deref()).is_some() ||
+                               registry.lookup_multi(&vuln.rule_id, vuln.cwe_id.as_deref()).is_some();
+
+            let auto_fix_badge = if has_template { "  (auto-fixable ✓)" } else { "" };
+            let fix_cmd = format!("sicario fix --rule {} --file {} --line {}", vuln.rule_id, vuln.file_path.display(), vuln.line);
+
+            if color_enabled {
+                write!(writer, "  {}:  {}", "fix".green().bold(), fix_cmd)?;
+                if has_template {
+                    writeln!(writer, "{}", auto_fix_badge.green())?;
+                } else {
+                    writeln!(writer)?;
+                }
+            } else {
+                writeln!(writer, "  fix:  {fix_cmd}{auto_fix_badge}")?;
+            }
+
+            writeln!(writer)?;
+        }
+    }
+
+    // Render standalone SCA synthetic findings if any exist
+    if !sca_vulns.is_empty() {
+        let header_text = format!("━━ Dependencies (SCA) ━━━━━━━━━━━━━━━━━━━━━━━ {} findings", sca_vulns.len());
+        if color_enabled {
+            writeln!(writer, "{}", header_text.bright_blue().bold())?;
+        } else {
+            writeln!(writer, "{header_text}")?;
+        }
+        writeln!(writer)?;
+
+        for vuln in sca_vulns {
+            if multi_scan_type {
+                let prefix = match vuln.scan_type.as_str() {
+                    "secrets" => "[SECRETS]",
+                    "sca" => "[SCA]",
+                    "license" => "[LICENSE]",
+                    _ => "[SAST]",
+                };
+                if color_enabled {
+                    write!(writer, "{} ", prefix.bright_black())?;
+                } else {
+                    write!(writer, "{prefix} ")?;
+                }
+            }
+
+            render_sca(vuln, color_enabled, writer)?;
+            writeln!(writer)?;
+        }
     }
 
     Ok(())

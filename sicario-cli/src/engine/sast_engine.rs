@@ -40,6 +40,16 @@ impl SastEngine {
         self.tree_sitter.exclusion_manager.clone()
     }
 
+    /// Disable .gitignore pattern matching (Task 52.7: --no-git-ignore flag).
+    pub fn disable_gitignore(&mut self) {
+        self.tree_sitter.exclusion_manager.disable_gitignore();
+    }
+
+    /// Add extra exclude glob patterns (Task 60.2: --exclude flag).
+    pub fn add_exclude_patterns(&mut self, patterns: &[String]) -> anyhow::Result<()> {
+        self.tree_sitter.exclusion_manager.add_exclude_patterns(patterns)
+    }
+
     /// Load a set of hardcoded default rules that work out-of-the-box without
     /// any external rule files. These cover the most common high-signal patterns
     /// across JavaScript/TypeScript, Python, and Rust.
@@ -178,6 +188,7 @@ impl SastEngine {
                 owasp_category: *owasp_category,
                 help_uri: None,
                 test_cases: None,
+                confidence: crate::engine::security_rule::ConfidenceLevel::High,
             };
             // Silently skip rules that fail to compile for the current platform
             let _ = self.validate_and_compile_rule(rule);
@@ -190,14 +201,53 @@ impl SastEngine {
         let yaml_content = fs::read_to_string(yaml_path)
             .with_context(|| format!("Failed to read YAML file: {:?}", yaml_path))?;
 
-        // Parse YAML into SecurityRule structs
-        let rules: Vec<SecurityRule> = serde_yaml::from_str(&yaml_content)
-            .with_context(|| format!("Failed to parse YAML rules from: {:?}", yaml_path))?;
+        // Parse YAML into raw YAML values first so we can detect missing `confidence`
+        // and emit a per-rule warning before rejecting.
+        let raw_rules: Vec<serde_yaml::Value> = match serde_yaml::from_str(&yaml_content) {
+            Ok(v) => v,
+            Err(e) => {
+                anyhow::bail!("Failed to parse YAML rules from {:?}: {}", yaml_path, e);
+            }
+        };
 
-        // Validate and compile each rule — skip individual failures
-        for rule in rules {
-            if let Err(_e) = self.validate_and_compile_rule(rule) {
-                // Skip bad rules silently — don't fail the whole file
+        for raw in &raw_rules {
+            // Extract rule ID for the warning message (best-effort).
+            let rule_id = raw
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("<unknown>")
+                .to_string();
+
+            // Check for missing `confidence` field before attempting full deserialization.
+            if raw.get("confidence").is_none() {
+                tracing::warn!(
+                    "Skipping rule '{}' in '{}': missing required 'confidence' field (valid values: high, medium, low)",
+                    rule_id,
+                    yaml_path.display()
+                );
+                eprintln!(
+                    "[sicario] warning: skipping rule '{}' in '{}': missing required 'confidence' field",
+                    rule_id,
+                    yaml_path.display()
+                );
+                continue;
+            }
+
+            // Deserialize the individual rule.
+            match serde_yaml::from_value::<SecurityRule>(raw.clone()) {
+                Ok(rule) => {
+                    if let Err(_e) = self.validate_and_compile_rule(rule) {
+                        // Skip bad rules silently — don't fail the whole file
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Skipping rule '{}' in '{}': {}",
+                        rule_id,
+                        yaml_path.display(),
+                        e
+                    );
+                }
             }
         }
 
@@ -277,15 +327,12 @@ impl SastEngine {
             Language::Rust => tree_sitter_rust::language(),
             Language::Go => tree_sitter_go::language(),
             Language::Java => tree_sitter_java::language(),
-            Language::Ruby => {
-                anyhow::bail!("No tree-sitter grammar available for Ruby")
-            }
-            Language::Php => {
-                anyhow::bail!("No tree-sitter grammar available for PHP")
-            }
+            Language::Ruby => tree_sitter_ruby::language(),
+            Language::Php => tree_sitter_php::language_php(),
+            Language::CSharp => tree_sitter_c_sharp::language(),
         };
 
-        Query::new(ts_language, query_str)
+        Query::new(&ts_language, query_str)
             .map_err(|e| anyhow::anyhow!("Query compilation error: {:?}", e))
     }
 
@@ -399,7 +446,7 @@ impl SastEngine {
                     path.to_path_buf(),
                     line,
                     start_position.column + 1, // Convert to 1-indexed
-                    snippet,
+                    snippet.clone(),
                     compiled_rule.rule.severity,
                 );
 
@@ -407,7 +454,54 @@ impl SastEngine {
                 vulnerability.cwe_id = compiled_rule.rule.cwe_id.clone();
                 vulnerability.owasp_category = compiled_rule.rule.owasp_category;
 
+                // Task 18: compute fingerprints
+                {
+                    use crate::engine::fingerprint::{
+                        compute_code_hash, compute_match_based_id, compute_syntactic_id,
+                    };
+                    let rel_path = path
+                        .to_string_lossy()
+                        .replace('\\', "/");
+                    // match_based_id uses the rule pattern (stable across line shifts)
+                    let pattern_with_values = &compiled_rule.rule.pattern.query;
+                    let match_idx = seen.len(); // approximate index
+                    vulnerability.match_based_id = Some(compute_match_based_id(
+                        &rel_path,
+                        &compiled_rule.rule.id,
+                        pattern_with_values,
+                        match_idx,
+                    ));
+                    // syntactic_id uses literal matched code (internal dedup only)
+                    vulnerability.syntactic_id = Some(compute_syntactic_id(
+                        &rel_path,
+                        &compiled_rule.rule.id,
+                        &snippet,
+                        match_idx,
+                    ));
+                    // code_hash for publish payload
+                    vulnerability.code_hash = Some(compute_code_hash(&snippet));
+                }
+
                 vulnerabilities.push(vulnerability);
+            }
+        }
+
+        // Task 52.1-52.4: Apply inline suppression processing (serial path).
+        // Mark suppressed findings rather than dropping them so they appear in
+        // output with suppressed:true and suppression_comment set.
+        {
+            use crate::scanner::suppression_parser::SuppressionParser;
+            let sup_parser = SuppressionParser::new();
+            let lines: Vec<&str> = source_code.lines().collect();
+            for v in &mut vulnerabilities {
+                let result = sup_parser.is_sast_suppressed(&source_code, v.line, &v.rule_id);
+                if result.suppressed {
+                    v.suppressed = true;
+                    if v.line >= 2 {
+                        let preceding = lines.get(v.line - 2).copied().unwrap_or("").trim();
+                        v.suppression_comment = Some(preceding.to_string());
+                    }
+                }
             }
         }
 
@@ -416,6 +510,23 @@ impl SastEngine {
 
     /// Scan an entire directory for vulnerabilities
     pub fn scan_directory(&mut self, dir: &Path) -> Result<Vec<Vulnerability>> {
+        self.scan_directory_with_progress(dir, None)
+    }
+
+    /// Scan an entire directory for vulnerabilities with an optional progress bar.
+    ///
+    /// When `progress` is `Some`, the bar is incremented after each file completes
+    /// and the current file name is displayed as the bar's message. The bar's
+    /// `set_message` call uses only the file's basename to keep the line short.
+    ///
+    /// The progress bar's steady-tick animation (set up by the caller) continues
+    /// to run between file completions, so the terminal never looks frozen even
+    /// when a single large file takes a while to parse.
+    pub fn scan_directory_with_progress(
+        &mut self,
+        dir: &Path,
+        progress: Option<&indicatif::ProgressBar>,
+    ) -> Result<Vec<Vulnerability>> {
         use rayon::prelude::*;
 
         // Collect all files to scan
@@ -426,11 +537,51 @@ impl SastEngine {
         let rules = self.rules.clone();
         let tree_sitter_exclusions = self.tree_sitter.exclusion_manager.clone();
 
-        // Use Rayon to scan files in parallel
+        // Shared atomic counter for findings discovered so far — displayed in
+        // the progress bar message to give the user a live sense of what's
+        // being found while the scan runs.
+        let findings_count = std::sync::atomic::AtomicUsize::new(0);
+
+        // Use Rayon to scan files in parallel, incrementing the progress bar
+        // after each file completes.
         let results: Vec<Result<Vec<Vulnerability>>> = files_to_scan
             .par_iter()
-            .map(|file_path| Self::scan_file_parallel(file_path, &rules, &tree_sitter_exclusions))
+            .map(|file_path| {
+                let result =
+                    Self::scan_file_parallel(file_path, &rules, &tree_sitter_exclusions);
+
+                // Update progress bar from the rayon worker thread.
+                // indicatif's ProgressBar is Send+Sync so this is safe.
+                if let Some(pb) = progress {
+                    // Update live findings counter
+                    if let Ok(ref vulns) = result {
+                        let new_count = findings_count
+                            .fetch_add(vulns.len(), std::sync::atomic::Ordering::Relaxed)
+                            + vulns.len();
+
+                        // Show basename + live count — keep it compact
+                        let name = file_path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("");
+                        pb.set_message(format!("{name}  ({new_count} findings)"));
+                    }
+                    pb.inc(1);
+                }
+
+                result
+            })
             .collect();
+
+        // Finish the progress bar with a completion message
+        if let Some(pb) = progress {
+            let total_findings =
+                findings_count.load(std::sync::atomic::Ordering::Relaxed);
+            pb.finish_with_message(format!(
+                "Done — {total_findings} findings in {} files",
+                files_to_scan.len()
+            ));
+        }
 
         // Collect all vulnerabilities from successful scans
         let mut all_vulnerabilities = Vec::new();
@@ -463,7 +614,15 @@ impl SastEngine {
                         let short: String = reason.chars().take(80).collect();
                         format!("Skipped — {short}")
                     };
-                    eprintln!("[Skip] {} - {}", file_name, display_reason);
+                    // Use pb.suspend() if available so [Skip] messages don't
+                    // overwrite the progress bar line.
+                    if let Some(pb) = progress {
+                        pb.suspend(|| {
+                            eprintln!("[Skip] {} - {}", file_name, display_reason);
+                        });
+                    } else {
+                        eprintln!("[Skip] {} - {}", file_name, display_reason);
+                    }
                 }
             }
         }
@@ -487,6 +646,15 @@ impl SastEngine {
     /// Vulnerabilities in functions not reachable from external taint sources are
     /// marked with `reachable = false` (task 7.6).
     pub fn scan_directory_with_reachability(&mut self, dir: &Path) -> Result<Vec<Vulnerability>> {
+        self.scan_directory_with_reachability_and_progress(dir, None)
+    }
+
+    /// Like `scan_directory_with_reachability`, but with optional progress bar.
+    pub fn scan_directory_with_reachability_and_progress(
+        &mut self,
+        dir: &Path,
+        progress: Option<&indicatif::ProgressBar>,
+    ) -> Result<Vec<Vulnerability>> {
         // Collect files first
         let mut files_to_scan = Vec::new();
         self.collect_files_recursive(dir, &mut files_to_scan)?;
@@ -494,8 +662,8 @@ impl SastEngine {
         // Build call graph from all files
         self.reachability.build_call_graph(&files_to_scan)?;
 
-        // Run the standard scan
-        let mut vulnerabilities = self.scan_directory(dir)?;
+        // Run the standard scan with progress
+        let mut vulnerabilities = self.scan_directory_with_progress(dir, progress)?;
 
         // Apply reachability: mark each vulnerability
         for vuln in &mut vulnerabilities {
@@ -729,16 +897,11 @@ impl SastEngine {
             Language::Rust => tree_sitter_rust::language(),
             Language::Go => tree_sitter_go::language(),
             Language::Java => tree_sitter_java::language(),
-            Language::Ruby => {
-                tracing::debug!("Skipping unsupported file type: {}", path.display());
-                return Ok(Vec::new());
-            }
-            Language::Php => {
-                tracing::debug!("Skipping unsupported file type: {}", path.display());
-                return Ok(Vec::new());
-            }
+            Language::Ruby => tree_sitter_ruby::language(),
+            Language::Php => tree_sitter_php::language_php(),
+            Language::CSharp => tree_sitter_c_sharp::language(),
         };
-        parser.set_language(ts_language)?;
+        parser.set_language(&ts_language)?;
 
         // tree-sitter returns None when the file is so malformed it cannot
         // produce even a partial AST.  Rather than propagating an error (which
@@ -769,7 +932,7 @@ impl SastEngine {
             }
 
             // Compile the query for this thread
-            let query = Query::new(ts_language, &rule.pattern.query)
+            let query = Query::new(&ts_language, &rule.pattern.query)
                 .map_err(|e| anyhow::anyhow!("Query compilation error: {:?}", e))?;
 
             // Execute the query on the AST
@@ -812,7 +975,7 @@ impl SastEngine {
                     path.to_path_buf(),
                     line,
                     start_position.column + 1,
-                    snippet,
+                    snippet.clone(),
                     rule.severity,
                 );
 
@@ -820,22 +983,54 @@ impl SastEngine {
                 vulnerability.cwe_id = rule.cwe_id.clone();
                 vulnerability.owasp_category = rule.owasp_category;
 
+                // Task 18: compute fingerprints
+                {
+                    use crate::engine::fingerprint::{
+                        compute_code_hash, compute_match_based_id, compute_syntactic_id,
+                    };
+                    let rel_path = path.to_string_lossy().replace('\\', "/");
+                    let match_idx = seen.len();
+                    vulnerability.match_based_id = Some(compute_match_based_id(
+                        &rel_path,
+                        &rule.id,
+                        &rule.pattern.query,
+                        match_idx,
+                    ));
+                    vulnerability.syntactic_id = Some(compute_syntactic_id(
+                        &rel_path,
+                        &rule.id,
+                        &snippet,
+                        match_idx,
+                    ));
+                    vulnerability.code_hash = Some(compute_code_hash(&snippet));
+                }
+
                 vulnerabilities.push(vulnerability);
             }
         }
 
-        // Apply inline suppression filtering: remove any finding where the
-        // preceding line contains a `// sicario-ignore-next-line` directive.
-        // This runs after all rules so the suppression check is O(findings),
-        // not O(rules × lines).
+        // Apply inline suppression processing: mark findings suppressed by
+        // `// sicario-ignore` or `// sicario-ignore: rule-id` directives.
+        // Per Task 52.3, suppressed findings are NOT silently dropped — they
+        // are kept in the output with `suppressed: true` and
+        // `suppression_comment` set so consumers can audit suppression usage.
+        // The exit-code computation already skips suppressed findings.
         {
             use crate::scanner::suppression_parser::SuppressionParser;
-            let parser = SuppressionParser::new();
-            vulnerabilities.retain(|v| {
-                !parser
-                    .is_sast_suppressed(&source_code, v.line, &v.rule_id)
-                    .suppressed
-            });
+            let sup_parser = SuppressionParser::new();
+            let lines: Vec<&str> = source_code.lines().collect();
+            for v in &mut vulnerabilities {
+                let result = sup_parser.is_sast_suppressed(&source_code, v.line, &v.rule_id);
+                if result.suppressed {
+                    v.suppressed = true;
+                    // Reconstruct the comment text from the preceding line for
+                    // the `suppression_comment` field (Task 52.4).
+                    if v.line >= 2 {
+                        let preceding = lines.get(v.line - 2).copied().unwrap_or("").trim();
+                        v.suppression_comment = Some(preceding.to_string());
+                    }
+                }
+            }
         }
 
         Ok(vulnerabilities)
@@ -1145,6 +1340,7 @@ mod tests {
   name: "Test SQL Injection"
   description: "Detects potential SQL injection"
   severity: High
+  confidence: high
   languages:
     - JavaScript
     - TypeScript
@@ -1174,6 +1370,7 @@ mod tests {
   name: "Rule 1"
   description: "First rule"
   severity: High
+  confidence: high
   languages:
     - JavaScript
   pattern:
@@ -1185,6 +1382,7 @@ mod tests {
   name: "Rule 2"
   description: "Second rule"
   severity: Medium
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -1227,6 +1425,7 @@ mod tests {
   name: "Test Rule"
   description: "Test"
   severity: High
+  confidence: high
   languages:
     - JavaScript
   pattern:
@@ -1255,6 +1454,7 @@ mod tests {
   name: "Invalid Query Rule"
   description: "Has invalid tree-sitter query"
   severity: High
+  confidence: high
   languages:
     - JavaScript
   pattern:
@@ -1283,6 +1483,7 @@ mod tests {
   name: "Test Rule"
   description: "Test"
   severity: High
+  confidence: high
   languages:
     - JavaScript
   pattern:
@@ -1308,6 +1509,7 @@ mod tests {
   name: "Test Rule"
   description: "Test"
   severity: High
+  confidence: high
   languages:
     - JavaScript
   pattern:
@@ -1337,6 +1539,7 @@ mod tests {
   name: "Rule 1"
   description: "First rule"
   severity: High
+  confidence: high
   languages:
     - JavaScript
   pattern:
@@ -1353,6 +1556,7 @@ mod tests {
   name: "Rule 2"
   description: "Second rule"
   severity: Medium
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -1383,6 +1587,7 @@ mod tests {
   name: "Test Identifier Rule"
   description: "Matches all identifiers"
   severity: Medium
+  confidence: high
   languages:
     - JavaScript
   pattern:
@@ -1417,6 +1622,7 @@ mod tests {
   name: "Test Function Rule"
   description: "Matches function declarations"
   severity: High
+  confidence: high
   languages:
     - JavaScript
   pattern:
@@ -1449,6 +1655,7 @@ mod tests {
   name: "Test Injection Rule"
   description: "Test rule with OWASP category"
   severity: Critical
+  confidence: high
   languages:
     - JavaScript
   pattern:
@@ -1485,6 +1692,7 @@ mod tests {
   name: "Test Rule"
   description: "Test"
   severity: High
+  confidence: high
   languages:
     - JavaScript
   pattern:
@@ -1521,6 +1729,7 @@ mod tests {
   name: "Test Identifier Rule"
   description: "Matches all identifiers"
   severity: Medium
+  confidence: high
   languages:
     - JavaScript
   pattern:
@@ -1568,6 +1777,7 @@ mod tests {
   name: "Test Rule"
   description: "Test"
   severity: High
+  confidence: high
   languages:
     - JavaScript
   pattern:
@@ -1634,6 +1844,7 @@ mod tests {
   name: "Critical Rule"
   description: "Critical"
   severity: Critical
+  confidence: high
   languages:
     - JavaScript
   pattern:
@@ -1645,6 +1856,7 @@ mod tests {
   name: "Low Rule"
   description: "Low"
   severity: Low
+  confidence: low
   languages:
     - JavaScript
   pattern:
@@ -1686,6 +1898,7 @@ mod tests {
   name: "Test Rule"
   description: "Test"
   severity: High
+  confidence: high
   languages:
     - JavaScript
   pattern:
@@ -1723,6 +1936,7 @@ mod tests {
   name: "Built-in Eval Rule"
   description: "Original built-in description"
   severity: Critical
+  confidence: high
   languages:
     - JavaScript
   pattern:
@@ -1741,6 +1955,7 @@ mod tests {
   name: "User Override Eval Rule"
   description: "User-provided override — lower severity for this project"
   severity: Medium
+  confidence: medium
   languages:
     - JavaScript
   pattern:
@@ -1895,6 +2110,7 @@ mod property_tests {
   name: "Test Rule {}"
   description: "Generated test rule"
   severity: {}
+  confidence: high
   languages:
     - {}
   pattern:
@@ -2015,6 +2231,7 @@ mod property_tests {
   name: "Metadata Test Rule"
   description: "Rule for testing metadata preservation"
   severity: High
+  confidence: high
   languages:
     - JavaScript
   pattern:

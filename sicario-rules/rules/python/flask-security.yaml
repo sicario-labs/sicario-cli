@@ -7,6 +7,7 @@
   name: "Flask Running in Debug Mode"
   description: "Running Flask with debug=True enables the Werkzeug debugger, which allows arbitrary code execution via the browser. Never run with debug=True in production."
   severity: Critical
+  confidence: high
   languages:
     - Python
   pattern:
@@ -28,6 +29,7 @@
   name: "Flask SECRET_KEY Hardcoded"
   description: "Hardcoding the Flask secret key exposes session signing material to anyone with repository access. Store it in an environment variable."
   severity: Critical
+  confidence: high
   languages:
     - Python
   pattern:
@@ -47,6 +49,7 @@
   name: "Server-Side Template Injection via render_template_string"
   description: "Passing user-controlled input to render_template_string() enables SSTI, which can lead to remote code execution. Use render_template() with static template files instead."
   severity: Critical
+  confidence: high
   languages:
     - Python
   pattern:

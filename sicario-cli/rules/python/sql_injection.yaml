@@ -8,6 +8,7 @@
   name: "SQLAlchemy text() with f-string"
   description: "Using f-strings in SQLAlchemy text() allows SQL injection. Use bound parameters with :param syntax instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -35,6 +36,7 @@
   name: "SQLAlchemy text() with .format()"
   description: "Using .format() in SQLAlchemy text() allows SQL injection. Use bound parameters with :param syntax instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -62,6 +64,7 @@
   name: "SQLAlchemy text() with % String Interpolation"
   description: "Using % string interpolation in SQLAlchemy text() allows SQL injection. Use bound parameters instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -89,6 +92,7 @@
   name: "SQLAlchemy engine.execute() with f-string"
   description: "Using f-strings in engine.execute() allows SQL injection. Use parameterized queries instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -116,6 +120,7 @@
   name: "SQLAlchemy engine.execute() with .format()"
   description: "Using .format() in engine.execute() allows SQL injection. Use parameterized queries instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -143,6 +148,7 @@
   name: "SQLAlchemy engine.execute() with % Interpolation"
   description: "Using % string interpolation in engine.execute() allows SQL injection. Use parameterized queries instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -170,6 +176,7 @@
   name: "sqlite3 cursor.execute() with f-string"
   description: "Using f-strings in sqlite3 cursor.execute() allows SQL injection. Use ? placeholders instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -192,3 +199,5 @@
       expected: TrueNegative
     - code: "cursor.execute(\"INSERT INTO logs VALUES (?, ?)\", (msg, ts))"
       expected: TrueNegative
+
+

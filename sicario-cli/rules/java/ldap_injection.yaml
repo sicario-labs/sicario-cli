@@ -13,6 +13,7 @@
   name: "DirContext.search with Concatenated Filter"
   description: "Concatenating user input into LDAP search filters allows LDAP injection. Use parameterized search filters with filterArgs or escape special characters."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -40,6 +41,7 @@
   name: "DirContext.search with String.format Filter"
   description: "Using String.format to build LDAP filters allows LDAP injection. Use parameterized search filters with filterArgs."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -71,6 +73,7 @@
   name: "LdapTemplate.search with Concatenated Filter"
   description: "Concatenating user input into Spring LdapTemplate search filters allows LDAP injection. Use LdapQueryBuilder with filter().where() for safe queries."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -98,6 +101,7 @@
   name: "LdapTemplate.search with Variable Filter"
   description: "Passing a variable filter to LdapTemplate.search may allow LDAP injection if the filter is user-controlled. Use LdapQueryBuilder for safe queries."
   severity: Medium
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -129,6 +133,7 @@
   name: "LDAP Filter String Concatenation"
   description: "Building LDAP filter strings via concatenation with user input allows LDAP injection. Use parameterized filters or escape special LDAP characters."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -156,6 +161,7 @@
   name: "LDAP Filter with String.format"
   description: "Using String.format to build LDAP filters allows LDAP injection. Use parameterized filters or escape special LDAP characters."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -178,3 +184,5 @@
       expected: TrueNegative
     - code: "String.format(\"Processing %d items\", count);"
       expected: TrueNegative
+
+

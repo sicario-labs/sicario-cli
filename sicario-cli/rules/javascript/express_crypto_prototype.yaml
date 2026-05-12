@@ -23,6 +23,7 @@
   name: "Express App Without Helmet Middleware"
   description: "Express application uses app.listen() without helmet middleware for security headers. Add helmet() to set secure HTTP headers and protect against common attacks."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -51,6 +52,7 @@
   name: "Express App Without Rate Limiting"
   description: "Express route handlers without rate limiting are vulnerable to brute-force and denial-of-service attacks. Use express-rate-limit middleware to throttle requests."
   severity: Medium
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -79,6 +81,7 @@
   name: "Express CSRF Protection Disabled"
   description: "CSRF protection is explicitly disabled, leaving the application vulnerable to cross-site request forgery attacks. Enable CSRF protection for state-changing operations."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -107,6 +110,7 @@
   name: "Express Verbose Error Response with Stack Trace"
   description: "Sending error stack traces to clients exposes internal application details. Use generic error messages in production and log details server-side."
   severity: Medium
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -135,6 +139,7 @@
   name: "Express Wildcard CORS Origin"
   description: "Setting Access-Control-Allow-Origin to '*' allows any website to make requests to your API. Restrict CORS to specific trusted origins."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -168,6 +173,7 @@
   name: "MD5 Used for Password Hashing"
   description: "MD5 is cryptographically broken and unsuitable for password hashing. Use bcrypt, scrypt, or argon2 for password hashing instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -196,6 +202,7 @@
   name: "SHA1 Used for Password Hashing"
   description: "SHA1 is cryptographically weak and unsuitable for password hashing. Use bcrypt, scrypt, or argon2 for password hashing instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -224,6 +231,7 @@
   name: "Hardcoded Encryption Key in Source Code"
   description: "Encryption keys hardcoded in source code can be extracted by attackers. Store keys in environment variables, secret managers, or key vaults."
   severity: Critical
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -252,6 +260,7 @@
   name: "Math.random() Used for Security-Sensitive Operations"
   description: "Math.random() is not cryptographically secure and should not be used for tokens, secrets, or security-sensitive values. Use crypto.randomBytes() or crypto.getRandomValues() instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -280,6 +289,7 @@
   name: "Deprecated crypto.createCipher Usage"
   description: "crypto.createCipher is deprecated because it derives keys without a salt, making it vulnerable to dictionary attacks. Use crypto.createCipheriv with a proper IV instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -308,6 +318,7 @@
   name: "Weak Key Derivation Without Proper Parameters"
   description: "Using pbkdf2 with low iteration counts or short salt values weakens key derivation. Use at least 100,000 iterations with a 16+ byte random salt."
   severity: Medium
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -341,6 +352,7 @@
   name: "Unsafe Recursive Merge Without Prototype Check"
   description: "Recursive merge functions that don't check for __proto__, constructor, or prototype properties are vulnerable to prototype pollution. Validate keys before merging or use a safe merge library."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -369,6 +381,7 @@
   name: "Unvalidated Bracket Notation Property Access with User Input"
   description: "Using bracket notation with user-controlled input (req.body, req.query, req.params) allows prototype pollution. Validate property names against a whitelist or use Map instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -397,6 +410,7 @@
   name: "Object.assign with Untrusted Source from Request"
   description: "Using Object.assign with request body or query parameters as source can lead to prototype pollution. Validate and sanitize input or use a schema validation library."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -425,6 +439,7 @@
   name: "Lodash/Underscore Merge with User-Controlled Objects"
   description: "Using _.merge, _.extend, or _.defaultsDeep with user-controlled objects can lead to prototype pollution. Use _.pick to whitelist properties or validate input with a schema."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -453,6 +468,7 @@
   name: "JSON.parse Result Used Directly as Object Keys"
   description: "Using JSON.parse output directly to set object properties without validation can lead to prototype pollution if the JSON contains __proto__ or constructor keys. Validate parsed data with a schema."
   severity: Medium
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -476,4 +492,6 @@
       expected: TrueNegative
     - code: "const validated = schema.validate(JSON.parse(input));"
       expected: TrueNegative
+
+
 

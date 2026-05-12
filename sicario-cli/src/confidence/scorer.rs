@@ -280,6 +280,41 @@ pub fn score_generic_pattern(finding: &Finding) -> f64 {
     scorer.score(finding, &input)
 }
 
+/// Compute a composite priority score (0.0–100.0) for a vulnerability.
+///
+/// Combines severity, confidence score, reachability, cloud exposure,
+/// and file hotspot bonuses into a single actionable metric for smart ranking.
+/// Implements Task 1.1 of the DX Improvement Plan.
+pub fn compute_priority_score(
+    severity: crate::engine::vulnerability::Severity,
+    confidence_score: f64,
+    reachable: bool,
+    cloud_exposed: Option<bool>,
+    file_hotspot_bonus: bool,
+) -> f64 {
+    let sev_weight = match severity {
+        crate::engine::vulnerability::Severity::Critical => 100.0,
+        crate::engine::vulnerability::Severity::High => 80.0,
+        crate::engine::vulnerability::Severity::Medium => 50.0,
+        crate::engine::vulnerability::Severity::Low => 20.0,
+        crate::engine::vulnerability::Severity::Info => 5.0,
+    };
+
+    let reachability_boost = if reachable { 100.0 } else { 0.0 };
+    let cloud_boost = if cloud_exposed.unwrap_or(false) { 100.0 } else { 0.0 };
+    let hotspot_bonus = if file_hotspot_bonus { 100.0 } else { 0.0 };
+
+    // Normalized scale mapping out of 100 total points max weighting:
+    // severity: 40%, confidence: 25%, reachability: 20%, cloud exposure: 10%, file hotspot: 5%
+    let score = (sev_weight * 0.40)
+        + (confidence_score * 100.0 * 0.25)
+        + (reachability_boost * 0.20)
+        + (cloud_boost * 0.10)
+        + (hotspot_bonus * 0.05);
+
+    score.clamp(0.0, 100.0)
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

@@ -8,6 +8,7 @@
   name: "open() with f-string Path"
   description: "Using f-strings to construct file paths in open() allows path traversal. Validate and sanitize the path first."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -35,6 +36,7 @@
   name: "open() with .format() Path"
   description: "Using .format() to construct file paths in open() allows path traversal. Validate and sanitize the path first."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -62,6 +64,7 @@
   name: "open() with Concatenated Path"
   description: "Concatenating user input into file paths in open() allows path traversal. Validate and sanitize the path first."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -89,6 +92,7 @@
   name: "os.path.join() with User-Controlled Input"
   description: "Using os.path.join() with user input can lead to path traversal if the input contains absolute paths or '..' sequences. Validate input first."
   severity: Medium
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -116,6 +120,7 @@
   name: "shutil.copy() with f-string Path"
   description: "Using f-strings to construct paths in shutil.copy() allows path traversal. Validate and sanitize paths first."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -143,6 +148,7 @@
   name: "Flask send_file() with f-string Path"
   description: "Using f-strings to construct paths in send_file() allows path traversal. Use send_from_directory() with a safe base directory instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -170,6 +176,7 @@
   name: "Flask send_file() with Concatenated Path"
   description: "Concatenating user input into send_file() paths allows path traversal. Use send_from_directory() instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -197,6 +204,7 @@
   name: "pathlib.Path() with f-string"
   description: "Using f-strings to construct pathlib.Path objects with user input allows path traversal. Validate and resolve the path first."
   severity: Medium
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -219,3 +227,5 @@
       expected: TrueNegative
     - code: "Path(__file__).parent"
       expected: TrueNegative
+
+

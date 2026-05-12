@@ -328,7 +328,7 @@ impl StdioMcpServer {
         };
 
         let mut parser = tree_sitter::Parser::new();
-        if parser.set_language(ts_language).is_err() {
+        if parser.set_language(&ts_language).is_err() {
             return serialize_error(
                 id,
                 JsonRpcError::internal_error("Failed to initialise tree-sitter parser"),

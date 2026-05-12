@@ -14,6 +14,7 @@
   name: "Statement.execute with String Concatenation"
   description: "Concatenating user input into SQL strings passed to Statement.execute allows SQL injection. Use PreparedStatement with parameterized queries instead."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -41,6 +42,7 @@
   name: "Statement.execute with String.format SQL"
   description: "Using String.format to build SQL strings passed to Statement methods allows SQL injection. Use PreparedStatement with bind parameters instead."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -68,6 +70,7 @@
   name: "createStatement() Used for Dynamic Queries"
   description: "Using createStatement() instead of prepareStatement() for queries with user input enables SQL injection. Always use PreparedStatement with parameterized queries."
   severity: Medium
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -95,6 +98,7 @@
   name: "SQL String Concatenation in Variable"
   description: "Building SQL query strings via concatenation with variables is a strong indicator of SQL injection. Use parameterized queries instead."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -126,6 +130,7 @@
   name: "Hibernate createQuery with String Concatenation"
   description: "Concatenating user input into HQL/JPQL strings passed to createQuery allows injection. Use named parameters (:param) with setParameter() instead."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -153,6 +158,7 @@
   name: "Hibernate createNativeQuery with String Concatenation"
   description: "Concatenating user input into native SQL passed to createNativeQuery allows SQL injection. Use positional (?) or named (:param) parameters instead."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -180,6 +186,7 @@
   name: "JPA CriteriaBuilder with Literal User Input"
   description: "Using CriteriaBuilder.literal() with user input in JPA criteria queries can lead to injection. Use CriteriaBuilder.parameter() with typed parameters instead."
   severity: Medium
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -211,6 +218,7 @@
   name: "JdbcTemplate Query with String Concatenation"
   description: "Concatenating user input into SQL strings passed to JdbcTemplate query methods allows SQL injection. Use parameterized queries with ? placeholders and Object[] args."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -238,6 +246,7 @@
   name: "Spring @Query with String Concatenation via nativeQuery"
   description: "Using SpEL expressions or concatenation in Spring Data @Query annotations with nativeQuery=true can lead to SQL injection. Use named parameters (:param) or indexed parameters (?1) instead."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -265,6 +274,7 @@
   name: "MyBatis ${} String Interpolation in SQL"
   description: "Using ${} in MyBatis SQL maps performs direct string interpolation, enabling SQL injection. Use #{} for parameterized binding instead."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -287,3 +297,5 @@
       expected: TrueNegative
     - code: "\"SELECT count(*) FROM users\""
       expected: TrueNegative
+
+

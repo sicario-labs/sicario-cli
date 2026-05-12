@@ -14,6 +14,7 @@
   name: "DocumentBuilderFactory.newInstance without XXE Protection"
   description: "DocumentBuilderFactory.newInstance() is vulnerable to XXE by default. Disable external entities and DTDs via setFeature() before parsing untrusted XML."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -41,6 +42,7 @@
   name: "DocumentBuilder.parse with Variable Input"
   description: "Parsing untrusted XML input with DocumentBuilder without disabling external entities enables XXE attacks. Disable DTDs and external entities on the factory."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -72,6 +74,7 @@
   name: "SAXParserFactory.newInstance without XXE Protection"
   description: "SAXParserFactory.newInstance() is vulnerable to XXE by default. Disable external entities and DTDs via setFeature() before parsing untrusted XML."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -99,6 +102,7 @@
   name: "SAXParser.parse with Variable Input"
   description: "Parsing untrusted XML with SAXParser without disabling external entities enables XXE. Disable DTDs and external entities on the factory."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -130,6 +134,7 @@
   name: "XMLInputFactory.newInstance without XXE Protection"
   description: "XMLInputFactory.newInstance() supports external entities by default. Set IS_SUPPORTING_EXTERNAL_ENTITIES and SUPPORT_DTD to false."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -161,6 +166,7 @@
   name: "TransformerFactory.newInstance without XXE Protection"
   description: "TransformerFactory.newInstance() is vulnerable to XXE by default. Set ACCESS_EXTERNAL_DTD and ACCESS_EXTERNAL_STYLESHEET to empty strings."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -192,6 +198,7 @@
   name: "SchemaFactory.newInstance without XXE Protection"
   description: "SchemaFactory.newInstance() may process external entities. Set ACCESS_EXTERNAL_DTD and ACCESS_EXTERNAL_SCHEMA to empty strings."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -224,6 +231,7 @@
   name: "XMLReaderFactory.createXMLReader without XXE Protection"
   description: "XMLReader created via XMLReaderFactory is vulnerable to XXE by default. Disable external entities via setFeature() before parsing."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -251,6 +259,7 @@
   name: "new SAXReader() without XXE Protection"
   description: "dom4j SAXReader is vulnerable to XXE by default. Disable external entities via setFeature() before parsing untrusted XML."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -282,6 +291,7 @@
   name: "Validator.validate with Variable Source"
   description: "Validating untrusted XML with a Validator that has not disabled external entities enables XXE. Set ACCESS_EXTERNAL_DTD and ACCESS_EXTERNAL_SCHEMA to empty strings on the SchemaFactory."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -313,6 +323,7 @@
   name: "JAXB Unmarshaller with Variable Source"
   description: "Unmarshalling untrusted XML with JAXB without disabling external entities enables XXE. Use a secure XMLInputFactory to create the source."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -335,3 +346,5 @@
       expected: TrueNegative
     - code: "marshaller.marshal(object, writer);"
       expected: TrueNegative
+
+

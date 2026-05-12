@@ -11,6 +11,7 @@
   name: "SQL Query with String Concatenation"
   description: "Building SQL queries via string concatenation with variables allows SQL injection. Use parameterized queries instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -39,6 +40,7 @@
   name: "SQL Query with Template Literal Interpolation"
   description: "Interpolating variables into SQL template literals allows SQL injection. Use parameterized queries instead."
   severity: Low
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -68,6 +70,7 @@
   name: "Sequelize Raw Query with String Interpolation"
   description: "Using string interpolation in Sequelize raw queries allows SQL injection. Use bind parameters or replacements instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -96,6 +99,7 @@
   name: "Sequelize Raw Query with String Concatenation"
   description: "Concatenating user input into Sequelize raw queries allows SQL injection. Use bind parameters instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -124,6 +128,7 @@
   name: "Knex Raw Query with String Interpolation"
   description: "Interpolating variables into Knex raw queries allows SQL injection. Use Knex parameter binding instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -152,6 +157,7 @@
   name: "Knex Raw Query with String Concatenation"
   description: "Concatenating user input into Knex raw queries allows SQL injection. Use Knex parameter binding instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -181,6 +187,7 @@
   name: "Prisma $queryRaw with String Interpolation"
   description: "Using string interpolation in Prisma $queryRaw allows SQL injection. Use Prisma.sql tagged template or parameterized queries instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -209,6 +216,7 @@
   name: "Prisma Raw Query with String Concatenation"
   description: "Concatenating user input into Prisma raw queries allows SQL injection. Use Prisma.sql tagged template instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -237,6 +245,7 @@
   name: "TypeORM Query with String Interpolation"
   description: "Using string interpolation in TypeORM query or createQueryRunner execute calls allows SQL injection. Use parameterized queries instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -265,6 +274,7 @@
   name: "TypeORM createQueryBuilder with Raw Where Clause"
   description: "Passing interpolated strings to TypeORM query builder where clauses allows SQL injection. Use parameter binding instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -294,6 +304,7 @@
   name: "Drizzle sql.raw with User Input"
   description: "Using sql.raw() with user input in Drizzle ORM allows SQL injection. Use the sql tagged template with proper escaping instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -322,6 +333,7 @@
   name: "PostgreSQL (pg) Query with String Concatenation"
   description: "Concatenating user input into pg/node-postgres queries allows SQL injection. Use parameterized queries with $1 placeholders instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -350,6 +362,7 @@
   name: "PostgreSQL (pg) Query with Template Literal"
   description: "Using template literal interpolation in pg/node-postgres queries allows SQL injection. Use parameterized queries with $1 placeholders instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -378,6 +391,7 @@
   name: "MySQL Query with String Concatenation"
   description: "Concatenating user input into mysql/mysql2 queries allows SQL injection. Use parameterized queries with ? placeholders instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -407,6 +421,7 @@
   name: "MongoDB $where with String Interpolation"
   description: "Using string interpolation in MongoDB $where operator allows NoSQL injection. Use standard query operators instead of $where."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -435,6 +450,7 @@
   name: "MongoDB $where with String Concatenation"
   description: "Concatenating user input into MongoDB $where operator allows NoSQL injection. Use standard query operators instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -463,6 +479,7 @@
   name: "Better-sqlite3 Query with String Concatenation"
   description: "Concatenating user input into better-sqlite3 prepare or exec calls allows SQL injection. Use parameterized queries with ? placeholders instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -491,6 +508,7 @@
   name: "Tedious (MSSQL) Request with Concatenated SQL"
   description: "Concatenating user input into Tedious Request SQL strings allows SQL injection. Use parameterized queries with addParameter instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -519,6 +537,7 @@
   name: "Generic Database Query with User Input Concatenation"
   description: "Concatenating user input into database query calls is a common SQL injection pattern. Use parameterized queries instead."
   severity: Medium
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -548,6 +567,7 @@
   name: "Express Route Handler with Inline SQL Construction"
   description: "Building SQL queries directly in Express route handlers using request parameters allows SQL injection. Extract database logic and use parameterized queries."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -576,6 +596,7 @@
   name: "GraphQL Resolver with SQL String Building"
   description: "Building SQL queries with string interpolation in GraphQL resolvers allows SQL injection. Use parameterized queries in resolver implementations."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -604,6 +625,7 @@
   name: "MySQL Query with Template Literal Interpolation"
   description: "Using template literal interpolation in mysql/mysql2 queries allows SQL injection. Use parameterized queries with ? placeholders instead."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -627,3 +649,5 @@
       expected: TrueNegative
     - code: "connection.query(`SELECT 1`);"
       expected: TrueNegative
+
+

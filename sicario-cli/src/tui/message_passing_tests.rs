@@ -33,21 +33,17 @@ fn arb_vulnerability() -> impl Strategy<Value = Vulnerability> {
         any::<bool>(),
     )
         .prop_map(
-            |(rule_id, file, line, col, snippet, severity, reachable)| Vulnerability {
-                id: Uuid::new_v4(),
-                rule_id,
-                file_path: PathBuf::from(file),
-                line,
-                column: col,
-                snippet,
-                severity,
-                reachable,
-                cloud_exposed: None,
-                cwe_id: None,
-                owasp_category: None,
-                confidence_score: 1.0,
-                suppressed: false,
-                execution_trace: None,
+            |(rule_id, file, line, col, snippet, severity, reachable)| {
+                let mut v = Vulnerability::new(
+                    rule_id,
+                    PathBuf::from(file),
+                    line,
+                    col,
+                    snippet,
+                    severity,
+                );
+                v.reachable = reachable;
+                v
             },
         )
 }

@@ -561,22 +561,16 @@ mod tests {
     use uuid::Uuid;
 
     fn make_vuln() -> Vulnerability {
-        Vulnerability {
-            id: Uuid::new_v4(),
-            rule_id: "test-rule".to_string(),
-            file_path: PathBuf::from("src/main.rs"),
-            line: 10,
-            column: 5,
-            snippet: "let x = secret;".to_string(),
-            severity: Severity::High,
-            reachable: true,
-            cloud_exposed: None,
-            cwe_id: None,
-            owasp_category: None,
-            confidence_score: 1.0,
-            suppressed: false,
-            execution_trace: None,
-        }
+        let mut v = Vulnerability::new(
+            "test-rule".to_string(),
+            PathBuf::from("src/main.rs"),
+            10,
+            5,
+            "let x = secret;".to_string(),
+            Severity::High,
+        );
+        v.reachable = true;
+        v
     }
 
     #[test]

@@ -9,6 +9,7 @@
   name: "Django DEBUG = True in Settings"
   description: "Setting DEBUG = True in production exposes detailed error pages, stack traces, and environment variables. Set DEBUG = False in production."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -36,6 +37,7 @@
   name: "Django ALLOWED_HOSTS with Wildcard"
   description: "Setting ALLOWED_HOSTS = ['*'] allows any host header, enabling host header injection attacks. Specify explicit hostnames."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -63,6 +65,7 @@
   name: "Django SECRET_KEY Hardcoded in Settings"
   description: "Hardcoding SECRET_KEY in source code exposes it in version control. Load it from environment variables or a secrets manager."
   severity: Critical
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -90,6 +93,7 @@
   name: "Django @csrf_exempt Decorator"
   description: "Using @csrf_exempt disables CSRF protection on a view, making it vulnerable to cross-site request forgery attacks. Remove the decorator or use proper CSRF handling."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -117,6 +121,7 @@
   name: "Django csrf_exempt() Function Call"
   description: "Wrapping a view with csrf_exempt() disables CSRF protection. Remove the wrapper or use proper CSRF handling."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -144,6 +149,7 @@
   name: "Django SESSION_COOKIE_SECURE = False"
   description: "Setting SESSION_COOKIE_SECURE = False allows session cookies to be sent over unencrypted HTTP. Set to True in production."
   severity: Medium
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -171,6 +177,7 @@
   name: "Django CSRF_COOKIE_SECURE = False"
   description: "Setting CSRF_COOKIE_SECURE = False allows CSRF cookies to be sent over unencrypted HTTP. Set to True in production."
   severity: Medium
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -198,6 +205,7 @@
   name: "Django SECURE_SSL_REDIRECT = False"
   description: "Setting SECURE_SSL_REDIRECT = False allows HTTP connections without redirecting to HTTPS. Set to True in production."
   severity: Medium
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -220,3 +228,5 @@
       expected: TrueNegative
     - code: "secure_ssl_redirect = False"
       expected: TrueNegative
+
+

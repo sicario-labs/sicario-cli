@@ -15,6 +15,7 @@
   name: "Open Redirect via res.redirect with req.query"
   description: "Using req.query values directly in res.redirect allows open redirect attacks. Validate redirect URLs against an allowlist of trusted domains or use relative paths only."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -43,6 +44,7 @@
   name: "Open Redirect via res.redirect with req.body"
   description: "Using req.body values directly in res.redirect allows open redirect attacks. Validate redirect URLs against an allowlist of trusted domains."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -71,6 +73,7 @@
   name: "Open Redirect via window.location.href Assignment"
   description: "Assigning user-controlled values to window.location.href causes client-side open redirect. Validate URLs against an allowlist before navigation."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -99,6 +102,7 @@
   name: "Open Redirect via window.location.replace"
   description: "Calling window.location.replace with user-controlled values causes client-side open redirect without history entry. Validate URLs before navigation."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -127,6 +131,7 @@
   name: "Open Redirect via router.push with User Input"
   description: "Using user-controlled values in router.push (Next.js/React Router) allows open redirect. Validate paths against an allowlist or ensure they are relative paths."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -155,6 +160,7 @@
   name: "Location Header Set with User Input"
   description: "Setting the Location response header with user-controlled values allows open redirect. Validate URLs against an allowlist before setting redirect headers."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -183,6 +189,7 @@
   name: "Type Assertion 'as any' in Security Context"
   description: "Using 'as any' type assertion in authentication, authorization, or security-sensitive code bypasses TypeScript's type safety, potentially hiding vulnerabilities. Use proper type guards instead."
   severity: Medium
+  confidence: medium
   languages:
     - TypeScript
   pattern:
@@ -210,6 +217,7 @@
   name: "Explicit 'any' Type on User Input Parameters"
   description: "Using 'any' type on function parameters that handle user input disables type checking and validation. Use specific types with runtime validation (e.g., zod, io-ts)."
   severity: Medium
+  confidence: medium
   languages:
     - TypeScript
   pattern:
@@ -237,6 +245,7 @@
   name: "Type Assertion Bypassing Validation"
   description: "Using type assertions to cast unvalidated data to trusted types bypasses runtime validation. Use type guards or validation libraries to ensure data conforms to expected types."
   severity: Medium
+  confidence: medium
   languages:
     - TypeScript
   pattern:
@@ -264,6 +273,7 @@
   name: "Non-null Assertion on User Input"
   description: "Using non-null assertion (!) on user input assumes it exists without validation, potentially causing runtime errors or security bypasses. Add explicit null checks."
   severity: Medium
+  confidence: medium
   languages:
     - TypeScript
   pattern:
@@ -291,6 +301,7 @@
   name: "@ts-ignore Before Security-Sensitive Code"
   description: "Using @ts-ignore to suppress TypeScript errors in security-sensitive code hides potential type safety issues. Fix the underlying type error instead of suppressing it."
   severity: Low
+  confidence: medium
   languages:
     - TypeScript
   pattern:
@@ -318,6 +329,7 @@
   name: "Type Casting Request Body Without Validation"
   description: "Casting req.body directly to a type without runtime validation trusts client-supplied data. Use a validation library (zod, joi, class-validator) to validate before casting."
   severity: Medium
+  confidence: medium
   languages:
     - TypeScript
   pattern:
@@ -340,3 +352,5 @@
       expected: TrueNegative
     - code: "const { name, email } = req.body; const user = { name, email };"
       expected: TrueNegative
+
+

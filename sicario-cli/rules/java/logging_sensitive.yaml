@@ -14,6 +14,7 @@
   name: "Logger.info with Password/Secret"
   description: "Logging passwords, secrets, or tokens at INFO level exposes sensitive data in log files. Mask or redact sensitive values before logging."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -41,6 +42,7 @@
   name: "Logger.debug with Password/Secret"
   description: "Logging passwords or secrets at DEBUG level exposes sensitive data when debug logging is enabled. Never log sensitive values at any level."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -68,6 +70,7 @@
   name: "SLF4J Logger with Password in Placeholder"
   description: "Logging sensitive data via SLF4J placeholders exposes secrets in log files. Mask or redact sensitive values before logging."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -100,6 +103,7 @@
   name: "System.out.println with Password/Secret"
   description: "Printing passwords or secrets to stdout exposes sensitive data. Use a proper logging framework with redaction and never log sensitive values."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -127,6 +131,7 @@
   name: "System.err.println with Password/Secret"
   description: "Printing passwords or secrets to stderr exposes sensitive data. Use a proper logging framework with redaction and never log sensitive values."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -154,6 +159,7 @@
   name: "System.out.println with Exception Containing Sensitive Data"
   description: "Printing exception stack traces to stdout may expose sensitive data in error messages. Use a logging framework and sanitize exception messages."
   severity: Medium
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -185,6 +191,7 @@
   name: "Log4j Logger with Password/Secret"
   description: "Logging passwords or secrets via Log4j exposes sensitive data in log files. Mask or redact sensitive values before logging."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -212,6 +219,7 @@
   name: "Log4j Logger with Password in Placeholder"
   description: "Logging sensitive data via Log4j placeholders exposes secrets in log files. Mask or redact sensitive values before logging."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -243,6 +251,7 @@
   name: "Exception.printStackTrace() Usage"
   description: "printStackTrace() writes to stderr and may expose sensitive internal details. Use a logging framework with appropriate log levels instead."
   severity: Medium
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -270,6 +279,7 @@
   name: "Logging Exception Message with Sensitive Context"
   description: "Logging exception messages that include sensitive variable context may expose secrets. Sanitize exception messages before logging."
   severity: Medium
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -292,3 +302,5 @@
       expected: TrueNegative
     - code: "logger.info(\"Processing complete\");"
       expected: TrueNegative
+
+

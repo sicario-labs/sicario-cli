@@ -319,22 +319,17 @@ mod tests {
     }
 
     fn make_vulnerability(rule_id: &str, cwe_id: Option<&str>, snippet: &str) -> Vulnerability {
-        Vulnerability {
-            id: Uuid::new_v4(),
-            rule_id: rule_id.to_string(),
-            file_path: PathBuf::from("src/db.js"),
-            line: 42,
-            column: 5,
-            snippet: snippet.to_string(),
-            severity: Severity::High,
-            reachable: true,
-            cloud_exposed: None,
-            cwe_id: cwe_id.map(|s| s.to_string()),
-            owasp_category: None,
-            confidence_score: 0.9,
-            suppressed: false,
-            execution_trace: None,
-        }
+        let mut v = Vulnerability::new(
+            rule_id.to_string(),
+            PathBuf::from("src/db.js"),
+            42,
+            5,
+            snippet.to_string(),
+            Severity::High,
+        );
+        v.reachable = true;
+        v.cwe_id = cwe_id.map(|s| s.to_string());
+        v
     }
 
     #[test]

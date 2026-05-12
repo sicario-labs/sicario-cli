@@ -14,6 +14,7 @@
   name: "new File() with String Concatenation"
   description: "Concatenating user input into File constructor paths allows path traversal. Validate and canonicalize paths against a base directory."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -41,6 +42,7 @@
   name: "new File() with Variable Path"
   description: "Passing a variable directly to the File constructor may allow path traversal if the variable is user-controlled. Validate and canonicalize paths."
   severity: Medium
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -73,6 +75,7 @@
   name: "Paths.get() with String Concatenation"
   description: "Concatenating user input into Paths.get() allows path traversal. Resolve paths against a safe base directory and use Path.normalize()."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -100,6 +103,7 @@
   name: "Paths.get() with Variable Path"
   description: "Passing a variable directly to Paths.get() may allow path traversal if the variable is user-controlled. Validate and canonicalize paths."
   severity: Medium
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -131,6 +135,7 @@
   name: "FileInputStream with String Concatenation"
   description: "Concatenating user input into FileInputStream paths allows path traversal and arbitrary file read. Validate and canonicalize paths."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -162,6 +167,7 @@
   name: "Files.readAllBytes with Concatenated Path"
   description: "Using string concatenation to build paths for Files.readAllBytes allows path traversal. Validate and canonicalize paths."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -189,6 +195,7 @@
   name: "Files.write with Concatenated Path"
   description: "Using string concatenation to build paths for Files.write allows path traversal and arbitrary file write. Validate and canonicalize paths."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -220,6 +227,7 @@
   name: "FileOutputStream with String Concatenation"
   description: "Concatenating user input into FileOutputStream paths allows path traversal and arbitrary file write. Validate and canonicalize paths."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -247,6 +255,7 @@
   name: "RandomAccessFile with String Concatenation"
   description: "Concatenating user input into RandomAccessFile paths allows path traversal. Validate and canonicalize paths."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -278,6 +287,7 @@
   name: "ClassLoader.getResource with String Concatenation"
   description: "Concatenating user input into ClassLoader.getResource paths allows path traversal to access arbitrary classpath resources. Validate input against an allowlist."
   severity: Medium
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -305,6 +315,7 @@
   name: "ServletContext.getResource with String Concatenation"
   description: "Concatenating user input into ServletContext.getResource paths allows path traversal to access arbitrary web resources. Validate input against an allowlist."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -336,6 +347,7 @@
   name: "Spring Resource Loading with String Concatenation"
   description: "Concatenating user input into Spring resource paths (classpath:, file:) allows path traversal. Validate and sanitize resource paths."
   severity: High
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -367,6 +379,7 @@
   name: "Path.resolve with Variable Input"
   description: "Resolving paths with user-controlled input may allow path traversal. Validate that the resolved path stays within the expected base directory."
   severity: Medium
+  confidence: medium
   languages:
     - Java
   pattern:
@@ -389,3 +402,5 @@
       expected: TrueNegative
     - code: "path.getParent();"
       expected: TrueNegative
+
+

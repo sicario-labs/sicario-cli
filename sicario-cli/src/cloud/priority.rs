@@ -65,22 +65,16 @@ mod tests {
     use uuid::Uuid;
 
     fn make_vuln(file: &str, severity: Severity) -> Vulnerability {
-        Vulnerability {
-            id: Uuid::new_v4(),
-            rule_id: "test-rule".to_string(),
-            file_path: PathBuf::from(file),
-            line: 10,
-            column: 5,
-            snippet: "unsafe_call()".to_string(),
+        let mut v = Vulnerability::new(
+            "test-rule".to_string(),
+            PathBuf::from(file),
+            10,
+            5,
+            "unsafe_call()".to_string(),
             severity,
-            reachable: true,
-            cloud_exposed: None,
-            cwe_id: None,
-            owasp_category: None,
-            confidence_score: 1.0,
-            suppressed: false,
-            execution_trace: None,
-        }
+        );
+        v.reachable = true;
+        v
     }
 
     fn make_k8s_service(name: &str, svc_type: &str) -> KubernetesConfig {

@@ -18,6 +18,7 @@
   name: "fetch() with User-Controlled URL"
   description: "Passing user-controlled variables directly to fetch() enables SSRF attacks. Validate and allowlist URLs before making requests."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -48,6 +49,7 @@
   name: "fetch() with Template Literal URL from User Input"
   description: "Interpolating user input into fetch() URL via template literals enables SSRF. Validate and allowlist the base URL before making requests."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -76,6 +78,7 @@
   name: "axios Request with User-Controlled URL"
   description: "Passing user-controlled variables to axios.get/post/put/delete enables SSRF. Validate and allowlist URLs before making requests."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -104,6 +107,7 @@
   name: "http.request() / https.request() with User-Controlled URL"
   description: "Passing user-controlled variables to http.request or https.request enables SSRF. Validate and allowlist URLs before making requests."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -132,6 +136,7 @@
   name: "got() with User-Controlled URL"
   description: "Passing user-controlled variables to the got HTTP client enables SSRF. Validate and allowlist URLs before making requests."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -165,6 +170,7 @@
   name: "fs.readFile with User Input in Path"
   description: "Passing user-controlled input to fs.readFile enables path traversal attacks. Validate and sanitize file paths, use path.resolve with a base directory, and reject paths containing '..'."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -193,6 +199,7 @@
   name: "fs.readFileSync with User Input in Path"
   description: "Passing user-controlled input to fs.readFileSync enables path traversal attacks. Validate and sanitize file paths before reading."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -221,6 +228,7 @@
   name: "fs.createReadStream with User Input in Path"
   description: "Passing user-controlled input to fs.createReadStream enables path traversal attacks. Validate and sanitize file paths before creating streams."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -249,6 +257,7 @@
   name: "path.join with User Input from Request"
   description: "Using user input from req.params, req.query, or req.body in path.join enables path traversal. Validate input and ensure the resolved path stays within the intended directory."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -277,6 +286,7 @@
   name: "path.resolve with User Input from Request"
   description: "Using user input from req.params, req.query, or req.body in path.resolve enables path traversal. Validate input and ensure the resolved path stays within the intended directory."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -305,6 +315,7 @@
   name: "fs.writeFile with User Input in Path"
   description: "Passing user-controlled input to fs.writeFile enables path traversal attacks allowing arbitrary file writes. Validate and sanitize file paths before writing."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -333,6 +344,7 @@
   name: "fs.unlink / fs.rm with User Input in Path"
   description: "Passing user-controlled input to fs.unlink or fs.rm enables path traversal attacks allowing arbitrary file deletion. Validate and sanitize file paths before deleting."
   severity: High
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -366,6 +378,7 @@
   name: "JSON.parse of Request Body without Schema Validation"
   description: "Using JSON.parse on request body data without schema validation can lead to deserialization attacks. Validate parsed data against a schema using libraries like Joi, Zod, or ajv."
   severity: Medium
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -394,6 +407,7 @@
   name: "eval() Used for Deserialization"
   description: "Using eval() to deserialize data allows arbitrary code execution. Use JSON.parse with schema validation instead."
   severity: Critical
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -422,6 +436,7 @@
   name: "node-serialize unserialize with User Input"
   description: "Using node-serialize's unserialize function with user input allows remote code execution via crafted serialized objects. Avoid node-serialize entirely; use JSON.parse with schema validation."
   severity: Critical
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -450,6 +465,7 @@
   name: "Function() Constructor with User Input"
   description: "Using the Function constructor with user-controlled input allows arbitrary code execution, similar to eval(). Use safe alternatives like JSON.parse with schema validation."
   severity: Critical
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -478,6 +494,7 @@
   name: "vm.runInNewContext / vm.runInThisContext with User Input"
   description: "Using Node.js vm module to execute user-controlled code allows sandbox escape and arbitrary code execution. Avoid running untrusted code; use isolated workers or WebAssembly sandboxes instead."
   severity: Critical
+  confidence: medium
   languages:
     - JavaScript
     - TypeScript
@@ -501,4 +518,6 @@
       expected: TrueNegative
     - code: "const vm = require('vm');"
       expected: TrueNegative
+
+
 

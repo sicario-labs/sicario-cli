@@ -8,6 +8,7 @@
   name: "Django QuerySet.extra() with String Formatting"
   description: "Using string formatting in Django's extra() method allows SQL injection. Use parameterized queries or ORM methods instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -35,6 +36,7 @@
   name: "Django QuerySet.extra() with f-string"
   description: "Using f-strings in Django's extra() method allows SQL injection. Use parameterized queries or ORM methods instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -62,6 +64,7 @@
   name: "Django QuerySet.raw() with f-string"
   description: "Using f-strings in Django's raw() method allows SQL injection. Pass parameters as the second argument instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -89,6 +92,7 @@
   name: "Django QuerySet.raw() with .format() or % Formatting"
   description: "Using .format() or % formatting in Django's raw() method allows SQL injection. Pass parameters as the second argument instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -116,6 +120,7 @@
   name: "Django QuerySet.raw() with % String Interpolation"
   description: "Using % string interpolation in Django's raw() method allows SQL injection. Pass parameters as the second argument instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -143,6 +148,7 @@
   name: "Django RawSQL Expression with f-string"
   description: "Using f-strings in Django's RawSQL expression allows SQL injection. Use parameterized queries instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -170,6 +176,7 @@
   name: "Django RawSQL Expression with .format()"
   description: "Using .format() in Django's RawSQL expression allows SQL injection. Use parameterized queries instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -197,6 +204,7 @@
   name: "Django cursor.execute() with f-string"
   description: "Using f-strings in cursor.execute() allows SQL injection. Pass parameters as the second argument instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -224,6 +232,7 @@
   name: "Django cursor.execute() with .format()"
   description: "Using .format() in cursor.execute() allows SQL injection. Pass parameters as the second argument instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -251,6 +260,7 @@
   name: "Django cursor.execute() with % String Interpolation"
   description: "Using % string interpolation in cursor.execute() allows SQL injection. Pass parameters as the second argument instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -273,3 +283,5 @@
       expected: TrueNegative
     - code: "msg = \"execute %s\" % query_name"
       expected: TrueNegative
+
+

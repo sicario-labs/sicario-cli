@@ -35,6 +35,18 @@ impl std::fmt::Display for FailOnLevel {
     }
 }
 
+/// Confidence threshold level for the `--confidence-threshold` flag.
+/// Controls which findings are included based on the rule's confidence level.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ConfidenceThresholdLevel {
+    /// Include only high-confidence findings.
+    High,
+    /// Include high and medium confidence findings.
+    Medium,
+    /// Include all findings regardless of confidence (default).
+    Low,
+}
+
 /// Output format for scan results.
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum OutputFormat {
@@ -112,9 +124,16 @@ pub struct ScanArgs {
     #[arg(long)]
     pub diff: Option<String>,
 
-    /// Minimum confidence score to report (0.0–1.0)
-    #[arg(long, default_value = "0.0")]
+    /// Minimum numeric confidence score to report (0.0–1.0). Internal use.
+    #[arg(long = "confidence-score", default_value = "0.0", hide = true)]
     pub confidence_threshold: f64,
+
+    /// Filter findings by rule confidence level.
+    /// `high` → only high-confidence findings.
+    /// `medium` → high + medium confidence findings.
+    /// `low` (default) → all findings regardless of confidence.
+    #[arg(long = "confidence-threshold", value_enum, default_value = "low")]
+    pub confidence_level: ConfidenceThresholdLevel,
 
     /// Suppress all output except final results
     #[arg(long)]
@@ -123,6 +142,23 @@ pub struct ScanArgs {
     /// Print detailed progress and diagnostics
     #[arg(long)]
     pub verbose: bool,
+
+    /// Show only the top N highest-priority findings (default: show all).
+    /// Findings are ranked by a composite risk score combining severity,
+    /// confidence, reachability, and cloud exposure.
+    /// Example: sicario scan . --top 5
+    #[arg(long)]
+    pub top: Option<usize>,
+
+    /// Focus mode: show only Critical and High findings, grouped by file,
+    /// with inline fix commands. Designed for first-time users.
+    /// Equivalent to: --min-severity high --top 10 with grouped output.
+    #[arg(long)]
+    pub focus: bool,
+
+    /// Display a compact summary table of findings instead of full diagnostic output.
+    #[arg(long)]
+    pub summary: bool,
 
     /// Glob patterns to exclude from scanning
     #[arg(long)]
@@ -161,6 +197,31 @@ pub struct ScanArgs {
     /// Output goes to stderr to avoid contaminating --format json.
     #[arg(long)]
     pub trace: bool,
+
+    /// Enable interprocedural taint analysis (2-hop source-to-sink tracking).
+    /// Identifies taint sources (req.query, os.environ, fs.readFile, etc.) and
+    /// tracks data flow to sinks (SQL queries, shell commands, file paths, HTTP
+    /// requests, HTML rendering). Adds `taint_path` field to JSON output.
+    #[arg(long)]
+    pub taint: bool,
+
+    /// Apply all deterministic Fix_Templates to findings in a single pass after scanning.
+    /// Creates a backup of each modified file before writing.
+    /// Prints a per-finding receipt: rule ID, file, line, template used.
+    /// Skips findings where no deterministic template exists.
+    #[arg(long)]
+    pub fix: bool,
+
+    /// With --fix: apply fixes only to staged files and re-stage after fixing.
+    /// Requires a git repository.
+    #[arg(long, requires = "fix")]
+    pub fix_staged: bool,
+
+    /// After scanning and applying fixes (requires --publish), create a branch
+    /// `sicario/autofix-<timestamp>`, commit all fixes, push, and open a PR/MR.
+    /// Prints the PR/MR URL to stdout on success.
+    #[arg(long, requires = "publish")]
+    pub auto_pr: bool,
 
     /// Disable colored output
     #[arg(long)]
@@ -211,6 +272,13 @@ pub struct ScanArgs {
     /// Use this flag to override that filter and send the complete finding set.
     #[arg(long = "publish-all", requires = "publish")]
     pub publish_all: bool,
+
+    /// Include 100-char truncated code snippets in the publish payload.
+    /// By default, only a one-way SHA-256 hash of matched code is uploaded.
+    /// Use this flag to explicitly opt in to snippet transmission.
+    /// When active, lines_of_code_transmitted > 0 in the audit log.
+    #[arg(long = "publish-with-snippet", requires = "publish")]
+    pub publish_with_snippet: bool,
 
     /// Disable automatic cloud exposure analysis (K8s manifest detection)
     #[arg(long)]
@@ -276,6 +344,56 @@ pub struct ScanArgs {
     /// times, `--auto-suppress` will automatically exclude matching findings.
     #[arg(long)]
     pub learn_suppressions: bool,
+
+    // ── Group I: Semgrep Parity flags (Tasks 52–60) ───────────────────────────
+
+    /// Enable secrets detection mode (Task 56.1).
+    /// Scans for credential patterns: API keys, tokens, connection strings, SSH keys.
+    /// Matched secret values are never transmitted — only a one-way SHA-256 hash.
+    #[arg(long)]
+    pub secrets: bool,
+
+    /// Enable SCA (Software Composition Analysis) mode (Task 57.1).
+    /// Parses lockfiles and checks dependencies against the local vulnerability database.
+    #[arg(long)]
+    pub sca: bool,
+
+    /// Enable all scan modes in one pass: --secrets, --sca, and --taint (Task 69.1).
+    /// Deduplicates findings across scan types.
+    #[arg(long)]
+    pub all: bool,
+
+    /// Scan full git history for secrets in all commits reachable from HEAD (Task 56.6).
+    /// Reports historical findings with commit SHA, timestamp, and author email.
+    /// Requires --secrets to be active.
+    #[arg(long, requires = "secrets")]
+    pub historical: bool,
+
+    /// Disable inline `sicario-ignore` comment processing (Task 52.5).
+    /// Use for security audits where suppression bypass must be prevented.
+    #[arg(long)]
+    pub no_ignore_comments: bool,
+
+    /// Disable automatic .gitignore pattern application (Task 52.7).
+    /// By default, files matching .gitignore patterns are excluded from scanning.
+    #[arg(long)]
+    pub no_git_ignore: bool,
+
+    /// Maximum file size in bytes to scan (default: 1 MB) (Task 60.3).
+    /// Files larger than this threshold are skipped with a warning.
+    #[arg(long, default_value = "1048576")]
+    pub max_file_size: u64,
+
+    /// Dry run: execute the full scan pipeline but do not write the audit log,
+    /// do not publish findings, and do not apply fixes (Task 78.6).
+    /// Prints what would be done. Useful for testing CI configuration.
+    #[arg(long)]
+    pub dry_run: bool,
+
+    /// Exit code 1 only when reachable SCA vulnerabilities are found (Task 57.6).
+    /// Requires --sca to be active.
+    #[arg(long, requires = "sca")]
+    pub fail_on_reachable: bool,
 }
 
 impl Default for ScanArgs {
@@ -291,8 +409,12 @@ impl Default for ScanArgs {
             min_severity: SeverityLevel::Low,
             diff: None,
             confidence_threshold: 0.0,
+            confidence_level: ConfidenceThresholdLevel::Low,
             quiet: false,
             verbose: false,
+            top: None,
+            focus: false,
+            summary: false,
             exclude: Vec::new(),
             include: Vec::new(),
             jobs: None,
@@ -302,6 +424,10 @@ impl Default for ScanArgs {
             staged: false,
             dataflow_traces: false,
             trace: false,
+            taint: false,
+            fix: false,
+            fix_staged: false,
+            auto_pr: false,
             no_color: false,
             force_color: false,
             exclude_rule: Vec::new(),
@@ -314,6 +440,7 @@ impl Default for ScanArgs {
             auto_suppress: false,
             publish: false,
             publish_all: false,
+            publish_with_snippet: false,
             no_cloud: false,
             org: None,
             fail_on: None,
@@ -323,6 +450,15 @@ impl Default for ScanArgs {
             licenses: false,
             fail_on_license: None,
             learn_suppressions: false,
+            secrets: false,
+            sca: false,
+            all: false,
+            historical: false,
+            no_ignore_comments: false,
+            no_git_ignore: false,
+            max_file_size: 1_048_576,
+            dry_run: false,
+            fail_on_reachable: false,
         }
     }
 }

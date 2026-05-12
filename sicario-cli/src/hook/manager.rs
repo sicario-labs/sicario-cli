@@ -13,12 +13,13 @@ const BEGIN_MARKER: &str = "# BEGIN SICARIO HOOK";
 const END_MARKER: &str = "# END SICARIO HOOK";
 const SHEBANG: &str = "#!/bin/sh";
 
+// Task 53.6: default hook includes --secrets and uses --fail-on medium
 const SICARIO_HOOK_BLOCK: &str = "\
 # BEGIN SICARIO HOOK
 if [ \"$SICARIO_SKIP_HOOK\" = \"1\" ]; then
   exit 0
 fi
-sicario scan --staged --severity-threshold high --quiet
+sicario scan --staged --secrets --fail-on medium --quiet
 # END SICARIO HOOK";
 
 const AUTO_FIX_HOOK_BLOCK: &str = "\

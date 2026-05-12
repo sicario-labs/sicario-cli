@@ -7,6 +7,7 @@
   name: "TLS Certificate Verification Disabled"
   description: "Setting InsecureSkipVerify: true disables TLS certificate validation, making the connection vulnerable to man-in-the-middle attacks. Remove this flag in production code."
   severity: Critical
+  confidence: high
   languages:
     - Go
   pattern:
@@ -26,6 +27,7 @@
   name: "HTTP Redirect with User-Controlled URL"
   description: "Redirecting to a user-controlled URL enables open redirect attacks. Validate the redirect target against an allowlist of trusted domains."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:

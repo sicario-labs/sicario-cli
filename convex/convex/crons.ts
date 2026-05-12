@@ -31,4 +31,19 @@ crons.weekly(
   internal.emailJobs.sendInactivityNudges,
 );
 
+// Process onboarding emails every hour (Task 38.7)
+// Checks first-scan nudge (24h) and day-3 re-engagement (72h) criteria.
+crons.hourly(
+  "onboarding-emails",
+  { minuteUTC: 15 },
+  internal.emailJobs.processOnboardingEmails,
+);
+
+// Task 50.6: Purge expired shared rule links daily at 04:00 UTC
+crons.daily(
+  "purge-expired-shared-rules",
+  { hourUTC: 4, minuteUTC: 0 },
+  internal.sharedRules.purgeExpired,
+);
+
 export default crons;

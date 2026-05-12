@@ -18,6 +18,7 @@
   name: "DES Cipher Usage"
   description: "DES is a broken cipher with a 56-bit key. Use AES-256 instead."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -45,6 +46,7 @@
   name: "ECB Mode Encryption"
   description: "ECB mode does not provide semantic security — identical plaintext blocks produce identical ciphertext. Use GCM or CBC with a random IV instead."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -72,6 +74,7 @@
   name: "RC4 Cipher Usage"
   description: "RC4 is a broken stream cipher with known biases. Use AES-GCM or ChaCha20-Poly1305 instead."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -99,6 +102,7 @@
   name: "Hardcoded AES Encryption Key"
   description: "Hardcoding encryption keys in source code exposes them to anyone with access to the binary. Load keys from environment variables or a secrets manager."
   severity: Critical
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -126,6 +130,7 @@
   name: "PBKDF2 with Insufficient Iterations"
   description: "PBKDF2 with fewer than 600,000 iterations (OWASP 2023 recommendation) is vulnerable to brute-force attacks. Increase the iteration count or use argon2id."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -153,6 +158,7 @@
   name: "Hardcoded IV or Nonce"
   description: "Using a hardcoded initialization vector (IV) or nonce breaks the semantic security of encryption. Generate a random IV/nonce using crypto/rand for each encryption operation."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -180,6 +186,7 @@
   name: "Weak RSA Key Size"
   description: "RSA keys shorter than 2048 bits are considered insecure. Use at least 2048-bit keys, preferably 4096-bit."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -207,6 +214,7 @@
   name: "bcrypt Cost Factor Too Low"
   description: "A bcrypt cost factor below 10 is too fast for password hashing and vulnerable to brute-force attacks. Use a cost of at least 12."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -234,6 +242,7 @@
   name: "Non-Constant-Time Comparison for Secrets"
   description: "Using == or bytes.Equal to compare secrets (tokens, hashes, MACs) leaks timing information. Use crypto/subtle.ConstantTimeCompare instead."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -261,6 +270,7 @@
   name: "Hardcoded HMAC Key"
   description: "Hardcoding HMAC keys in source code exposes them to anyone with access to the binary. Load keys from environment variables or a secrets manager."
   severity: Critical
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -288,6 +298,7 @@
   name: "math/rand Seeded with Constant Value"
   description: "Seeding math/rand with a constant produces a predictable sequence. Use crypto/rand for security-sensitive operations or seed with a truly random value."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -315,6 +326,7 @@
   name: "Hardcoded TLS Certificate Key Pair"
   description: "Hardcoding TLS certificate or key content in source code is insecure. Load certificates from files or a secrets manager."
   severity: Critical
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -342,6 +354,7 @@
   name: "Blowfish Cipher Usage"
   description: "Blowfish has a 64-bit block size making it vulnerable to birthday attacks. Use AES-256 instead."
   severity: Medium
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -369,6 +382,7 @@
   name: "GCM Seal with Hardcoded Nonce"
   description: "Using a hardcoded nonce with AES-GCM breaks its security guarantees. Generate a random nonce using crypto/rand for each encryption."
   severity: High
+  confidence: medium
   languages:
     - Go
   pattern:
@@ -391,3 +405,5 @@
       expected: TrueNegative
     - code: "gcm, err := cipher.NewGCM(block)"
       expected: TrueNegative
+
+

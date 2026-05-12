@@ -8,6 +8,7 @@
   name: "LDAP search_s() with f-string Filter"
   description: "Using f-strings to construct LDAP filters allows LDAP injection. Use ldap.filter.escape_filter_chars() to sanitize input."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -35,6 +36,7 @@
   name: "LDAP search_s() with .format() Filter"
   description: "Using .format() to construct LDAP filters allows LDAP injection. Use ldap.filter.escape_filter_chars() to sanitize input."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -62,6 +64,7 @@
   name: "LDAP search_s() with % String Interpolation"
   description: "Using % string interpolation to construct LDAP filters allows LDAP injection. Use ldap.filter.escape_filter_chars() to sanitize input."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -89,6 +92,7 @@
   name: "ldap3 search() with f-string Filter"
   description: "Using f-strings to construct ldap3 search filters allows LDAP injection. Use ldap3.utils.conv.escape_filter_chars() to sanitize input."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -116,6 +120,7 @@
   name: "ldap3 search() with .format() Filter"
   description: "Using .format() to construct ldap3 search filters allows LDAP injection. Use ldap3.utils.conv.escape_filter_chars() to sanitize input."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -138,3 +143,5 @@
       expected: TrueNegative
     - code: "msg = \"search {}\".format(name)"
       expected: TrueNegative
+
+

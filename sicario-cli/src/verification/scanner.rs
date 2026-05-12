@@ -131,6 +131,7 @@ mod tests {
   name: "Dangerous eval"
   description: "Use of eval with dynamic input"
   severity: High
+  confidence: high
   languages:
     - JavaScript
   pattern:
@@ -165,6 +166,7 @@ mod tests {
   name: "Console log usage"
   description: "Console log detected"
   severity: Low
+  confidence: high
   languages:
     - JavaScript
   pattern:

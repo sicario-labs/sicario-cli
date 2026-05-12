@@ -9,6 +9,7 @@
   name: "hashlib.md5() for Password Hashing"
   description: "MD5 is cryptographically broken and should not be used for password hashing. Use bcrypt, scrypt, or argon2 instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -36,6 +37,7 @@
   name: "hashlib.sha1() for Password Hashing"
   description: "SHA1 is cryptographically weak and should not be used for password hashing. Use bcrypt, scrypt, or argon2 instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -63,6 +65,7 @@
   name: "hashlib.new('md5') Usage"
   description: "Creating MD5 hash via hashlib.new() is cryptographically broken. Use SHA-256 or stronger algorithms."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -90,6 +93,7 @@
   name: "hashlib.new('sha1') Usage"
   description: "Creating SHA1 hash via hashlib.new() is cryptographically weak. Use SHA-256 or stronger algorithms."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -117,6 +121,7 @@
   name: "random Module for Security-Sensitive Operations"
   description: "The random module uses a Mersenne Twister PRNG which is predictable. Use secrets or os.urandom() for security-sensitive operations."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -144,6 +149,7 @@
   name: "random.seed() with Static Value"
   description: "Seeding random with a static value makes output predictable. Use secrets module for security-sensitive operations."
   severity: Medium
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -171,6 +177,7 @@
   name: "Weak Fernet Key Derivation"
   description: "Deriving Fernet keys from passwords without proper KDF (like PBKDF2 with sufficient iterations) is insecure. Use cryptography.hazmat.primitives.kdf.pbkdf2.PBKDF2HMAC."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -198,6 +205,7 @@
   name: "DES/3DES Encryption Usage"
   description: "DES and 3DES are deprecated and insecure. Use AES-256-GCM or ChaCha20-Poly1305 instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -225,6 +233,7 @@
   name: "ECB Mode Encryption"
   description: "ECB mode does not provide semantic security — identical plaintext blocks produce identical ciphertext. Use CBC, GCM, or CTR mode instead."
   severity: High
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -252,6 +261,7 @@
   name: "Hardcoded Encryption Key"
   description: "Hardcoding encryption keys in source code exposes them in version control. Load keys from environment variables or a secrets manager."
   severity: Critical
+  confidence: medium
   languages:
     - Python
   pattern:
@@ -274,3 +284,5 @@
       expected: TrueNegative
     - code: "name = 'my-key'"
       expected: TrueNegative
+
+

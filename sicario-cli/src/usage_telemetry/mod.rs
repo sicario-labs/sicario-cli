@@ -565,26 +565,36 @@ mod tests {
                         let raw = String::from_utf8_lossy(&buf[..n]).to_string();
 
                         // Extract the request path from the first line.
+                        let mut is_usage = false;
                         if let Some(first_line) = raw.lines().next() {
                             // e.g. "POST /api/v1/usage HTTP/1.1"
                             let parts: Vec<&str> = first_line.split_whitespace().collect();
                             if parts.len() >= 2 {
-                                *captured_path_clone.lock().unwrap() = Some(parts[1].to_string());
+                                let path = parts[1].to_string();
+                                if path.contains("/api/v1/usage") {
+                                    is_usage = true;
+                                    *captured_path_clone.lock().unwrap() = Some(path);
+                                }
                             }
                         }
 
-                        // Extract the JSON body (everything after the blank line).
-                        if let Some(body_start) = raw.find("\r\n\r\n") {
-                            let body = raw[body_start + 4..].to_string();
-                            if !body.is_empty() {
-                                *captured_body_clone.lock().unwrap() = Some(body);
+                        if is_usage {
+                            // Extract the JSON body (everything after the blank line).
+                            if let Some(body_start) = raw.find("\r\n\r\n") {
+                                let body = raw[body_start + 4..].to_string();
+                                if !body.is_empty() {
+                                    *captured_body_clone.lock().unwrap() = Some(body);
+                                }
                             }
+                            // Respond with 204 No Content (same as the real endpoint).
+                            let response = "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n";
+                            let _ = stream.write_all(response.as_bytes());
+                            break;
+                        } else {
+                            // Answer stray concurrent test requests and keep listening
+                            let response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+                            let _ = stream.write_all(response.as_bytes());
                         }
-
-                        // Respond with 204 No Content (same as the real endpoint).
-                        let response = "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n";
-                        let _ = stream.write_all(response.as_bytes());
-                        break;
                     }
                     Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                         std::thread::sleep(std::time::Duration::from_millis(10));

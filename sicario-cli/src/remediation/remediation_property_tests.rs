@@ -220,7 +220,7 @@ mod property_tests {
             std::env::remove_var("CEREBRAS_API_KEY");
 
             let dir = TempDir::new().unwrap();
-            let engine = RemediationEngine::new_with_allow_ai(dir.path(), false).unwrap();
+            let engine = RemediationEngine::new_with_allow_ai(dir.path(), true).unwrap();
 
             let file = dir.path().join("app.js");
             fs::write(&file, &content).unwrap();

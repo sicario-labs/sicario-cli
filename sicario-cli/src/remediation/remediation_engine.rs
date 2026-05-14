@@ -2075,7 +2075,7 @@ mod tests {
         std::env::remove_var("SICARIO_LLM_API_KEY");
         std::env::remove_var("OPENAI_API_KEY");
         let dir = TempDir::new().unwrap();
-        let engine = RemediationEngine::new(dir.path()).unwrap();
+        let engine = RemediationEngine::new_with_allow_ai(dir.path(), true).unwrap();
 
         let file = dir.path().join("app.py");
         fs::write(

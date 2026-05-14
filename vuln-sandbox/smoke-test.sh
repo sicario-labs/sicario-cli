@@ -50,18 +50,24 @@ if [ ! -f "$MANIFEST" ]; then
   exit 2
 fi
 
-# --- Run the scan ------------------------------------------------------------
+# --- Run the scan to a temporary file to avoid pipe buffer limits -----------
+SCAN_JSON="${TMPDIR:-/tmp}/sicario_smoke_scan_$$.json"
+# Clean up temp file on exit
+trap 'rm -f "$SCAN_JSON"' EXIT
+
 echo "Running: sicario scan vuln-sandbox/ --format json"
 # Use || true so set -e does not abort when sicario exits 1 (findings found)
-SCAN_OUTPUT=$(sicario scan "$SANDBOX_DIR/" --format json 2>/dev/null || true)
+sicario scan "$SANDBOX_DIR/" --format json > "$SCAN_JSON" 2>/dev/null || true
 
 # Validate output is parseable JSON array
-ACTUAL=$(echo "$SCAN_OUTPUT" | jq '(.findings // .) | length' 2>/dev/null || echo "parse_error")
+ACTUAL=$(jq '(.findings // .) | length' "$SCAN_JSON" 2>/dev/null || echo "parse_error")
 
 if [ "$ACTUAL" = "parse_error" ]; then
   echo "x Smoke test FAILED: could not parse JSON output from sicario"
   echo "--- Raw output (first 2000 chars) ---"
-  echo "$SCAN_OUTPUT" | head -c 2000
+  # Use a subshell/redirection to head to prevent broken pipe errors
+  head -c 2000 "$SCAN_JSON" || true
+  echo ""
   exit 1
 fi
 
@@ -99,15 +105,6 @@ while IFS= read -r line; do
   fi
 
   # Extract columns from the markdown table row
-  # Format: | `file` | CWE | rule_id | Outcome | Severity |
-  # Column indices (1-based after splitting on |):
-  #   1: empty (leading pipe)
-  #   2: file path (backtick-quoted)
-  #   3: CWE
-  #   4: rule_id
-  #   5: outcome
-  #   6: severity
-
   FILE_COL=$(echo "$line" | awk -F'|' '{print $2}' | tr -d '`[:space:]')
   RULE_COL=$(echo "$line" | awk -F'|' '{print $4}' | tr -d '[:space:]')
   OUTCOME_COL=$(echo "$line" | awk -F'|' '{print $5}' | tr -d '[:space:]')
@@ -122,17 +119,14 @@ while IFS= read -r line; do
     continue
   fi
 
-  # Count findings for this (file, rule_id) pair.
-  # The file path in MANIFEST is relative to vuln-sandbox/ (e.g. "node/cwe-89/sql-injection.js").
-  # The scan output file_path may be relative to the scanned dir or absolute.
-  # We match on the suffix of the file path.
-  MATCH_COUNT=$(echo "$SCAN_OUTPUT" | jq --arg file "$FILE_COL" --arg rule "$RULE_COL" '
+  # Count findings for this (file, rule_id) pair supporting both camelCase and snake_case outputs.
+  MATCH_COUNT=$(jq --arg file "$FILE_COL" --arg rule "$RULE_COL" '
     [(.findings // .) | .[] | select(
-      ((.file_path | type) == "string") and
-      (.file_path | endswith($file)) and
-      (.rule_id == $rule)
+      (((.file_path // .filePath) | type) == "string") and
+      ((.file_path // .filePath) | endswith($file)) and
+      ((.rule_id // .ruleId) == $rule)
     )] | length
-  ')
+  ' "$SCAN_JSON")
 
   if [ "$OUTCOME_COL" = "TruePositive" ]; then
     # Expect exactly 1 finding
@@ -168,7 +162,7 @@ if [ "$FAIL_COUNT" -gt 0 ]; then
   echo "$FAILURES"
   echo ""
   echo "Breakdown by severity:"
-  echo "$SCAN_OUTPUT" | jq '(.findings // .) | group_by(.severity) | map({severity: .[0].severity, count: length}) | sort_by(.severity)'
+  jq '(.findings // .) | group_by(.severity // .Severity) | map({severity: .[0].severity // .[0].Severity, count: length}) | sort_by(.severity)' "$SCAN_JSON"
   exit 1
 fi
 
@@ -180,5 +174,5 @@ fi
 echo "OK Smoke test passed: $PASS_COUNT/$TOTAL_CHECKED assertions passed"
 echo ""
 echo "Breakdown by severity:"
-echo "$SCAN_OUTPUT" | jq '(.findings // .) | group_by(.severity) | map({severity: .[0].severity, count: length}) | sort_by(.severity)'
+jq '(.findings // .) | group_by(.severity // .Severity) | map({severity: .[0].severity // .[0].Severity, count: length}) | sort_by(.severity)' "$SCAN_JSON"
 exit 0

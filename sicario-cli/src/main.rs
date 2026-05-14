@@ -6376,6 +6376,7 @@ mod tests {
   name: "Test Rule"
   description: "Test rule for warning tests"
   severity: Low
+  confidence: high
   languages:
     - JavaScript
   pattern:
@@ -6603,6 +6604,7 @@ mod tests {
   name: "Custom Detect eval"
   description: "Custom rule to detect eval usage"
   severity: High
+  confidence: high
   languages:
     - JavaScript
   pattern:
@@ -6643,6 +6645,7 @@ mod tests {
   name: "Rule One"
   description: "First custom rule"
   severity: High
+  confidence: high
   languages:
     - JavaScript
   pattern:
@@ -6655,6 +6658,7 @@ mod tests {
   name: "Rule Two"
   description: "Second custom rule"
   severity: Medium
+  confidence: high
   languages:
     - Python
   pattern:

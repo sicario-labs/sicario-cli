@@ -2462,6 +2462,7 @@ mod property_tests {
   name: "{prefix} Rule {idx}"
   description: "Generated {prefix} rule"
   severity: {severity}
+  confidence: high
   languages:
     - {language}
   pattern:

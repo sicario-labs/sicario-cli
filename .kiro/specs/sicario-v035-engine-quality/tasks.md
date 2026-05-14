@@ -527,32 +527,32 @@ finding_metadata entries when snippet not opted in
 
 ### Task 50: Share via URL - Backend
 
-- [ ] 50.1 Create `sharedRules` Convex table: `{token, orgId, ruleId, yaml, testCode, language, isPublic, isPermalink, expiresAt, createdBy, createdAt, viewCount}`
-- [ ] 50.2 Add `POST /api/v1/rules/share` HTTP endpoint: generate 8-12 char base62 token, create `sharedRules` record, return `{token, url}`
-- [ ] 50.3 Add `GET /api/v1/rules/share/:token` HTTP endpoint: look up token, check expiry, check auth for private links, return `{yaml, testCode, language, isPublic, isPermalink}`
-- [ ] 50.4 Add `PATCH /api/v1/rules/share/:token` HTTP endpoint: update `isPublic` visibility (author only); reject updates to permalink records
-- [ ] 50.5 Add `DELETE /api/v1/rules/share/:token` HTTP endpoint: delete share record (author only)
-- [ ] 50.6 Implement token expiry: cron job runs daily and deletes `sharedRules` records where `expiresAt < now`
-- [ ] 50.7 Add `POST /api/v1/rules/publish-pr` HTTP endpoint: validate rule YAML, create branch in `sicario-rules` repo via GitHub API, commit rule file, open PR with pre-populated body including live editor link
-- [ ] 50.8 Rate-limit the unauthenticated validation endpoint (`POST /api/v1/rules/validate`) to 10 requests/minute per IP for public/embed access
+- [x] 50.1 Create `sharedRules` Convex table: `{token, orgId, ruleId, yaml, testCode, language, isPublic, isPermalink, expiresAt, createdBy, createdAt, viewCount}`
+- [x] 50.2 Add `POST /api/v1/rules/share` HTTP endpoint: generate 8-12 char base62 token, create `sharedRules` record, return `{token, url}`
+- [x] 50.3 Add `GET /api/v1/rules/share/:token` HTTP endpoint: look up token, check expiry, check auth for private links, return `{yaml, testCode, language, isPublic, isPermalink}`
+- [x] 50.4 Add `PATCH /api/v1/rules/share/:token` HTTP endpoint: update `isPublic` visibility (author only); reject updates to permalink records
+- [x] 50.5 Add `DELETE /api/v1/rules/share/:token` HTTP endpoint: delete share record (author only)
+- [x] 50.6 Implement token expiry: cron job runs daily and deletes `sharedRules` records where `expiresAt < now`
+- [x] 50.7 Add `POST /api/v1/rules/publish-pr` HTTP endpoint: validate rule YAML, create branch in `sicario-rules` repo via GitHub API, commit rule file, open PR with pre-populated body including live editor link
+- [x] 50.8 Rate-limit the unauthenticated validation endpoint (`POST /api/v1/rules/validate`) to 10 requests/minute per IP for public/embed access
 
 ### Task 51: Share via URL - Frontend
 
-- [ ] 51.1 Build `ShareModal.tsx` component with three sections: Copy link (private), Quick share (URL-encoded), Embed; plus Make public and Publish to Registry actions
-- [ ] 51.2 Implement `encodeEditorState(yaml, code, lang)` client-side: URL-safe Base64 of `{yaml, code, lang}` JSON; auto-fallback to server token when payload > 1500 chars
-- [ ] 51.3 Implement `decodeEditorState(encoded)` client-side: decode `?r=` param on `RuleEditorPage` mount; populate editor and run validation automatically
-- [ ] 51.4 Add Share button to Rule Editor top menu bar; wire to `ShareModal`
-- [ ] 51.5 Add Permalink toggle in Share modal: when enabled, POST to share endpoint with `isPermalink: true`; show note "This link is frozen to the current version"
-- [ ] 51.6 Add Expiry selector in Share modal: Never / 7 days / 30 days / 90 days; pass `expiresAt` to share endpoint
-- [ ] 51.7 Add Make public toggle: PATCH share record `isPublic: true`; show warning "Anyone with this link can view and fork this rule"
-- [ ] 51.8 Add Publish to Registry form: description, tags multi-select, GitHub handle input; POST to `/api/v1/rules/publish-pr`; show PR URL on success
-- [ ] 51.9 Build `EmbedEditorPage.tsx` at `/editor/embed?r=<base64url>`: stripped layout (no sidebar, no nav), read-only YAML, editable test code, match result, "Open in Sicario Editor" footer link
-- [ ] 51.10 Add embed `<iframe>` snippet to Share modal Embed tab with copy button
-- [ ] 51.11 Handle `?s=<token>` URL on `RuleEditorPage` mount: fetch share record from server, populate editor; show "Shared rule" banner with Fork button for non-owners
-- [ ] 51.12 Render read-only playground mode for unauthenticated visitors: YAML non-editable, test code editable, validation works, "Fork to my org" CTA with sign-up/login prompt
-- [ ] 51.13 Add canonical rule URL `/editor/rules/<ruleId>` route: load rule from `customRules` by ID; redirect to login if private and unauthenticated
-- [ ] 51.14 Add "Copy link" button to the Custom Rules table row actions (quick copy of canonical URL without opening Share modal)
-- [ ] 51.15 Add "Open in Sicario Editor" button to Built-in Rules table: generates `?r=` URL from the built-in rule YAML and opens the editor pre-populated
+- [x] 51.1 Build `ShareModal.tsx` component with three sections: Copy link (private), Quick share (URL-encoded), Embed; plus Make public and Publish to Registry actions
+- [x] 51.2 Implement `encodeEditorState(yaml, code, lang)` client-side: URL-safe Base64 of `{yaml, code, lang}` JSON; auto-fallback to server token when payload > 1500 chars
+- [x] 51.3 Implement `decodeEditorState(encoded)` client-side: decode `?r=` param on `RuleEditorPage` mount; populate editor and run validation automatically
+- [x] 51.4 Add Share button to Rule Editor top menu bar; wire to `ShareModal`
+- [x] 51.5 Add Permalink toggle in Share modal: when enabled, POST to share endpoint with `isPermalink: true`; show note "This link is frozen to the current version"
+- [x] 51.6 Add Expiry selector in Share modal: Never / 7 days / 30 days / 90 days; pass `expiresAt` to share endpoint
+- [x] 51.7 Add Make public toggle: PATCH share record `isPublic: true`; show warning "Anyone with this link can view and fork this rule"
+- [x] 51.8 Add Publish to Registry form: description, tags multi-select, GitHub handle input; POST to `/api/v1/rules/publish-pr`; show PR URL on success
+- [x] 51.9 Build `EmbedEditorPage.tsx` at `/editor/embed?r=<base64url>`: stripped layout (no sidebar, no nav), read-only YAML, editable test code, match result, "Open in Sicario Editor" footer link
+- [x] 51.10 Add embed `<iframe>` snippet to Share modal Embed tab with copy button
+- [x] 51.11 Handle `?s=<token>` URL on `RuleEditorPage` mount: fetch share record from server, populate editor; show "Shared rule" banner with Fork button for non-owners
+- [x] 51.12 Render read-only playground mode for unauthenticated visitors: YAML non-editable, test code editable, validation works, "Fork to my org" CTA with sign-up/login prompt
+- [x] 51.13 Add canonical rule URL `/editor/rules/<ruleId>` route: load rule from `customRules` by ID; redirect to login if private and unauthenticated
+- [x] 51.14 Add "Copy link" button to the Custom Rules table row actions (quick copy of canonical URL without opening Share modal)
+- [x] 51.15 Add "Open in Sicario Editor" button to Built-in Rules table: generates `?r=` URL from the built-in rule YAML and opens the editor pre-populated
 
 ---
 
@@ -733,13 +733,13 @@ finding_metadata entries when snippet not opted in
 
 ### Task 73: Policies Table Backend and CRUD
 
-- [ ] 73.1 Create `policies` Convex table: `{policyId, orgId, ruleId, mode, projectScope, updatedBy, updatedAt}` with indexes `by_orgId` and `by_orgId_ruleId`
-- [ ] 73.2 Add `policies.setMode` mutation: upsert a rule's policy mode for the org; require `manager` role minimum
-- [ ] 73.3 Add `policies.bulkSetMode` mutation: set mode for multiple rule IDs in one call; used by Policy Modes tab bulk assignment
-- [ ] 73.4 Add `policies.list` query: return all policy records for an org, joined with built-in rule metadata (name, severity, language, CWE)
-- [ ] 73.5 Add `GET /api/v1/orgs/{org_id}/policy` HTTP endpoint: return `{rules: [{rule_id, mode}]}` for CLI policy sync; authenticated via `SICARIO_API_KEY`
-- [ ] 73.6 Seed default policy records for all built-in rules when a new org is created: default mode is `"monitor"` for all rules
-- [ ] 73.7 Verify `sicario ci` policy fetch correctly reads from the `policies` table and applies modes during scan
+- [x] 73.1 Create `policies` Convex table: `{policyId, orgId, ruleId, mode, projectScope, updatedBy, updatedAt}` with indexes `by_orgId` and `by_orgId_ruleId`
+- [x] 73.2 Add `policies.setMode` mutation: upsert a rule's policy mode for the org; require `manager` role minimum
+- [x] 73.3 Add `policies.bulkSetMode` mutation: set mode for multiple rule IDs in one call; used by Policy Modes tab bulk assignment
+- [x] 73.4 Add `policies.list` query: return all policy records for an org, joined with built-in rule metadata (name, severity, language, CWE)
+- [x] 73.5 Add `GET /api/v1/orgs/{org_id}/policy` HTTP endpoint: return `{rules: [{rule_id, mode}]}` for CLI policy sync; authenticated via `SICARIO_API_KEY`
+- [x] 73.6 Seed default policy records for all built-in rules when a new org is created: default mode is `"monitor"` for all rules
+- [x] 73.7 Verify `sicario ci` policy fetch correctly reads from the `policies` table and applies modes during scan
 
 ### Task 74: MTTR Module Update for Fixed vs. Removed
 

@@ -56,7 +56,7 @@ echo "Running: sicario scan vuln-sandbox/ --format json"
 SCAN_OUTPUT=$(sicario scan "$SANDBOX_DIR/" --format json 2>/dev/null || true)
 
 # Validate output is parseable JSON array
-ACTUAL=$(echo "$SCAN_OUTPUT" | jq 'length' 2>/dev/null || echo "parse_error")
+ACTUAL=$(echo "$SCAN_OUTPUT" | jq '(.findings // .) | length' 2>/dev/null || echo "parse_error")
 
 if [ "$ACTUAL" = "parse_error" ]; then
   echo "x Smoke test FAILED: could not parse JSON output from sicario"
@@ -127,7 +127,8 @@ while IFS= read -r line; do
   # The scan output file_path may be relative to the scanned dir or absolute.
   # We match on the suffix of the file path.
   MATCH_COUNT=$(echo "$SCAN_OUTPUT" | jq --arg file "$FILE_COL" --arg rule "$RULE_COL" '
-    [.[] | select(
+    [(.findings // .) | .[] | select(
+      ((.file_path | type) == "string") and
       (.file_path | endswith($file)) and
       (.rule_id == $rule)
     )] | length
@@ -167,7 +168,7 @@ if [ "$FAIL_COUNT" -gt 0 ]; then
   echo "$FAILURES"
   echo ""
   echo "Breakdown by severity:"
-  echo "$SCAN_OUTPUT" | jq 'group_by(.severity) | map({severity: .[0].severity, count: length}) | sort_by(.severity)'
+  echo "$SCAN_OUTPUT" | jq '(.findings // .) | group_by(.severity) | map({severity: .[0].severity, count: length}) | sort_by(.severity)'
   exit 1
 fi
 
@@ -179,5 +180,5 @@ fi
 echo "OK Smoke test passed: $PASS_COUNT/$TOTAL_CHECKED assertions passed"
 echo ""
 echo "Breakdown by severity:"
-echo "$SCAN_OUTPUT" | jq 'group_by(.severity) | map({severity: .[0].severity, count: length}) | sort_by(.severity)'
+echo "$SCAN_OUTPUT" | jq '(.findings // .) | group_by(.severity) | map({severity: .[0].severity, count: length}) | sort_by(.severity)'
 exit 0

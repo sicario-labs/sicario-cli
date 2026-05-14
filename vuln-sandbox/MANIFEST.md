@@ -12,8 +12,8 @@ This manifest lists every intentionally vulnerable file in the sandbox alongside
 
 | Language          | TP Files | TN Files | Total |
 |-------------------|----------|----------|-------|
-| Node.js           | 40       | 40       | 80    |
-| Python            | 29       | 29       | 58    |
+| Node.js           | 50       | 40       | 90    |
+| Python            | 39       | 29       | 68    |
 | React/TypeScript  | 10       | 10       | 20    |
 | TypeScript        | 6        | 6        | 12    |
 | Go                | 10       | 10       | 20    |
@@ -22,9 +22,9 @@ This manifest lists every intentionally vulnerable file in the sandbox alongside
 | Ruby              | 6        | 6        | 12    |
 | PHP               | 6        | 6        | 12    |
 | C#                | 6        | 6        | 12    |
-| **Total**         | **133**  | **133**  | **266** |
+| **Total**         | **153**  | **133**  | **286** |
 
-Expected total finding count: **133** (one finding per TP file, zero findings per TN file).
+Expected total finding count: **153** (one finding per TP file, zero findings per TN file).
 
 ---
 
@@ -112,6 +112,16 @@ Expected total finding count: **133** (one finding per TP file, zero findings pe
 | `node/cwe-643/xpath-injection-safe.js` | CWE-643 | js-xpath-injection | TrueNegative | — |
 | `node/cwe-601/open-redirect.js` | CWE-601 | js/react-window-location-user-input | TruePositive | MEDIUM |
 | `node/cwe-601/open-redirect-safe.js` | CWE-601 | js/react-window-location-user-input | TrueNegative | — |
+| `node/taint/sqli-1hop.js` | CWE-89 | js-sql-string-concat | TruePositive | HIGH |
+| `node/taint/sqli-2hop.js` | CWE-89 | js-sql-string-concat | TruePositive | HIGH |
+| `node/taint/cmdi-1hop.js` | CWE-78 | js-spawn-shell-true | TruePositive | CRITICAL |
+| `node/taint/cmdi-2hop.js` | CWE-78 | js-spawn-shell-true | TruePositive | CRITICAL |
+| `node/taint/path-1hop.js` | CWE-22 | js-path-traversal-fs-readfile | TruePositive | HIGH |
+| `node/taint/path-2hop.js` | CWE-22 | js-path-traversal-fs-readfile | TruePositive | HIGH |
+| `node/taint/xss-1hop.js` | CWE-79 | js-xss-innerhtml-assignment | TruePositive | HIGH |
+| `node/taint/xss-2hop.js` | CWE-79 | js-xss-innerhtml-assignment | TruePositive | HIGH |
+| `node/taint/ssrf-1hop.js` | CWE-918 | js-ssrf-fetch-user-url | TruePositive | HIGH |
+| `node/taint/ssrf-2hop.js` | CWE-918 | js-ssrf-fetch-user-url | TruePositive | HIGH |
 
 ---
 
@@ -177,6 +187,16 @@ Expected total finding count: **133** (one finding per TP file, zero findings pe
 | `python/cwe-532/password-in-log-safe.py` | CWE-532 | py-logging-password | TrueNegative | — |
 | `python/cwe-613/jwt-no-expiry.py` | CWE-613 | py-jwt-no-expiry | TruePositive | MEDIUM |
 | `python/cwe-613/jwt-no-expiry-safe.py` | CWE-613 | py-jwt-no-expiry | TrueNegative | — |
+| `python/taint/sqli-1hop.py` | CWE-89 | py-sqlite3-execute-fstring | TruePositive | CRITICAL |
+| `python/taint/sqli-2hop.py` | CWE-89 | py-sqlite3-execute-fstring | TruePositive | CRITICAL |
+| `python/taint/cmdi-1hop.py` | CWE-78 | py-subprocess-shell-true | TruePositive | CRITICAL |
+| `python/taint/cmdi-2hop.py` | CWE-78 | py-subprocess-shell-true | TruePositive | CRITICAL |
+| `python/taint/path-1hop.py` | CWE-22 | py-tempfile-insecure | TruePositive | MEDIUM |
+| `python/taint/path-2hop.py` | CWE-22 | py-tempfile-insecure | TruePositive | MEDIUM |
+| `python/taint/xss-1hop.py` | CWE-94 | py-flask-render-template-string | TruePositive | CRITICAL |
+| `python/taint/xss-2hop.py` | CWE-94 | py-flask-render-template-string | TruePositive | CRITICAL |
+| `python/taint/ssrf-1hop.py` | CWE-918 | py-requests-get-fstring | TruePositive | HIGH |
+| `python/taint/ssrf-2hop.py` | CWE-918 | py-requests-get-fstring | TruePositive | HIGH |
 
 ---
 
@@ -353,11 +373,11 @@ If the finding count changes or a rule ID / severity does not match this manifes
 
 | Severity | Count |
 |----------|-------|
-| CRITICAL | 35    |
-| HIGH     | 57    |
-| MEDIUM   | 19    |
+| CRITICAL | 49    |
+| HIGH     | 79    |
+| MEDIUM   | 21    |
 | LOW      | 4     |
-| **Total**| **115**|
+| **Total**| **153**|
 
 > **Note:** All paths in the table above are relative to `vuln-sandbox/`. The `vuln-sandbox/` directory is excluded from production scans via the root `.sicarioignore` entry.
 > TN files (marked `TrueNegative`) should produce **zero findings** when scanned. They demonstrate the safe/correct coding pattern for each rule.

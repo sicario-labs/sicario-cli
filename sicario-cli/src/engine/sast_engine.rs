@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tree_sitter::{Query, QueryCursor};
 
 use super::reachability::ReachabilityAnalyzer;
@@ -21,10 +22,11 @@ pub struct SastEngine {
 }
 
 /// A compiled security rule with tree-sitter query
-struct CompiledRule {
-    rule: SecurityRule,
-    queries: HashMap<Language, Query>,
-    pattern_not_queries: HashMap<Language, Query>,
+#[derive(Clone)]
+pub struct CompiledRule {
+    pub rule: SecurityRule,
+    pub queries: HashMap<Language, Arc<Query>>,
+    pub pattern_not_queries: HashMap<Language, Arc<Query>>,
 }
 
 impl SastEngine {
@@ -315,11 +317,13 @@ impl SastEngine {
                         rule.id, language
                     )
                 })?;
-            queries.insert(language, query);
+            queries.insert(language, Arc::new(query));
 
             if let Some(ref pattern_not_str) = rule.pattern.pattern_not {
-                if let Ok(pattern_not_query) = self.compile_query_for_language(pattern_not_str, language) {
-                    pattern_not_queries.insert(language, pattern_not_query);
+                if let Ok(pattern_not_query) =
+                    self.compile_query_for_language(pattern_not_str, language)
+                {
+                    pattern_not_queries.insert(language, Arc::new(pattern_not_query));
                 }
             }
         }
@@ -360,6 +364,11 @@ impl SastEngine {
     /// Get all loaded rules
     pub fn get_rules(&self) -> &[SecurityRule] {
         &self.rules
+    }
+
+    /// Returns all compiled rules currently loaded in the engine.
+    pub fn get_compiled_rules(&self) -> Vec<CompiledRule> {
+        self.compiled_queries.values().cloned().collect()
     }
 
     /// Get a specific rule by ID
@@ -449,7 +458,11 @@ impl SastEngine {
                 // Evaluate pattern-not exclusion filter if present for this language
                 if let Some(pattern_not_query) = compiled_rule.pattern_not_queries.get(&language) {
                     let mut pn_cursor = QueryCursor::new();
-                    if pn_cursor.matches(pattern_not_query, node, source_code.as_bytes()).next().is_some() {
+                    if pn_cursor
+                        .matches(pattern_not_query, node, source_code.as_bytes())
+                        .next()
+                        .is_some()
+                    {
                         continue;
                     }
                 }
@@ -561,8 +574,8 @@ impl SastEngine {
         let mut files_to_scan = Vec::new();
         self.collect_files_recursive(dir, &mut files_to_scan)?;
 
-        // Clone the rules (not the compiled queries) for parallel processing
-        let rules = self.rules.clone();
+        // Pre-compile all rules once before starting the parallel scan
+        let compiled_rules: Vec<CompiledRule> = self.compiled_queries.values().cloned().collect();
         let tree_sitter_exclusions = self.tree_sitter.exclusion_manager.clone();
 
         // Shared atomic counter for findings discovered so far — displayed in
@@ -575,7 +588,8 @@ impl SastEngine {
         let results: Vec<Result<Vec<Vulnerability>>> = files_to_scan
             .par_iter()
             .map(|file_path| {
-                let result = Self::scan_file_parallel(file_path, &rules, &tree_sitter_exclusions);
+                let result =
+                    Self::scan_file_parallel(file_path, &compiled_rules, &tree_sitter_exclusions);
 
                 // Update progress bar from the rayon worker thread.
                 // indicatif's ProgressBar is Send+Sync so this is safe.
@@ -938,7 +952,7 @@ impl SastEngine {
     /// Scan a single file in parallel mode (static method for thread safety)
     pub fn scan_file_parallel(
         path: &Path,
-        rules: &[SecurityRule],
+        rules: &[CompiledRule],
         exclusion_manager: &ExclusionManager,
     ) -> Result<Vec<Vulnerability>> {
         use std::collections::HashSet;
@@ -993,23 +1007,25 @@ impl SastEngine {
             }
         };
 
-        let mut vulnerabilities = Vec::new();
+        let mut vulnerabilities: Vec<Vulnerability> = Vec::new();
         // Dedup key: (rule_id, line) — one finding per rule per line
         let mut seen: HashSet<(String, usize)> = HashSet::new();
 
         // Apply all rules that target this language
-        for rule in rules {
-            if !rule.languages.contains(&language) {
+        for compiled_rule in rules {
+            if !compiled_rule.rule.languages.contains(&language) {
                 continue;
             }
 
-            // Compile the query for this thread
-            let query = Query::new(&ts_language, &rule.pattern.query)
-                .map_err(|e| anyhow::anyhow!("Query compilation error: {:?}", e))?;
+            // Get the pre-compiled query for this language
+            let query = match compiled_rule.queries.get(&language) {
+                Some(q) => q,
+                None => continue,
+            };
 
             // Execute the query on the AST
             let mut cursor = QueryCursor::new();
-            let matches = cursor.matches(&query, tree.root_node(), source_code.as_bytes());
+            let matches = cursor.matches(query, tree.root_node(), source_code.as_bytes());
 
             // Process each match — take only the first (widest) capture per match
             for query_match in matches {
@@ -1027,12 +1043,14 @@ impl SastEngine {
                 let node = capture.node;
 
                 // Evaluate pattern-not exclusion filter on-the-fly if present
-                if let Some(ref pattern_not_str) = rule.pattern.pattern_not {
-                    if let Ok(pattern_not_query) = Query::new(&ts_language, pattern_not_str) {
-                        let mut pn_cursor = QueryCursor::new();
-                        if pn_cursor.matches(&pattern_not_query, node, source_code.as_bytes()).next().is_some() {
-                            continue;
-                        }
+                if let Some(pattern_not_query) = compiled_rule.pattern_not_queries.get(&language) {
+                    let mut pn_cursor = QueryCursor::new();
+                    if pn_cursor
+                        .matches(pattern_not_query, node, source_code.as_bytes())
+                        .next()
+                        .is_some()
+                    {
+                        continue;
                     }
                 }
 
@@ -1040,7 +1058,7 @@ impl SastEngine {
                 let line = start_position.row + 1;
 
                 // Deduplicate: one finding per rule per line
-                let dedup_key = (rule.id.clone(), line);
+                let dedup_key = (compiled_rule.rule.id.clone(), line);
                 if seen.contains(&dedup_key) {
                     continue;
                 }
@@ -1054,19 +1072,19 @@ impl SastEngine {
 
                 // Create vulnerability with metadata
                 let mut vulnerability = Vulnerability::new(
-                    rule.id.clone(),
+                    compiled_rule.rule.id.clone(),
                     path.to_path_buf(),
                     line,
                     start_position.column + 1,
                     snippet.clone(),
-                    rule.severity,
+                    compiled_rule.rule.severity,
                 );
 
                 // Add CWE ID, OWASP category, and confidence from rule
-                vulnerability.cwe_id = rule.cwe_id.clone();
-                vulnerability.owasp_category = rule.owasp_category;
-                vulnerability.confidence_level = rule.confidence;
-                vulnerability.confidence_score = match rule.confidence {
+                vulnerability.cwe_id = compiled_rule.rule.cwe_id.clone();
+                vulnerability.owasp_category = compiled_rule.rule.owasp_category;
+                vulnerability.confidence_level = compiled_rule.rule.confidence;
+                vulnerability.confidence_score = match compiled_rule.rule.confidence {
                     crate::engine::security_rule::ConfidenceLevel::High => 0.9,
                     crate::engine::security_rule::ConfidenceLevel::Medium => 0.5,
                     crate::engine::security_rule::ConfidenceLevel::Low => 0.2,
@@ -1078,15 +1096,25 @@ impl SastEngine {
                         compute_code_hash, compute_match_based_id, compute_syntactic_id,
                     };
                     let rel_path = path.to_string_lossy().replace('\\', "/");
-                    let match_idx = seen.len();
+
+                    // match_idx should be per-rule and 0-indexed for stability.
+                    // We count how many findings for THIS rule we've already added.
+                    let match_idx = vulnerabilities
+                        .iter()
+                        .filter(|v| v.rule_id == compiled_rule.rule.id)
+                        .count();
+
                     vulnerability.match_based_id = Some(compute_match_based_id(
                         &rel_path,
-                        &rule.id,
-                        &rule.pattern.query,
+                        &compiled_rule.rule.id,
+                        &compiled_rule.rule.pattern.query,
                         match_idx,
                     ));
                     vulnerability.syntactic_id = Some(compute_syntactic_id(
-                        &rel_path, &rule.id, &snippet, match_idx,
+                        &rel_path,
+                        &compiled_rule.rule.id,
+                        &snippet,
+                        match_idx,
                     ));
                     vulnerability.code_hash = Some(compute_code_hash(&snippet));
                 }
@@ -1225,7 +1253,7 @@ impl SastEngine {
             format!("{:x}", hasher.finalize())
         };
 
-        let rules = self.rules.clone();
+        let rules = self.get_compiled_rules();
         let exclusion_mgr = self.tree_sitter.exclusion_manager.clone();
         let suppression_parser = SuppressionParser::new();
 

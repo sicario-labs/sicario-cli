@@ -32,6 +32,7 @@
     - Go
   pattern:
     query: "(call_expression function: (selector_expression field: (field_identifier) @fn (#eq? @fn \"Redirect\")) arguments: (argument_list (_) (_) (_) @url)) @call"
+    pattern-not: "(call_expression arguments: (argument_list (_) (_) [(interpreted_string_literal) (raw_string_literal)]))"
     captures:
       - "call"
   cwe_id: "CWE-601"

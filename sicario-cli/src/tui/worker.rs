@@ -102,7 +102,7 @@ fn run_scan(job: ScanJob, tx: &Sender<TuiMessage>) -> Result<()> {
     });
 
     // Phase 2: Scan each file individually and stream progress
-    let rules = engine.get_rules().to_vec();
+    let rules = engine.get_compiled_rules();
     let exclusion_mgr = engine.exclusion_manager();
 
     for (idx, file_path) in files_to_scan.iter().enumerate() {

@@ -32,12 +32,21 @@ REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 SANDBOX_DIR="$SCRIPT_DIR"
 MANIFEST="$SANDBOX_DIR/MANIFEST.md"
 
-# --- Prerequisite checks -----------------------------------------------------
-if ! command -v sicario &>/dev/null; then
-  echo "x Smoke test FAILED: 'sicario' not found in PATH"
-  echo "  Build and install the CLI first: cargo install --path sicario-cli"
+# --- Resolve sicario binary --------------------------------------------------
+SICARIO_BIN="$REPO_ROOT/target/debug/sicario"
+if [ -f "${SICARIO_BIN}.exe" ]; then
+  SICARIO_BIN="${SICARIO_BIN}.exe"
+fi
+
+if [ ! -f "$SICARIO_BIN" ]; then
+  echo "x Smoke test FAILED: 'sicario' binary not found at $SICARIO_BIN"
+  echo "  Build it first: cargo build -p sicario-cli"
   exit 2
 fi
+
+# Override PATH to ensure 'sicario' command resolves to our local build
+# for any sub-shells that might be spawned.
+export PATH="$(dirname "$SICARIO_BIN"):$PATH"
 
 if ! command -v jq &>/dev/null; then
   echo "x Smoke test FAILED: 'jq' not found in PATH"

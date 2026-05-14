@@ -41,7 +41,7 @@ impl BehavioralScanner {
         // Scan each file directly using the parallel scan path with a fresh
         // exclusion manager that has no gitignore rules — this bypasses the
         // parent project's .gitignore which typically excludes node_modules/.
-        let rules = engine.get_rules().to_vec();
+        let rules = engine.get_compiled_rules();
         let empty_exclusions = crate::parser::ExclusionManager::new_empty();
         let mut vulnerabilities = Vec::new();
         for file_path in &js_files {

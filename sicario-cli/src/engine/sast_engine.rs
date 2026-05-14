@@ -56,7 +56,9 @@ impl SastEngine {
 
     /// Add extra exclude glob patterns (Task 60.2: --exclude flag).
     pub fn add_exclude_patterns(&mut self, patterns: &[String]) -> anyhow::Result<()> {
-        self.tree_sitter.exclusion_manager.add_exclude_patterns(patterns)
+        self.tree_sitter
+            .exclusion_manager
+            .add_exclude_patterns(patterns)
     }
 
     /// Load a set of hardcoded default rules that work out-of-the-box without
@@ -468,9 +470,7 @@ impl SastEngine {
                     use crate::engine::fingerprint::{
                         compute_code_hash, compute_match_based_id, compute_syntactic_id,
                     };
-                    let rel_path = path
-                        .to_string_lossy()
-                        .replace('\\', "/");
+                    let rel_path = path.to_string_lossy().replace('\\', "/");
                     // match_based_id uses the rule pattern (stable across line shifts)
                     let pattern_with_values = &compiled_rule.rule.pattern.query;
                     let match_idx = seen.len(); // approximate index
@@ -556,8 +556,7 @@ impl SastEngine {
         let results: Vec<Result<Vec<Vulnerability>>> = files_to_scan
             .par_iter()
             .map(|file_path| {
-                let result =
-                    Self::scan_file_parallel(file_path, &rules, &tree_sitter_exclusions);
+                let result = Self::scan_file_parallel(file_path, &rules, &tree_sitter_exclusions);
 
                 // Update progress bar from the rayon worker thread.
                 // indicatif's ProgressBar is Send+Sync so this is safe.
@@ -569,10 +568,7 @@ impl SastEngine {
                             + vulns.len();
 
                         // Show basename + live count — keep it compact
-                        let name = file_path
-                            .file_name()
-                            .and_then(|n| n.to_str())
-                            .unwrap_or("");
+                        let name = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
                         pb.set_message(format!("{name}  ({new_count} findings)"));
                     }
                     pb.inc(1);
@@ -584,8 +580,7 @@ impl SastEngine {
 
         // Finish the progress bar with a completion message
         if let Some(pb) = progress {
-            let total_findings =
-                findings_count.load(std::sync::atomic::Ordering::Relaxed);
+            let total_findings = findings_count.load(std::sync::atomic::Ordering::Relaxed);
             pb.finish_with_message(format!(
                 "Done — {total_findings} findings in {} files",
                 files_to_scan.len()
@@ -781,10 +776,11 @@ impl SastEngine {
                     if !trimmed.is_empty() {
                         let path = dir.join(trimmed);
                         // Gracefully handle deleted or renamed staged files by checking is_file()
-                        if path.is_file() && self.tree_sitter.should_scan_file(&path) {
-                            if Language::from_path(&path).is_some() {
-                                files.push(path);
-                            }
+                        if path.is_file()
+                            && self.tree_sitter.should_scan_file(&path)
+                            && Language::from_path(&path).is_some()
+                        {
+                            files.push(path);
                         }
                     }
                 }
@@ -857,13 +853,11 @@ impl SastEngine {
                     let trimmed = line.trim();
                     if !trimmed.is_empty() {
                         let path = dir.join(trimmed);
-                        if path.is_file() {
-                            if Language::from_path(&path).is_some() {
-                                if self.tree_sitter.should_scan_file(&path) {
-                                    files.push(path);
-                                } else {
-                                    ignored += 1;
-                                }
+                        if path.is_file() && Language::from_path(&path).is_some() {
+                            if self.tree_sitter.should_scan_file(&path) {
+                                files.push(path);
+                            } else {
+                                ignored += 1;
                             }
                         }
                     }
@@ -1062,10 +1056,7 @@ impl SastEngine {
                         match_idx,
                     ));
                     vulnerability.syntactic_id = Some(compute_syntactic_id(
-                        &rel_path,
-                        &rule.id,
-                        &snippet,
-                        match_idx,
+                        &rel_path, &rule.id, &snippet, match_idx,
                     ));
                     vulnerability.code_hash = Some(compute_code_hash(&snippet));
                 }

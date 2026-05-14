@@ -104,10 +104,8 @@ pub fn render_diagnostics(
     });
 
     // Check if multiple scan types exist for prefixing lines where needed
-    let scan_types: std::collections::HashSet<&str> = vulns
-        .iter()
-        .map(|v| v.scan_type.as_str())
-        .collect();
+    let scan_types: std::collections::HashSet<&str> =
+        vulns.iter().map(|v| v.scan_type.as_str()).collect();
     let multi_scan_type = scan_types.len() > 1;
 
     // Instantiate deterministic template registry once to check auto-fixability
@@ -142,7 +140,10 @@ pub fn render_diagnostics(
             format!(" ({})", breakdown.join(", "))
         };
 
-        let header_text = format!("━━ {} ━━━━━━━━━━━━━━━━━━━━━━━ {} {}{}", file_display, total, findings_str, breakdown_str);
+        let header_text = format!(
+            "━━ {} ━━━━━━━━━━━━━━━━━━━━━━━ {} {}{}",
+            file_display, total, findings_str, breakdown_str
+        );
         if color_enabled {
             writeln!(writer, "{}", header_text.bright_blue().bold())?;
         } else {
@@ -168,11 +169,24 @@ pub fn render_diagnostics(
             render_one(vuln, color_enabled, writer)?;
 
             // Append inline remediation / fix command hint (Task 3.1)
-            let has_template = registry.lookup(&vuln.rule_id, vuln.cwe_id.as_deref()).is_some() ||
-                               registry.lookup_multi(&vuln.rule_id, vuln.cwe_id.as_deref()).is_some();
+            let has_template = registry
+                .lookup(&vuln.rule_id, vuln.cwe_id.as_deref())
+                .is_some()
+                || registry
+                    .lookup_multi(&vuln.rule_id, vuln.cwe_id.as_deref())
+                    .is_some();
 
-            let auto_fix_badge = if has_template { "  (auto-fixable ✓)" } else { "" };
-            let fix_cmd = format!("sicario fix --rule {} --file {} --line {}", vuln.rule_id, vuln.file_path.display(), vuln.line);
+            let auto_fix_badge = if has_template {
+                "  (auto-fixable ✓)"
+            } else {
+                ""
+            };
+            let fix_cmd = format!(
+                "sicario fix --rule {} --file {} --line {}",
+                vuln.rule_id,
+                vuln.file_path.display(),
+                vuln.line
+            );
 
             if color_enabled {
                 write!(writer, "  {}:  {}", "fix".green().bold(), fix_cmd)?;
@@ -191,7 +205,10 @@ pub fn render_diagnostics(
 
     // Render standalone SCA synthetic findings if any exist
     if !sca_vulns.is_empty() {
-        let header_text = format!("━━ Dependencies (SCA) ━━━━━━━━━━━━━━━━━━━━━━━ {} findings", sca_vulns.len());
+        let header_text = format!(
+            "━━ Dependencies (SCA) ━━━━━━━━━━━━━━━━━━━━━━━ {} findings",
+            sca_vulns.len()
+        );
         if color_enabled {
             writeln!(writer, "{}", header_text.bright_blue().bold())?;
         } else {

@@ -217,7 +217,8 @@ mod tests {
             severity: "High".to_string(),
             file: "src/db.py".to_string(),
             line: 42,
-            file_hash: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".to_string(),
+            file_hash: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                .to_string(),
             cwe_id: Some("CWE-89".to_string()),
             owasp_category: Some("A03".to_string()),
             fingerprint: None,

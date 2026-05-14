@@ -32,7 +32,6 @@ pub mod fix_staged_tests;
 use clap::{Parser, Subcommand};
 
 use self::attack::AttackArgs;
-use self::zero_exfil_audit::AuditCommand;
 use self::baseline::BaselineCommand;
 use self::benchmark::BenchmarkArgs;
 use self::cache::CacheCommand;
@@ -51,6 +50,7 @@ use self::rules::RulesCommand;
 use self::scan::ScanArgs;
 use self::suppressions::SuppressionsCommand;
 use self::triage::TriageArgs;
+use self::zero_exfil_audit::AuditCommand;
 
 /// Next-gen SAST security scanner
 #[derive(Parser, Debug)]

@@ -170,31 +170,69 @@ pub fn print_scan_summary(
     let semgrep_estimate = duration_secs * 10.0;
 
     let total_f = summary.total_findings as f64;
-    let crit_pct = if total_f > 0.0 { (summary.critical_count as f64 / total_f) * 100.0 } else { 0.0 };
-    let high_pct = if total_f > 0.0 { (summary.high_count as f64 / total_f) * 100.0 } else { 0.0 };
-    let med_pct = if total_f > 0.0 { (summary.medium_count as f64 / total_f) * 100.0 } else { 0.0 };
-    let low_pct = if total_f > 0.0 { (summary.low_count as f64 / total_f) * 100.0 } else { 0.0 };
-    let info_pct = if total_f > 0.0 { (summary.info_count as f64 / total_f) * 100.0 } else { 0.0 };
+    let crit_pct = if total_f > 0.0 {
+        (summary.critical_count as f64 / total_f) * 100.0
+    } else {
+        0.0
+    };
+    let high_pct = if total_f > 0.0 {
+        (summary.high_count as f64 / total_f) * 100.0
+    } else {
+        0.0
+    };
+    let med_pct = if total_f > 0.0 {
+        (summary.medium_count as f64 / total_f) * 100.0
+    } else {
+        0.0
+    };
+    let low_pct = if total_f > 0.0 {
+        (summary.low_count as f64 / total_f) * 100.0
+    } else {
+        0.0
+    };
+    let info_pct = if total_f > 0.0 {
+        (summary.info_count as f64 / total_f) * 100.0
+    } else {
+        0.0
+    };
 
-    let findings_line = format!(
-        "Findings: {} total",
-        summary.total_findings
-    );
+    let findings_line = format!("Findings: {} total", summary.total_findings);
     let breakdown_line = format!(
         "Severity: C:{}({:.0}%) H:{}({:.0}%) M:{}({:.0}%) L:{}({:.0}%) I:{}({:.0}%)",
-        summary.critical_count, crit_pct,
-        summary.high_count, high_pct,
-        summary.medium_count, med_pct,
-        summary.low_count, low_pct,
-        summary.info_count, info_pct
+        summary.critical_count,
+        crit_pct,
+        summary.high_count,
+        high_pct,
+        summary.medium_count,
+        med_pct,
+        summary.low_count,
+        low_pct,
+        summary.info_count,
+        info_pct
     );
 
     let bar_width = 30;
-    let crit_len = if total_f > 0.0 { (crit_pct / 100.0 * bar_width as f64).round() as usize } else { 0 };
-    let high_len = if total_f > 0.0 { (high_pct / 100.0 * bar_width as f64).round() as usize } else { 0 };
-    let med_len = if total_f > 0.0 { (med_pct / 100.0 * bar_width as f64).round() as usize } else { 0 };
-    let low_len = if total_f > 0.0 { (low_pct / 100.0 * bar_width as f64).round() as usize } else { 0 };
-    
+    let crit_len = if total_f > 0.0 {
+        (crit_pct / 100.0 * bar_width as f64).round() as usize
+    } else {
+        0
+    };
+    let high_len = if total_f > 0.0 {
+        (high_pct / 100.0 * bar_width as f64).round() as usize
+    } else {
+        0
+    };
+    let med_len = if total_f > 0.0 {
+        (med_pct / 100.0 * bar_width as f64).round() as usize
+    } else {
+        0
+    };
+    let low_len = if total_f > 0.0 {
+        (low_pct / 100.0 * bar_width as f64).round() as usize
+    } else {
+        0
+    };
+
     let (crit_char, high_char, med_char, low_char, info_char) = if unicode {
         ("█", "▓", "▒", "░", "-")
     } else {
@@ -206,7 +244,7 @@ pub fn print_scan_summary(
     visual_bar.push_str(&high_char.repeat(high_len));
     visual_bar.push_str(&med_char.repeat(med_len));
     visual_bar.push_str(&low_char.repeat(low_len));
-    
+
     let current_len = crit_len + high_len + med_len + low_len;
     if current_len < bar_width && total_f > 0.0 {
         visual_bar.push_str(&info_char.repeat(bar_width - current_len));

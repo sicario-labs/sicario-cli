@@ -12,6 +12,7 @@ use crate::engine::Vulnerability;
 
 /// Main TUI application state variants
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum AppState {
     Welcome,
     /// Zero-configuration onboarding: auto-detection results displayed before scan
@@ -69,6 +70,7 @@ pub enum AppState {
 
 /// Messages sent from worker threads to the TUI via mpsc channels
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum TuiMessage {
     ScanProgress {
         files_scanned: usize,

@@ -721,21 +721,30 @@ mod tests {
         let entries = vec![
             PatchHistoryEntry {
                 patch_id: "rule-1-0001".to_string(),
-                applied_at: Utc.with_ymd_and_hms(2024, 1, 1, 2, 0, 0).unwrap().to_rfc3339(),
+                applied_at: Utc
+                    .with_ymd_and_hms(2024, 1, 1, 2, 0, 0)
+                    .unwrap()
+                    .to_rfc3339(),
                 file_path: PathBuf::from("src/app.js"),
                 backup_path: PathBuf::from(".sicario/backups/1/app.js"),
                 resolution_type: Some("fixed".to_string()),
             },
             PatchHistoryEntry {
                 patch_id: "rule-1-0002".to_string(),
-                applied_at: Utc.with_ymd_and_hms(2024, 1, 1, 4, 0, 0).unwrap().to_rfc3339(),
+                applied_at: Utc
+                    .with_ymd_and_hms(2024, 1, 1, 4, 0, 0)
+                    .unwrap()
+                    .to_rfc3339(),
                 file_path: PathBuf::from("src/app.js"),
                 backup_path: PathBuf::from(".sicario/backups/2/app.js"),
                 resolution_type: Some("fixed".to_string()),
             },
             PatchHistoryEntry {
                 patch_id: "rule-1-0003".to_string(),
-                applied_at: Utc.with_ymd_and_hms(2024, 1, 1, 6, 0, 0).unwrap().to_rfc3339(),
+                applied_at: Utc
+                    .with_ymd_and_hms(2024, 1, 1, 6, 0, 0)
+                    .unwrap()
+                    .to_rfc3339(),
                 file_path: PathBuf::from("src/app.js"),
                 backup_path: PathBuf::from(".sicario/backups/3/app.js"),
                 resolution_type: Some("removed".to_string()),

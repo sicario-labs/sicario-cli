@@ -79,9 +79,18 @@ impl AccuracyResult {
             "║ Target:    {:<38}║\n",
             truncate(&self.target_dir, 38)
         ));
-        s.push_str(&format!("║ TP:        {:>5}                                  ║\n", self.total_tp));
-        s.push_str(&format!("║ FP:        {:>5}                                  ║\n", self.total_fp));
-        s.push_str(&format!("║ FN:        {:>5}                                  ║\n", self.total_fn));
+        s.push_str(&format!(
+            "║ TP:        {:>5}                                  ║\n",
+            self.total_tp
+        ));
+        s.push_str(&format!(
+            "║ FP:        {:>5}                                  ║\n",
+            self.total_fp
+        ));
+        s.push_str(&format!(
+            "║ FN:        {:>5}                                  ║\n",
+            self.total_fn
+        ));
         s.push_str(&format!(
             "║ Precision: {:>6.1}%                                ║\n",
             self.precision * 100.0
@@ -271,14 +280,16 @@ impl AccuracyBenchmark {
                     } else {
                         fn_count += 1;
                         stat.2 += 1;
-                        false_negatives.push(format!("{} (rule: {})", entry.file_path, entry.rule_id));
+                        false_negatives
+                            .push(format!("{} (rule: {})", entry.file_path, entry.rule_id));
                     }
                 }
                 ManifestOutcome::TrueNegative => {
                     if fired {
                         fp += 1;
                         stat.1 += 1;
-                        false_positives.push(format!("{} (rule: {})", entry.file_path, entry.rule_id));
+                        false_positives
+                            .push(format!("{} (rule: {})", entry.file_path, entry.rule_id));
                     }
                     // TN that correctly produced no finding: not counted in TP/FP/FN
                 }

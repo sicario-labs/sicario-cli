@@ -26,6 +26,7 @@ import type * as jira from "../jira.js";
 import type * as managedCi from "../managedCi.js";
 import type * as memberships from "../memberships.js";
 import type * as notifications from "../notifications.js";
+import type * as orgApiTokens from "../orgApiTokens.js";
 import type * as organizations from "../organizations.js";
 import type * as planEnforcer from "../planEnforcer.js";
 import type * as policies from "../policies.js";
@@ -71,6 +72,7 @@ declare const fullApi: ApiFromModules<{
   managedCi: typeof managedCi;
   memberships: typeof memberships;
   notifications: typeof notifications;
+  orgApiTokens: typeof orgApiTokens;
   organizations: typeof organizations;
   planEnforcer: typeof planEnforcer;
   policies: typeof policies;

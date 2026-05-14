@@ -3,7 +3,7 @@ members = ["sicario-cli"]
 resolver = "2"
 
 [workspace.package]
-version = "0.3.0"
+version = "0.3.5"
 edition = "2021"
 authors = ["Sicario Team"]
 license = "FSL-1.1"

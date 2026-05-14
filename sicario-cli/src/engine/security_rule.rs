@@ -178,6 +178,9 @@ pattern:
     - "id"
 "#;
         let result: Result<SecurityRule, _> = serde_yaml::from_str(yaml);
-        assert!(result.is_err(), "Rule without confidence should fail deserialization");
+        assert!(
+            result.is_err(),
+            "Rule without confidence should fail deserialization"
+        );
     }
 }

@@ -98,7 +98,11 @@ mod tests {
             0,
         );
         // Should be hex_hash_0
-        assert!(id.ends_with("_0"), "match_based_id should end with _0: {}", id);
+        assert!(
+            id.ends_with("_0"),
+            "match_based_id should end with _0: {}",
+            id
+        );
         assert!(id.len() > 10, "match_based_id should be non-trivial");
     }
 
@@ -126,14 +130,20 @@ mod tests {
     fn test_match_based_id_differs_for_different_rules() {
         let id1 = compute_match_based_id("src/app.js", "js-eval", "eval($X)", 0);
         let id2 = compute_match_based_id("src/app.js", "js-xss", "eval($X)", 0);
-        assert_ne!(id1, id2, "different rule_id should produce different match_based_id");
+        assert_ne!(
+            id1, id2,
+            "different rule_id should produce different match_based_id"
+        );
     }
 
     #[test]
     fn test_match_based_id_differs_for_different_files() {
         let id1 = compute_match_based_id("src/a.js", "js-eval", "eval($X)", 0);
         let id2 = compute_match_based_id("src/b.js", "js-eval", "eval($X)", 0);
-        assert_ne!(id1, id2, "different file_path should produce different match_based_id");
+        assert_ne!(
+            id1, id2,
+            "different file_path should produce different match_based_id"
+        );
     }
 
     #[test]
@@ -154,7 +164,10 @@ mod tests {
     #[test]
     fn test_code_hash_format() {
         let hash = compute_code_hash("eval(userInput)");
-        assert!(hash.starts_with("sha256:"), "code_hash must start with 'sha256:'");
+        assert!(
+            hash.starts_with("sha256:"),
+            "code_hash must start with 'sha256:'"
+        );
         assert_eq!(hash.len(), 7 + 64, "sha256: prefix + 64 hex chars");
     }
 

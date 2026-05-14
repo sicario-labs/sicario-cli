@@ -113,11 +113,9 @@ pub fn create_discovery_progress(config: &FormatterConfig) -> ProgressBar {
 
     let pb = ProgressBar::new_spinner();
     pb.set_style(
-        ProgressStyle::with_template(
-            "{spinner:.cyan}  Collecting files… {msg}",
-        )
-        .unwrap()
-        .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
+        ProgressStyle::with_template("{spinner:.cyan}  Collecting files… {msg}")
+            .unwrap()
+            .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
     );
     pb.enable_steady_tick(std::time::Duration::from_millis(80));
     pb
@@ -160,11 +158,9 @@ pub fn create_phase_progress(phase_label: &str, config: &FormatterConfig) -> Pro
 
     let pb = ProgressBar::new_spinner();
     pb.set_style(
-        ProgressStyle::with_template(
-            "{spinner:.yellow}  {msg}",
-        )
-        .unwrap()
-        .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
+        ProgressStyle::with_template("{spinner:.yellow}  {msg}")
+            .unwrap()
+            .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
     );
     pb.set_message(phase_label.to_string());
     pb.enable_steady_tick(std::time::Duration::from_millis(80));

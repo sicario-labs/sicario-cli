@@ -32,20 +32,12 @@ fn arb_vulnerability() -> impl Strategy<Value = Vulnerability> {
         arb_severity(),
         any::<bool>(),
     )
-        .prop_map(
-            |(rule_id, file, line, col, snippet, severity, reachable)| {
-                let mut v = Vulnerability::new(
-                    rule_id,
-                    PathBuf::from(file),
-                    line,
-                    col,
-                    snippet,
-                    severity,
-                );
-                v.reachable = reachable;
-                v
-            },
-        )
+        .prop_map(|(rule_id, file, line, col, snippet, severity, reachable)| {
+            let mut v =
+                Vulnerability::new(rule_id, PathBuf::from(file), line, col, snippet, severity);
+            v.reachable = reachable;
+            v
+        })
 }
 
 fn arb_tui_message() -> impl Strategy<Value = TuiMessage> {

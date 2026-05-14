@@ -2991,7 +2991,7 @@ dependencies = [
 
 [[package]]
 name = "sicario-cli"
-version = "0.3.0"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "base64-url",

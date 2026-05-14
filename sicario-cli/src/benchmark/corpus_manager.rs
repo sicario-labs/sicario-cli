@@ -230,7 +230,8 @@ impl CorpusManager {
         let status = std::process::Command::new("git")
             .args([
                 "clone",
-                "--depth", "1",
+                "--depth",
+                "1",
                 "--single-branch",
                 repo.url,
                 &dest.to_string_lossy(),
@@ -347,14 +348,8 @@ mod tests {
         assert!(base.starts_with(tmp.path()));
         // The last two components should be ".sicario" and "fp-corpus"
         let mut components = base.components().rev();
-        assert_eq!(
-            components.next().unwrap().as_os_str(),
-            "fp-corpus"
-        );
-        assert_eq!(
-            components.next().unwrap().as_os_str(),
-            ".sicario"
-        );
+        assert_eq!(components.next().unwrap().as_os_str(), "fp-corpus");
+        assert_eq!(components.next().unwrap().as_os_str(), ".sicario");
     }
 
     #[test]

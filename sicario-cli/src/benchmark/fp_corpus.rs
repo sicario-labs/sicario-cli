@@ -160,10 +160,22 @@ mod tests {
     fn all_repos_have_non_empty_fields() {
         for repo in FP_CORPUS_REPOS {
             assert!(!repo.name.is_empty(), "Repo has empty name");
-            assert!(!repo.display_name.is_empty(), "Repo '{}' has empty display_name", repo.name);
+            assert!(
+                !repo.display_name.is_empty(),
+                "Repo '{}' has empty display_name",
+                repo.name
+            );
             assert!(!repo.url.is_empty(), "Repo '{}' has empty url", repo.name);
-            assert!(!repo.languages.is_empty(), "Repo '{}' has no languages", repo.name);
-            assert!(!repo.description.is_empty(), "Repo '{}' has empty description", repo.name);
+            assert!(
+                !repo.languages.is_empty(),
+                "Repo '{}' has no languages",
+                repo.name
+            );
+            assert!(
+                !repo.description.is_empty(),
+                "Repo '{}' has empty description",
+                repo.name
+            );
         }
     }
 

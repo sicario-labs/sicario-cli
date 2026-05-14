@@ -13,8 +13,7 @@ use std::path::{Path, PathBuf};
 
 // ── Formal zero-exfil guarantee statement ────────────────────────────────────
 
-pub const ZERO_EXFIL_GUARANTEE: &str =
-    "Source code is never transmitted to Sicario Cloud. \
+pub const ZERO_EXFIL_GUARANTEE: &str = "Source code is never transmitted to Sicario Cloud. \
      A one-way SHA-256 hash of matched code is uploaded for deduplication. \
      The hash is not reversible to source code. \
      Raw code excerpts are only transmitted when --publish-with-snippet is \
@@ -91,12 +90,24 @@ impl AuditLogEntry {
         s.push_str("╔══════════════════════════════════════════════════╗\n");
         s.push_str("║         Zero-Exfiltration Audit Log              ║\n");
         s.push_str("╠══════════════════════════════════════════════════╣\n");
-        s.push_str(&format!("║ Scan ID:    {:<38}║\n", truncate(&self.scan_id, 38)));
-        s.push_str(&format!("║ Started:    {:<38}║\n", truncate(&self.started_at, 38)));
-        s.push_str(&format!("║ Completed:  {:<38}║\n", truncate(&self.completed_at, 38)));
+        s.push_str(&format!(
+            "║ Scan ID:    {:<38}║\n",
+            truncate(&self.scan_id, 38)
+        ));
+        s.push_str(&format!(
+            "║ Started:    {:<38}║\n",
+            truncate(&self.started_at, 38)
+        ));
+        s.push_str(&format!(
+            "║ Completed:  {:<38}║\n",
+            truncate(&self.completed_at, 38)
+        ));
         s.push_str(&format!("║ Files:      {:<38}║\n", self.files_scanned));
         s.push_str(&format!("║ Findings:   {:<38}║\n", self.findings_count));
-        s.push_str(&format!("║ Transmissions: {:<35}║\n", self.transmissions.len()));
+        s.push_str(&format!(
+            "║ Transmissions: {:<35}║\n",
+            self.transmissions.len()
+        ));
         s.push_str("╠══════════════════════════════════════════════════╣\n");
         if self.transmissions.is_empty() {
             s.push_str("║ No outbound transmissions — full air-gap mode.   ║\n");
@@ -125,8 +136,11 @@ impl AuditLogEntry {
 }
 
 fn truncate(s: &str, max: usize) -> String {
-    if s.len() <= max { s.to_string() }
-    else { format!("{}…", &s[..max.saturating_sub(1)]) }
+    if s.len() <= max {
+        s.to_string()
+    } else {
+        format!("{}…", &s[..max.saturating_sub(1)])
+    }
 }
 
 // ── AuditLogger ───────────────────────────────────────────────────────────────
@@ -158,8 +172,8 @@ impl AuditLogger {
         let final_path = self.audit_dir.join(&filename);
         let tmp_path = final_path.with_extension("tmp");
 
-        let json = serde_json::to_string_pretty(entry)
-            .context("Failed to serialize audit log entry")?;
+        let json =
+            serde_json::to_string_pretty(entry).context("Failed to serialize audit log entry")?;
 
         // Atomic write: write to .tmp then rename
         std::fs::write(&tmp_path, &json)
@@ -278,7 +292,10 @@ mod tests {
         let entry = AuditLogEntry::new("scan-002", 10, 0);
         logger.write(&entry).unwrap();
         let loaded = logger.load_latest().unwrap().unwrap();
-        assert!(loaded.transmissions.is_empty(), "No transmissions when no --publish");
+        assert!(
+            loaded.transmissions.is_empty(),
+            "No transmissions when no --publish"
+        );
     }
 
     #[test]
@@ -322,7 +339,10 @@ mod tests {
             .filter_map(|e| e.ok())
             .filter(|e| e.path().extension().is_some_and(|ext| ext == "tmp"))
             .collect();
-        assert!(tmp_files.is_empty(), "No .tmp files should remain after atomic write");
+        assert!(
+            tmp_files.is_empty(),
+            "No .tmp files should remain after atomic write"
+        );
     }
 
     #[test]

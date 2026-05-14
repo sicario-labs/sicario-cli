@@ -758,8 +758,7 @@ impl RemediationEngine {
                 .apply(&vuln.rule_id, vuln.cwe_id.as_deref(), vulnerable_line, lang)?;
 
         // Splice the fixed line back into the full file — splice_patch automatically applies original indentation
-        let fixed_content =
-            splice_patch(original_content, vuln.line, &vuln.snippet, &fixed_line);
+        let fixed_content = splice_patch(original_content, vuln.line, &vuln.snippet, &fixed_line);
 
         // Validate syntax — if the registry fix breaks syntax, fall through to LLM
         if !self.validate_syntax(&fixed_content, &language) {

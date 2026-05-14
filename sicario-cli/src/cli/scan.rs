@@ -354,7 +354,6 @@ pub struct ScanArgs {
     pub learn_suppressions: bool,
 
     // ── Group I: Semgrep Parity flags (Tasks 52–60) ───────────────────────────
-
     /// Enable secrets detection mode (Task 56.1).
     /// Scans for credential patterns: API keys, tokens, connection strings, SSH keys.
     /// Matched secret values are never transmitted — only a one-way SHA-256 hash.

@@ -301,7 +301,11 @@ pub fn compute_priority_score(
     };
 
     let reachability_boost = if reachable { 100.0 } else { 0.0 };
-    let cloud_boost = if cloud_exposed.unwrap_or(false) { 100.0 } else { 0.0 };
+    let cloud_boost = if cloud_exposed.unwrap_or(false) {
+        100.0
+    } else {
+        0.0
+    };
     let hotspot_bonus = if file_hotspot_bonus { 100.0 } else { 0.0 };
 
     // Normalized scale mapping out of 100 total points max weighting:

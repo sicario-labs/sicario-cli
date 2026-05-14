@@ -32,18 +32,9 @@ fn arb_vulnerability() -> impl Strategy<Value = Vulnerability> {
         "[a-zA-Z0-9 ]{5,40}",
         arb_severity(),
     )
-        .prop_map(
-            |(rule_id, file, line, col, snippet, severity)| {
-                Vulnerability::new(
-                    rule_id,
-                    PathBuf::from(file),
-                    line,
-                    col,
-                    snippet,
-                    severity,
-                )
-            },
-        )
+        .prop_map(|(rule_id, file, line, col, snippet, severity)| {
+            Vulnerability::new(rule_id, PathBuf::from(file), line, col, snippet, severity)
+        })
 }
 
 // ── Simulated input event types ───────────────────────────────────────────────

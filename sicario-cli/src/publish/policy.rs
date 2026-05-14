@@ -13,10 +13,11 @@ pub const POLICY_PAYLOAD_VERSION: &str = "1.0";
 // ── Per-rule policy entry ─────────────────────────────────────────────────────
 
 /// Policy mode for a single rule.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum PolicyMode {
     /// Upload finding to dashboard only — no CI impact.
+    #[default]
     Monitor,
     /// Post a PR/MR comment when this rule fires.
     Comment,
@@ -34,12 +35,6 @@ impl std::fmt::Display for PolicyMode {
             PolicyMode::Block => write!(f, "block"),
             PolicyMode::Disabled => write!(f, "disabled"),
         }
-    }
-}
-
-impl Default for PolicyMode {
-    fn default() -> Self {
-        PolicyMode::Monitor
     }
 }
 
@@ -192,7 +187,9 @@ mod tests {
     fn test_policy_version_validation_rejects_unknown() {
         let result = PolicyDownloadPayload::validate_version("99.0");
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Unsupported policy payload version"));
+        assert!(result
+            .unwrap_err()
+            .contains("Unsupported policy payload version"));
     }
 
     #[test]

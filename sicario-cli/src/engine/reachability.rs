@@ -409,7 +409,9 @@ fn call_expression_query(language: Language) -> &'static str {
         Language::Java => r#"(method_invocation name: (identifier) @callee)"#,
         Language::Ruby => r#"(call method: (identifier) @callee)"#,
         Language::Php => r#"(function_call_expression function: (name) @callee)"#,
-        Language::CSharp => r#"(invocation_expression function: (member_access_expression name: (identifier) @callee))"#,
+        Language::CSharp => {
+            r#"(invocation_expression function: (member_access_expression name: (identifier) @callee))"#
+        }
     }
 }
 

@@ -460,7 +460,7 @@ mod tests {
             Ok(output) if output.status.success() => {
                 // Binary found on PATH — verify it is actually executable.
                 let path_str = String::from_utf8_lossy(&output.stdout);
-                let found_path = path_str.trim();
+                let found_path = path_str.lines().next().unwrap_or("").trim();
                 assert!(
                     !found_path.is_empty(),
                     "`{}` returned success but no path. PATH may be misconfigured.",

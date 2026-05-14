@@ -24,6 +24,7 @@ pub struct SastEngine {
 struct CompiledRule {
     rule: SecurityRule,
     queries: HashMap<Language, Query>,
+    pattern_not_queries: HashMap<Language, Query>,
 }
 
 impl SastEngine {
@@ -192,6 +193,7 @@ impl SastEngine {
                 languages: languages.to_vec(),
                 pattern: crate::engine::security_rule::QueryPattern {
                     query: query.to_string(),
+                    pattern_not: None,
                     captures: vec!["call".to_string()],
                 },
                 fix_template: None,
@@ -303,6 +305,7 @@ impl SastEngine {
 
         // Compile tree-sitter queries for each target language
         let mut queries = HashMap::new();
+        let mut pattern_not_queries = HashMap::new();
         for &language in &rule.languages {
             let query = self
                 .compile_query_for_language(&rule.pattern.query, language)
@@ -313,6 +316,12 @@ impl SastEngine {
                     )
                 })?;
             queries.insert(language, query);
+
+            if let Some(ref pattern_not_str) = rule.pattern.pattern_not {
+                if let Ok(pattern_not_query) = self.compile_query_for_language(pattern_not_str, language) {
+                    pattern_not_queries.insert(language, pattern_not_query);
+                }
+            }
         }
 
         // Store compiled rule — replace any existing rule with the same ID
@@ -320,6 +329,7 @@ impl SastEngine {
         let compiled_rule = CompiledRule {
             rule: rule.clone(),
             queries,
+            pattern_not_queries,
         };
         // Remove the old entry from self.rules if one exists with the same ID
         self.rules.retain(|r| r.id != rule.id);
@@ -435,6 +445,15 @@ impl SastEngine {
                 };
 
                 let node = capture.node;
+
+                // Evaluate pattern-not exclusion filter if present for this language
+                if let Some(pattern_not_query) = compiled_rule.pattern_not_queries.get(&language) {
+                    let mut pn_cursor = QueryCursor::new();
+                    if pn_cursor.matches(pattern_not_query, node, source_code.as_bytes()).next().is_some() {
+                        continue;
+                    }
+                }
+
                 let start_position = node.start_position();
                 let line = start_position.row + 1;
 
@@ -1006,6 +1025,17 @@ impl SastEngine {
                 };
 
                 let node = capture.node;
+
+                // Evaluate pattern-not exclusion filter on-the-fly if present
+                if let Some(ref pattern_not_str) = rule.pattern.pattern_not {
+                    if let Ok(pattern_not_query) = Query::new(&ts_language, pattern_not_str) {
+                        let mut pn_cursor = QueryCursor::new();
+                        if pn_cursor.matches(&pattern_not_query, node, source_code.as_bytes()).next().is_some() {
+                            continue;
+                        }
+                    }
+                }
+
                 let start_position = node.start_position();
                 let line = start_position.row + 1;
 
@@ -1471,6 +1501,16 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("Failed to parse YAML"));
+    }
+
+    #[test]
+    fn test_debug_rust_rules_parsing() {
+        let mut engine = SastEngine::new(std::path::Path::new(".")).unwrap();
+        let rules_path = std::path::Path::new("rules/rust/crypto_deser_memory_concurrency.yaml");
+        let result = engine.load_rules(rules_path);
+        if let Err(e) = result {
+            panic!("YAML ERROR IN RUST RULES: {:?}", e);
+        }
     }
 
     #[test]

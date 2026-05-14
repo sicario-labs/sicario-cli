@@ -76,6 +76,7 @@ mod tests {
             languages: vec![Language::JavaScript],
             pattern: QueryPattern {
                 query: "(identifier) @id".to_string(),
+                pattern_not: None,
                 captures: vec!["id".to_string()],
             },
             fix_template: None,

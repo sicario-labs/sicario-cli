@@ -26,6 +26,7 @@ pub fn behavioral_rules() -> Vec<SecurityRule> {
   function: (identifier) @fn (#eq? @fn "require")
   arguments: (arguments (string) @arg (#eq? @arg "'child_process'"))
 ) @call"#.to_string(),
+                pattern_not: None,
                 captures: vec!["call".to_string()],
             },
             fix_template: None,
@@ -49,6 +50,7 @@ pub fn behavioral_rules() -> Vec<SecurityRule> {
   function: (identifier) @fn (#eq? @fn "require")
   arguments: (arguments (string) @arg (#match? @arg "^'(net|http)'$"))
 ) @call"#.to_string(),
+                pattern_not: None,
                 captures: vec!["call".to_string()],
             },
             fix_template: None,
@@ -72,6 +74,7 @@ pub fn behavioral_rules() -> Vec<SecurityRule> {
   function: (identifier) @fn (#eq? @fn "require")
   arguments: (arguments (string) @arg (#match? @arg "^'fs(/promises)?'$"))
 ) @call"#.to_string(),
+                pattern_not: None,
                 captures: vec!["call".to_string()],
             },
             fix_template: None,
@@ -102,6 +105,7 @@ pub fn behavioral_rules() -> Vec<SecurityRule> {
     (await_expression)
   ] @arg)
 ) @call"#.to_string(),
+                pattern_not: None,
                 captures: vec!["call".to_string()],
             },
             fix_template: None,
@@ -127,6 +131,7 @@ pub fn behavioral_rules() -> Vec<SecurityRule> {
     property: (property_identifier) @prop (#eq? @prop "env")
   )
 ) @access"#.to_string(),
+                pattern_not: None,
                 captures: vec!["access".to_string()],
             },
             fix_template: None,
@@ -156,6 +161,7 @@ pub fn behavioral_rules() -> Vec<SecurityRule> {
     (member_expression)
   ] @arg)
 ) @call"#.to_string(),
+                pattern_not: None,
                 captures: vec!["call".to_string()],
             },
             fix_template: None,
@@ -177,6 +183,7 @@ pub fn behavioral_rules() -> Vec<SecurityRule> {
                 // Matches string literals that are 100+ hex characters
                 // tree-sitter #match? uses a regex
                 query: r#"(string) @hex_str (#match? @hex_str "^['\"][0-9a-fA-F]{100,}['\"]$")"#.to_string(),
+                pattern_not: None,
                 captures: vec!["hex_str".to_string()],
             },
             fix_template: None,

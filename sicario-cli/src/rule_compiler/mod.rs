@@ -83,6 +83,7 @@ impl RuleCompiler {
                 languages: vec![language],
                 pattern: QueryPattern {
                     query: query_str.clone(),
+                    pattern_not: None,
                     captures: vec!["match".to_string()],
                 },
                 fix_template: None,
@@ -530,6 +531,7 @@ mod tests {
             pattern: QueryPattern {
                 query: "(call_expression function: (identifier) @fn (#eq? @fn \"eval\")) @call"
                     .to_string(),
+                pattern_not: None,
                 captures: vec!["call".to_string()],
             },
             fix_template: None,
@@ -578,6 +580,7 @@ mod tests {
             languages: vec![Language::Python],
             pattern: QueryPattern {
                 query: "(call function: (identifier) @fn (#eq? @fn \"eval\")) @call".to_string(),
+                pattern_not: None,
                 captures: vec!["call".to_string()],
             },
             fix_template: None,
@@ -664,6 +667,7 @@ mod tests {
             languages: vec![Language::JavaScript],
             pattern: QueryPattern {
                 query: valid_query.to_string(),
+                pattern_not: None,
                 captures: vec!["call".to_string()],
             },
             fix_template: None,
@@ -695,6 +699,7 @@ mod tests {
             languages: vec![Language::JavaScript],
             pattern: QueryPattern {
                 query: "THIS IS NOT VALID TREE-SITTER SYNTAX !!!".to_string(),
+                pattern_not: None,
                 captures: vec!["match".to_string()],
             },
             fix_template: None,

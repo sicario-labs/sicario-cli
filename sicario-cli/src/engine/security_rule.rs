@@ -73,6 +73,8 @@ pub struct SecurityRule {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryPattern {
     pub query: String,
+    #[serde(rename = "pattern-not", default)]
+    pub pattern_not: Option<String>,
     pub captures: Vec<String>,
 }
 

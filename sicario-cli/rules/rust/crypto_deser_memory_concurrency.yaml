@@ -195,7 +195,12 @@
   languages:
     - Rust
   pattern:
-    query: "(type_identifier) @type (#match? @type \"Ecb\")"
+    query: |
+      [
+        (type_identifier) @type
+        (use_declaration argument: (_) @type)
+      ]
+      (#match? @type "Ecb")
     captures:
       - "type"
   cwe_id: "CWE-327"
@@ -307,7 +312,7 @@
   languages:
     - Rust
   pattern:
-    query: "(use_declaration argument: (scoped_identifier path: (identifier) @crate (#eq? @crate \"crypto\"))) @decl"
+    query: "(use_declaration argument: (_) @import (#match? @import \"^crypto::\")) @decl"
     captures:
       - "decl"
   cwe_id: "CWE-327"
@@ -330,6 +335,7 @@
 
 # ============================================================================
 # DESERIALIZATION RULES (8 rules)
+
 # ============================================================================
 
 - id: "rust-serde-json-from-str-untrusted"
@@ -341,6 +347,7 @@
     - Rust
   pattern:
     query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"serde_json\") (#eq? @fn \"from_str\"))) @call"
+    pattern-not: "(macro_invocation macro: (identifier) @m (#match? @m \"^(include_str|include_bytes)$\"))"
     captures:
       - "call"
   cwe_id: "CWE-502"
@@ -369,6 +376,7 @@
     - Rust
   pattern:
     query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"serde_yaml\") (#eq? @fn \"from_str\"))) @call"
+    pattern-not: "(macro_invocation macro: (identifier) @m (#match? @m \"^(include_str|include_bytes)$\"))"
     captures:
       - "call"
   cwe_id: "CWE-502"
@@ -397,6 +405,7 @@
     - Rust
   pattern:
     query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"serde_json\") (#eq? @fn \"from_slice\"))) @call"
+    pattern-not: "(macro_invocation macro: (identifier) @m (#match? @m \"^(include_str|include_bytes)$\"))"
     captures:
       - "call"
   cwe_id: "CWE-502"
@@ -425,6 +434,7 @@
     - Rust
   pattern:
     query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"bincode\") (#match? @fn \"^(deserialize|deserialize_from)$\"))) @call"
+    pattern-not: "(macro_invocation macro: (identifier) @m (#match? @m \"^(include_str|include_bytes)$\"))"
     captures:
       - "call"
   cwe_id: "CWE-502"
@@ -453,6 +463,7 @@
     - Rust
   pattern:
     query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"rmp_serde\") (#match? @fn \"^(from_slice|from_read|decode)$\"))) @call"
+    pattern-not: "(macro_invocation macro: (identifier) @m (#match? @m \"^(include_str|include_bytes)$\"))"
     captures:
       - "call"
   cwe_id: "CWE-502"
@@ -481,6 +492,7 @@
     - Rust
   pattern:
     query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"ciborium\") (#match? @fn \"^(from_reader|de)$\"))) @call"
+    pattern-not: "(macro_invocation macro: (identifier) @m (#match? @m \"^(include_str|include_bytes)$\"))"
     captures:
       - "call"
   cwe_id: "CWE-502"
@@ -509,6 +521,7 @@
     - Rust
   pattern:
     query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"toml\") (#eq? @fn \"from_str\"))) @call"
+    pattern-not: "(macro_invocation macro: (identifier) @m (#match? @m \"^(include_str|include_bytes)$\"))"
     captures:
       - "call"
   cwe_id: "CWE-502"
@@ -537,6 +550,7 @@
     - Rust
   pattern:
     query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"serde_json\") (#eq? @fn \"from_reader\"))) @call"
+    pattern-not: "(macro_invocation macro: (identifier) @m (#match? @m \"^(include_str|include_bytes)$\"))"
     captures:
       - "call"
   cwe_id: "CWE-502"

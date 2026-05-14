@@ -19,7 +19,7 @@ const SICARIO_HOOK_BLOCK: &str = "\
 if [ \"$SICARIO_SKIP_HOOK\" = \"1\" ]; then
   exit 0
 fi
-sicario scan --staged --secrets --fail-on medium --quiet
+sicario scan --staged --secrets --fail-on medium
 # END SICARIO HOOK";
 
 const AUTO_FIX_HOOK_BLOCK: &str = "\
@@ -321,7 +321,7 @@ mod tests {
         assert!(content.starts_with(SHEBANG));
         assert!(content.contains(BEGIN_MARKER));
         assert!(content.contains(END_MARKER));
-        assert!(content.contains("sicario scan --staged --severity-threshold high --quiet"));
+        assert!(content.contains("sicario scan --staged --secrets --fail-on medium"));
         assert!(content.contains("SICARIO_SKIP_HOOK"));
     }
 
@@ -403,7 +403,7 @@ mod tests {
         assert!(st.installed);
         assert_eq!(
             st.command.as_deref(),
-            Some("sicario scan --staged --severity-threshold high --quiet")
+            Some("sicario scan --staged --secrets --fail-on medium")
         );
     }
 
@@ -469,14 +469,14 @@ mod tests {
         mgr.install().unwrap();
 
         let before = std::fs::read_to_string(mgr.pre_commit_path()).unwrap();
-        assert!(before.contains("sicario scan --staged --severity-threshold high --quiet"));
+        assert!(before.contains("sicario scan --staged --secrets --fail-on medium"));
 
         // Now install auto-fix — should replace the Sicario block.
         mgr.install_auto_fix().unwrap();
 
         let after = std::fs::read_to_string(mgr.pre_commit_path()).unwrap();
         // Old scan command should be gone.
-        assert!(!after.contains("sicario scan --staged --severity-threshold high --quiet"));
+        assert!(!after.contains("sicario scan --staged --secrets --fail-on medium"));
         // New auto-fix content should be present.
         assert!(after.contains("sicario fix --staged --format json --quiet"));
         // Markers should still be present exactly once.

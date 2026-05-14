@@ -20,12 +20,24 @@ export default defineSchema({
     slackAlertSeverityThreshold: v.optional(v.string()),
     weeklyDigestEnabled: v.optional(v.boolean()),
     criticalAlertsEnabled: v.optional(v.boolean()),
+
+    // Group O Extensions
+    scanSettings: v.optional(v.any()),
+    globalPathIgnores: v.optional(v.string()),
+    prCommentTriage: v.optional(v.object({
+      enabled: v.boolean(),
+      requireReason: v.boolean(),
+    })),
+    defaultMemberRole: v.optional(v.string()),
+    slug: v.optional(v.string()),
   }).index("by_orgId", ["orgId"]),
 
   teams: defineTable({
     teamId: v.string(),
     name: v.string(),
     orgId: v.string(),
+    parentTeamId: v.optional(v.string()),
+    managerUserId: v.optional(v.string()),
     createdAt: v.string(),
   })
     .index("by_teamId", ["teamId"])
@@ -38,6 +50,7 @@ export default defineSchema({
     description: v.string(),
     orgId: v.string(),
     teamId: v.optional(v.string()),
+    teamIds: v.optional(v.array(v.string())),
     createdAt: v.string(),
 
     // V2 extensions (all optional for backward compatibility)
@@ -192,6 +205,9 @@ export default defineSchema({
     // Req 52: inline suppression
     suppressed: v.optional(v.boolean()),
     suppressionComment: v.optional(v.string()),
+
+    // Task 74: resolutionType ("fixed" | "removed")
+    resolutionType: v.optional(v.string()),
   })
     .index("by_findingId", ["findingId"])
     .index("by_scanId", ["scanId"])
@@ -224,7 +240,18 @@ export default defineSchema({
     deliveryId: v.string(),
     webhookId: v.string(),
     eventType: v.string(),
-    payload: v.any(),
+    payload: v.object({
+      rule_id: v.optional(v.string()),
+      file_path: v.optional(v.string()),
+      line: v.optional(v.number()),
+      severity: v.optional(v.string()),
+      cwe_id: v.optional(v.string()),
+      match_based_id: v.optional(v.string()),
+      triage_state: v.optional(v.string()),
+      project_name: v.optional(v.string()),
+      scan_id: v.optional(v.string()),
+      finding_permalink: v.optional(v.string()),
+    }),
     status: v.string(),
     responseCode: v.optional(v.number()),
     deliveredAt: v.string(),
@@ -411,6 +438,7 @@ export default defineSchema({
     userId: v.optional(v.string()),
     note: v.optional(v.string()),
     timestamp: v.string(),
+    resolutionType: v.optional(v.string()),
   })
     .index("by_findingId", ["findingId"])
     .index("by_orgId_timestamp", ["orgId", "timestamp"]),
@@ -536,4 +564,19 @@ export default defineSchema({
   })
     .index("by_orgId", ["orgId"])
     .index("by_orgId_ruleId", ["orgId", "ruleId"]),
+
+  // ── Group O: API Tokens ──────────────────────────────────────────────────
+  orgApiTokens: defineTable({
+    tokenId: v.string(),
+    orgId: v.string(),
+    name: v.string(),
+    tokenHash: v.string(),
+    expiresAt: v.optional(v.string()),
+    lastUsedAt: v.optional(v.string()),
+    createdBy: v.string(),
+    createdAt: v.string(),
+  })
+    .index("by_tokenId", ["tokenId"])
+    .index("by_orgId", ["orgId"])
+    .index("by_tokenHash", ["tokenHash"]),
 });

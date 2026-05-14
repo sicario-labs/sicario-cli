@@ -606,6 +606,7 @@ impl RemediationEngine {
             applied_at: chrono::Utc::now().to_rfc3339(),
             file_path: patch.file_path.clone(),
             backup_path: backup_path.clone(),
+            resolution_type: Some("fixed".to_string()),
         };
         self.backup_manager.record_patch(entry)?;
 

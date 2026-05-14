@@ -10,6 +10,17 @@ export const list = query({
   },
 });
 
+export const listByOrg = query({
+  args: { orgId: v.string() },
+  handler: async (ctx, args) => {
+    const webhooks = await ctx.db
+      .query("webhooks")
+      .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId))
+      .collect();
+    return webhooks.map(mapWebhook);
+  },
+});
+
 export const create = mutation({
   args: {
     id: v.string(),

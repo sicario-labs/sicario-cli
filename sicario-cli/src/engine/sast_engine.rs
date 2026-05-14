@@ -16,6 +16,8 @@ pub struct SastEngine {
     tree_sitter: TreeSitterEngine,
     compiled_queries: HashMap<String, CompiledRule>,
     reachability: ReachabilityAnalyzer,
+    project_root: PathBuf,
+    staged_only: bool,
 }
 
 /// A compiled security rule with tree-sitter query
@@ -32,7 +34,14 @@ impl SastEngine {
             tree_sitter: TreeSitterEngine::new(project_root)?,
             compiled_queries: HashMap::new(),
             reachability: ReachabilityAnalyzer::new(),
+            project_root: project_root.to_path_buf(),
+            staged_only: false,
         })
+    }
+
+    /// Enable or disable staged-only scanning mode (Task 78.2: --staged flag).
+    pub fn set_staged_only(&mut self, staged_only: bool) {
+        self.staged_only = staged_only;
     }
 
     /// Get a clone of the exclusion manager for use in parallel scanning.
@@ -760,6 +769,29 @@ impl SastEngine {
 
     /// Recursively collect files to scan from a directory
     pub fn collect_files_recursive(&self, dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
+        if self.staged_only {
+            if let Ok(out) = std::process::Command::new("git")
+                .args(["diff", "--cached", "--name-only"])
+                .current_dir(dir)
+                .output()
+            {
+                let lines = String::from_utf8_lossy(&out.stdout);
+                for line in lines.lines() {
+                    let trimmed = line.trim();
+                    if !trimmed.is_empty() {
+                        let path = dir.join(trimmed);
+                        // Gracefully handle deleted or renamed staged files by checking is_file()
+                        if path.is_file() && self.tree_sitter.should_scan_file(&path) {
+                            if Language::from_path(&path).is_some() {
+                                files.push(path);
+                            }
+                        }
+                    }
+                }
+            }
+            return Ok(());
+        }
+
         if !dir.is_dir() {
             return Ok(());
         }
@@ -813,6 +845,33 @@ impl SastEngine {
         dir: &Path,
         files: &mut Vec<PathBuf>,
     ) -> Result<usize> {
+        if self.staged_only {
+            let mut ignored = 0usize;
+            if let Ok(out) = std::process::Command::new("git")
+                .args(["diff", "--cached", "--name-only"])
+                .current_dir(dir)
+                .output()
+            {
+                let lines = String::from_utf8_lossy(&out.stdout);
+                for line in lines.lines() {
+                    let trimmed = line.trim();
+                    if !trimmed.is_empty() {
+                        let path = dir.join(trimmed);
+                        if path.is_file() {
+                            if Language::from_path(&path).is_some() {
+                                if self.tree_sitter.should_scan_file(&path) {
+                                    files.push(path);
+                                } else {
+                                    ignored += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return Ok(ignored);
+        }
+
         let mut ignored = 0usize;
         self.collect_files_with_ignored_count_inner(dir, files, &mut ignored)?;
         Ok(ignored)
@@ -979,9 +1038,15 @@ impl SastEngine {
                     rule.severity,
                 );
 
-                // Add CWE ID and OWASP category from rule
+                // Add CWE ID, OWASP category, and confidence from rule
                 vulnerability.cwe_id = rule.cwe_id.clone();
                 vulnerability.owasp_category = rule.owasp_category;
+                vulnerability.confidence_level = rule.confidence;
+                vulnerability.confidence_score = match rule.confidence {
+                    crate::engine::security_rule::ConfidenceLevel::High => 0.9,
+                    crate::engine::security_rule::ConfidenceLevel::Medium => 0.5,
+                    crate::engine::security_rule::ConfidenceLevel::Low => 0.2,
+                };
 
                 // Task 18: compute fingerprints
                 {

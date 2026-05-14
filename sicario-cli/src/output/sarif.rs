@@ -131,6 +131,9 @@ pub struct SarifPropertyBag {
     /// Whether the finding is in a cloud-exposed service.
     #[serde(rename = "cloudExposed", skip_serializing_if = "Option::is_none")]
     pub cloud_exposed: Option<bool>,
+    /// Scan type that produced this finding.
+    #[serde(rename = "scan_type", skip_serializing_if = "Option::is_none")]
+    pub scan_type: Option<String>,
 }
 
 // ─── Severity Mapping ─────────────────────────────────────────────────────────
@@ -218,6 +221,7 @@ pub fn emit_sarif(vulns: &[Vulnerability], tool_version: &str) -> SarifDocument 
                 properties: Some(SarifPropertyBag {
                     rank: Some(confidence_score * 100.0),
                     cloud_exposed: v.cloud_exposed,
+                    scan_type: Some(v.scan_type.clone()),
                 }),
             }
         })

@@ -92,7 +92,8 @@ pub enum Command {
     Whoami,
     /// Launch the interactive CLI triage wizard
     Triage(TriageArgs),
-    /// Launch the interactive TUI
+    /// Launch the interactive TUI (DEPRECATED)
+    #[command(hide = true)]
     Tui(TuiArgs),
     /// Manage Git pre-commit hooks
     Hook(HookCommand),
@@ -129,6 +130,8 @@ pub enum Command {
     Search(SearchArgs),
     /// Update the local vulnerability database
     Update(UpdateArgs),
+    /// Print CLI version, build date, target platform, and vulnerability database version
+    Version,
 }
 
 /// Arguments for the `completions` subcommand.

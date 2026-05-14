@@ -48,4 +48,15 @@ pub struct BenchmarkArgs {
     /// Requires SICARIO_API_KEY to be set.
     #[arg(long)]
     pub publish: bool,
+
+    /// Quick mode: scan only 3 small repos (Express, Laravel, NestJS) instead
+    /// of all 10. Useful for rapid local validation without waiting for
+    /// clones of Django, Next.js, Rails, etc.
+    #[arg(long)]
+    pub quick: bool,
+
+    /// Maximum number of FP corpus repos to scan (default: all available).
+    /// Useful for iterating quickly: `--fp-corpus --limit 2`.
+    #[arg(long)]
+    pub limit: Option<usize>,
 }

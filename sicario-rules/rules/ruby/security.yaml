@@ -1,0 +1,127 @@
+# Ruby security rules
+# CWE-89: SQL Injection
+# CWE-78: Command Injection
+# CWE-22: Path Traversal
+# CWE-79: Cross-Site Scripting
+# CWE-798: Hardcoded Credentials
+# CWE-918: Server-Side Request Forgery
+
+- id: "ruby/sql-injection"
+  name: "SQL Injection via String Interpolation"
+  description: "Using string interpolation or concatenation to build SQL queries allows attackers to inject arbitrary SQL. Use parameterized queries or ActiveRecord's safe query methods instead."
+  severity: Critical
+  confidence: high
+  languages:
+    - Ruby
+  pattern:
+    query: "(call method: (identifier) @method (#match? @method \"^(execute|query|find_by_sql|select_all|exec_query)$\") arguments: (argument_list (string (interpolation)) @arg)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://guides.rubyonrails.org/security.html#sql-injection"
+  test_cases:
+    - code: 'User.find_by_sql("SELECT * FROM users WHERE id = #{params[:id]}")'
+      expected: TruePositive
+    - code: 'User.where(id: params[:id])'
+      expected: TrueNegative
+
+- id: "ruby/command-injection"
+  name: "Command Injection via system/exec/backtick"
+  description: "Passing user-controlled input to system(), exec(), spawn(), or backtick execution allows arbitrary command execution. Use array form of system() or sanitize input."
+  severity: Critical
+  confidence: high
+  languages:
+    - Ruby
+  pattern:
+    query: "(call method: (identifier) @method (#match? @method \"^(system|exec|spawn|popen)$\") arguments: (argument_list (string (interpolation)) @arg)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/www-community/attacks/Command_Injection"
+  test_cases:
+    - code: 'system("ls #{params[:dir]}")'
+      expected: TruePositive
+    - code: 'system("ls", "/safe/path")'
+      expected: TrueNegative
+
+- id: "ruby/path-traversal"
+  name: "Path Traversal via User-Controlled File Path"
+  description: "Using user-controlled input to construct file paths passed to File.read, File.open, or IO.read allows path traversal attacks. Validate and sanitize file paths."
+  severity: High
+  confidence: high
+  languages:
+    - Ruby
+  pattern:
+    query: "(call method: (identifier) @method (#match? @method \"^(read|open|read_text)$\") receiver: (constant) @recv (#match? @recv \"^(File|IO|Pathname)$\") arguments: (argument_list (string (interpolation)) @arg)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
+  test_cases:
+    - code: 'File.read("/uploads/#{params[:filename]}")'
+      expected: TruePositive
+    - code: 'File.read("/uploads/report.pdf")'
+      expected: TrueNegative
+
+- id: "ruby/xss-erb-unescaped"
+  name: "XSS via Unescaped Output in ERB Template"
+  description: "Using raw output (<%== or html_safe) in ERB templates with user-controlled data enables XSS. Use the default escaped output (<%= ) or explicitly call html_escape."
+  severity: High
+  confidence: high
+  languages:
+    - Ruby
+  pattern:
+    query: "(call method: (identifier) @method (#eq? @method \"html_safe\") receiver: (call method: (identifier) @src (#match? @src \"^(params|request|session)\"))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://guides.rubyonrails.org/security.html#cross-site-scripting-xss"
+  test_cases:
+    - code: 'params[:name].html_safe'
+      expected: TruePositive
+    - code: 'h(params[:name])'
+      expected: TrueNegative
+
+- id: "ruby/hardcoded-secret"
+  name: "Hardcoded Secret in Variable Assignment"
+  description: "Assigning a string literal to a variable named secret, password, api_key, token, or key exposes credentials in source code. Use environment variables or a secrets manager."
+  severity: High
+  confidence: high
+  languages:
+    - Ruby
+  pattern:
+    query: "(assignment left: (identifier) @name (#match? @name \"(?i)(password|passwd|secret|api_key|token|jwt|private_key|access_key)\") right: (string) @val) @assign"
+    captures:
+      - "assign"
+  cwe_id: "CWE-798"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html"
+  test_cases:
+    - code: 'api_key = "sk-abc123xyz"'
+      expected: TruePositive
+    - code: 'api_key = ENV["API_KEY"]'
+      expected: TrueNegative
+
+- id: "ruby/ssrf"
+  name: "SSRF via User-Controlled URL"
+  description: "Passing user-controlled input to Net::HTTP.get, open-uri, RestClient, or HTTParty enables SSRF attacks. Validate URLs against an allowlist of trusted domains."
+  severity: High
+  confidence: high
+  languages:
+    - Ruby
+  pattern:
+    query: "(call method: (identifier) @method (#match? @method \"^(get|post|get_response|fetch)$\") arguments: (argument_list (string (interpolation)) @arg)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_ServerSideRequestForgery
+  help_uri: "https://owasp.org/www-community/attacks/Server_Side_Request_Forgery"
+  test_cases:
+    - code: 'Net::HTTP.get(URI("https://#{params[:host]}/api"))'
+      expected: TruePositive
+    - code: 'Net::HTTP.get(URI("https://api.example.com/data"))'
+      expected: TrueNegative

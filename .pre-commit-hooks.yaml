@@ -1,0 +1,45 @@
+# Sicario pre-commit hooks — compatible with the pre-commit framework
+# https://pre-commit.com
+#
+# Usage in .pre-commit-config.yaml:
+#   repos:
+#     - repo: https://github.com/sicario-labs/sicario-cli
+#       rev: v0.3.5
+#       hooks:
+#         - id: sicario
+#         # or for secrets-only:
+#         - id: sicario-secrets
+
+- id: sicario
+  name: Sicario Security Scan
+  description: >
+    Run Sicario SAST + secrets detection on staged files.
+    Fails on Medium or higher severity findings.
+    Zero exfiltration — your code never leaves your machine.
+  language: system
+  entry: sicario scan --staged --secrets --fail-on medium
+  types: [file]
+  pass_filenames: false
+  stages: [commit]
+
+- id: sicario-secrets
+  name: Sicario Secrets Detection
+  description: >
+    Run Sicario secrets detection only on staged files.
+    Fails on any secrets finding (Medium or higher confidence).
+  language: system
+  entry: sicario scan --staged --secrets --fail-on medium
+  types: [file]
+  pass_filenames: false
+  stages: [commit]
+
+- id: sicario-sast
+  name: Sicario SAST Only
+  description: >
+    Run Sicario SAST (no secrets, no SCA) on staged files.
+    Fails on High or higher severity findings.
+  language: system
+  entry: sicario scan --staged --fail-on high
+  types: [file]
+  pass_filenames: false
+  stages: [commit]

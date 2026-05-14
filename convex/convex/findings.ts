@@ -456,6 +456,7 @@ function mapFinding(f: any) {
     assigned_to: f.assignedTo ?? null,
     created_at: f.createdAt,
     updated_at: f.updatedAt,
+    resolution_type: f.resolutionType ?? null,
   };
 }
 
@@ -777,21 +778,62 @@ export const exportSarif = query({
       Medium: "warning", Low: "note", Info: "note",
     };
 
-    const results = filtered.map((f) => ({
-      ruleId: f.ruleId,
-      level: SEVERITY_TO_SARIF[f.severity] ?? "note",
-      message: { text: f.ruleName },
-      locations: [{
-        physicalLocation: {
-          artifactLocation: { uri: f.filePath },
-          region: { startLine: f.line, startColumn: f.column },
+    const results = filtered.map((f) => {
+      let scanType = "sast";
+      if (f.ruleId.startsWith("sca/") || f.filePath.startsWith("<")) {
+        scanType = "sca";
+      } else if (f.ruleId.startsWith("secrets/") || f.ruleId.includes("secret") || f.ruleId.includes("token") || f.ruleId.includes("key")) {
+        scanType = "secrets";
+      }
+
+      const cveId = f.cweId ?? f.ruleId.replace(/^sca\//, "");
+      const finalRuleId = scanType === "sca" ? (f.ruleId.startsWith("sca/") ? f.ruleId : `sca/${cveId}`) : f.ruleId;
+
+      let scaProps: Record<string, any> = {};
+      if (scanType === "sca") {
+        const cleanedPath = f.filePath.replace(/^</, "").replace(/>$/, "");
+        const parts = cleanedPath.split(":");
+        const pkg = (f as any).packageName ?? parts[0] ?? "unknown";
+        const ver = (f as any).version ?? parts[1] ?? "unknown";
+        scaProps = {
+          package: pkg,
+          version: ver,
+          cve_id: cveId,
+          reachable: f.reachable ?? false,
+        };
+      }
+
+      let secretsProps: Record<string, any> = {};
+      if (scanType === "secrets") {
+        secretsProps = {
+          rule_id: f.ruleId,
+          file_path: f.filePath,
+          line: f.line,
+          severity: f.severity,
+        };
+      }
+
+      return {
+        ruleId: finalRuleId,
+        level: SEVERITY_TO_SARIF[f.severity] ?? "note",
+        message: { text: f.ruleName },
+        locations: [{
+          physicalLocation: {
+            artifactLocation: { uri: f.filePath },
+            region: { startLine: f.line, startColumn: f.column },
+          },
+        }],
+        fingerprints: {
+          matchBasedId: f.matchBasedId ?? f.fingerprint,
         },
-      }],
-      fingerprints: {
-        matchBasedId: f.matchBasedId ?? f.fingerprint,
-      },
-      // Req 32.5: no snippet unless explicitly opted in
-    }));
+        properties: {
+          scan_type: scanType,
+          ...scaProps,
+          ...secretsProps,
+        },
+        // Req 32.5: no snippet unless explicitly opted in
+      };
+    });
 
     return {
       version: "2.1.0",

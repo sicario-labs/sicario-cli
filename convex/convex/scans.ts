@@ -152,6 +152,7 @@ export const insert = mutation({
         if (
           existing.triageState === "Fixed" ||
           existing.triageState === "AutoFixed" ||
+          existing.triageState === "Removed" ||
           existing.triageState === "Ignored" ||
           existing.triageState === "AutoIgnored" ||
           existing.filePath.startsWith("<")
@@ -160,10 +161,41 @@ export const insert = mutation({
         }
         // If this finding's fingerprint was not in the incoming scan, auto-resolve it
         if (existing.fingerprint && !incomingFingerprints.has(existing.fingerprint)) {
+          let resType = "fixed";
+          let nextState = "AutoFixed";
+          let note = "Auto-resolved: finding was not present in the latest scan.";
+          let eventType = "auto_fixed";
+
+          const currentOrgId = existing.orgId ?? orgId;
+          if (currentOrgId) {
+            const policy = await ctx.db
+              .query("policies")
+              .withIndex("by_orgId_ruleId", (q) => q.eq("orgId", currentOrgId).eq("ruleId", existing.ruleId))
+              .first();
+            if (policy && policy.mode === "disabled") {
+              resType = "removed";
+              nextState = "Removed";
+              note = "Auto-resolved: rule was disabled in the organization policy.";
+              eventType = "auto_removed";
+            }
+          }
+
           await ctx.db.patch(existing._id, {
-            triageState: "AutoFixed",
-            triageNote: "Auto-resolved: finding was not present in the latest scan.",
+            triageState: nextState,
+            triageNote: note,
             updatedAt: now,
+            resolutionType: resType,
+          });
+
+          await ctx.db.insert("findingEvents", {
+            eventId: `evt-${existing.findingId}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            findingId: existing.findingId,
+            orgId: currentOrgId ?? "",
+            eventType,
+            fromState: existing.triageState,
+            toState: nextState,
+            timestamp: now,
+            resolutionType: resType,
           });
         }
       }

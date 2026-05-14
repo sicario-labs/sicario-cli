@@ -11,6 +11,9 @@ export const record = mutation({
     environment: v.union(v.literal("ci"), v.literal("local")),
     cliVersion: v.string(),
     receivedAt: v.string(),
+    hookInstalled: v.optional(v.boolean()),
+    vulnDbVersion: v.optional(v.string()),
+    scanType: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await ctx.db.insert("usagePings", {
@@ -18,6 +21,9 @@ export const record = mutation({
       environment: args.environment,
       cliVersion: args.cliVersion,
       receivedAt: args.receivedAt,
+      hookInstalled: args.hookInstalled,
+      vulnDbVersion: args.vulnDbVersion,
+      scanType: args.scanType,
     });
   },
 });

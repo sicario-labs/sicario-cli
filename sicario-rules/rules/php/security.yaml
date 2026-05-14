@@ -1,0 +1,127 @@
+# PHP security rules
+# CWE-89: SQL Injection
+# CWE-78: Command Injection
+# CWE-22: Path Traversal
+# CWE-79: Cross-Site Scripting
+# CWE-798: Hardcoded Credentials
+# CWE-918: Server-Side Request Forgery
+
+- id: "php/sql-injection"
+  name: "SQL Injection via User Input Concatenation"
+  description: "Concatenating $_GET, $_POST, $_REQUEST, or $_COOKIE values into SQL queries allows SQL injection. Use PDO prepared statements or parameterized queries."
+  severity: Critical
+  confidence: high
+  languages:
+    - Php
+  pattern:
+    query: "(function_call_expression function: (name) @fn (#match? @fn \"^(mysqli_query|mysql_query|pg_query)$\") arguments: (arguments (_) (encapsed_string (variable) @var) @arg)) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: 'mysqli_query($conn, "SELECT * FROM users WHERE id = " . $_GET["id"]);'
+      expected: TruePositive
+    - code: '$stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?"); $stmt->execute([$id]);'
+      expected: TrueNegative
+
+- id: "php/command-injection"
+  name: "Command Injection via exec/system/shell_exec"
+  description: "Passing user-controlled input to exec(), system(), shell_exec(), passthru(), or backtick execution allows arbitrary command execution. Sanitize input with escapeshellarg()."
+  severity: Critical
+  confidence: high
+  languages:
+    - Php
+  pattern:
+    query: "(function_call_expression function: (name) @fn (#match? @fn \"^(exec|system|shell_exec|passthru|popen)$\") arguments: (arguments (encapsed_string (variable) @var))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/www-community/attacks/Command_Injection"
+  test_cases:
+    - code: 'system("ls " . $_GET["dir"]);'
+      expected: TruePositive
+    - code: 'system("ls /safe/path");'
+      expected: TrueNegative
+
+- id: "php/path-traversal"
+  name: "Path Traversal via User-Controlled File Path"
+  description: "Using $_GET, $_POST, or $_REQUEST values to construct file paths passed to file_get_contents, include, require, fopen, or readfile allows path traversal. Validate and sanitize paths."
+  severity: High
+  confidence: high
+  languages:
+    - Php
+  pattern:
+    query: "(function_call_expression function: (name) @fn (#match? @fn \"^(file_get_contents|readfile|fopen|include|require)$\") arguments: (arguments (encapsed_string (variable) @var))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
+  test_cases:
+    - code: 'file_get_contents("/uploads/" . $_GET["file"]);'
+      expected: TruePositive
+    - code: 'file_get_contents("/uploads/report.pdf");'
+      expected: TrueNegative
+
+- id: "php/xss-echo-unescaped"
+  name: "XSS via Unescaped echo/print of User Input"
+  description: "Echoing or printing user-controlled input without htmlspecialchars() or htmlentities() enables XSS. Always escape output before rendering in HTML context."
+  severity: High
+  confidence: high
+  languages:
+    - Php
+  pattern:
+    query: "(echo_statement (encapsed_string (variable) @var (#match? @var \"\\$_(GET|POST|REQUEST|COOKIE)\"))) @echo"
+    captures:
+      - "echo"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: 'echo "Hello " . $_GET["name"];'
+      expected: TruePositive
+    - code: 'echo "Hello " . htmlspecialchars($_GET["name"], ENT_QUOTES);'
+      expected: TrueNegative
+
+- id: "php/hardcoded-secret"
+  name: "Hardcoded Secret in Variable Assignment"
+  description: "Assigning a string literal to a variable named password, secret, api_key, token, or db_pass exposes credentials in source code. Use environment variables or a secrets manager."
+  severity: High
+  confidence: high
+  languages:
+    - Php
+  pattern:
+    query: "(assignment_expression left: (variable_name (name) @name (#match? @name \"(?i)(password|passwd|secret|api_key|token|db_pass|private_key)\")) right: (string) @val) @assign"
+    captures:
+      - "assign"
+  cwe_id: "CWE-798"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html"
+  test_cases:
+    - code: '$api_key = "sk-abc123xyz";'
+      expected: TruePositive
+    - code: '$api_key = getenv("API_KEY");'
+      expected: TrueNegative
+
+- id: "php/ssrf"
+  name: "SSRF via User-Controlled URL in curl/file_get_contents"
+  description: "Passing user-controlled input to curl_setopt with CURLOPT_URL, file_get_contents with a URL, or fsockopen enables SSRF. Validate URLs against an allowlist."
+  severity: High
+  confidence: high
+  languages:
+    - Php
+  pattern:
+    query: "(function_call_expression function: (name) @fn (#eq? @fn \"curl_setopt\") arguments: (arguments (_) (name) @opt (#eq? @opt \"CURLOPT_URL\") (encapsed_string (variable) @var))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_ServerSideRequestForgery
+  help_uri: "https://owasp.org/www-community/attacks/Server_Side_Request_Forgery"
+  test_cases:
+    - code: 'curl_setopt($ch, CURLOPT_URL, "https://" . $_GET["host"] . "/api");'
+      expected: TruePositive
+    - code: 'curl_setopt($ch, CURLOPT_URL, "https://api.example.com/data");'
+      expected: TrueNegative

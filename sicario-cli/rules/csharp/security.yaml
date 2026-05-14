@@ -1,0 +1,148 @@
+# C# Security Rules
+# CWE-89: SQL Injection
+# CWE-78: OS Command Injection
+# CWE-22: Path Traversal
+# CWE-79: Cross-Site Scripting
+# CWE-798: Hardcoded Credentials
+# CWE-918: Server-Side Request Forgery
+
+- id: "csharp-sql-string-concat"
+  name: "SQL Injection via String Concatenation"
+  description: "Concatenating user input into SQL command strings allows SQL injection. Use parameterized queries with SqlParameter or Entity Framework instead."
+  severity: Critical
+  confidence: medium
+  languages:
+    - CSharp
+  pattern:
+    query: "(object_creation_expression type: (identifier) @type (#match? @type \"^(SqlCommand|OleDbCommand|OdbcCommand|NpgsqlCommand|MySqlCommand)$\") arguments: (argument_list (binary_expression left: (string_literal) @sql right: (_) @input (#match? @sql \"(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|FROM|WHERE)\")))) @new_cmd"
+    captures:
+      - "new_cmd"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Query_Parameterization_Cheat_Sheet.html"
+  test_cases:
+    - code: 'var cmd = new SqlCommand("SELECT * FROM Users WHERE Id = " + userId, conn);'
+      expected: TruePositive
+    - code: 'var cmd = new SqlCommand("SELECT * FROM Users WHERE Id = @id", conn);'
+      expected: TrueNegative
+
+- id: "csharp-sql-commandtext-concat"
+  name: "SQL Injection via CommandText String Concatenation"
+  description: "Assigning concatenated strings to CommandText allows SQL injection. Use parameterized queries with SqlParameter instead."
+  severity: Critical
+  confidence: medium
+  languages:
+    - CSharp
+  pattern:
+    query: "(assignment_expression left: (member_access_expression name: (identifier) @prop (#eq? @prop \"CommandText\")) right: (binary_expression) @concat (#match? @concat \"(?i)(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)\")) @assign"
+    captures:
+      - "assign"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Query_Parameterization_Cheat_Sheet.html"
+  test_cases:
+    - code: 'cmd.CommandText = "SELECT * FROM Users WHERE Name = ''" + username + "''";'
+      expected: TruePositive
+    - code: 'cmd.CommandText = "SELECT * FROM Users WHERE Name = @name";'
+      expected: TrueNegative
+
+- id: "csharp-command-injection-process-start"
+  name: "OS Command Injection via Process.Start with User Input"
+  description: "Passing user-controlled input to Process.Start allows OS command injection. Validate and sanitize all arguments before executing processes."
+  severity: Critical
+  confidence: medium
+  languages:
+    - CSharp
+  pattern:
+    query: "(invocation_expression function: (member_access_expression object: (identifier) @obj (#eq? @obj \"Process\") name: (identifier) @method (#eq? @method \"Start\")) argument_list: (argument_list (argument (interpolated_string_expression) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/www-community/attacks/Command_Injection"
+  test_cases:
+    - code: 'Process.Start("cmd.exe", $"/c {userInput}");'
+      expected: TruePositive
+    - code: 'Process.Start("notepad.exe", "C:\\\\logs\\\\app.log");'
+      expected: TrueNegative
+
+- id: "csharp-path-traversal-file-read"
+  name: "Path Traversal via File.ReadAllText with User Input"
+  description: "Reading files using user-controlled paths allows path traversal. Use Path.GetFullPath and validate the result is within the expected directory."
+  severity: High
+  confidence: medium
+  languages:
+    - CSharp
+  pattern:
+    query: "(invocation_expression function: (member_access_expression object: (identifier) @obj (#eq? @obj \"File\") name: (identifier) @method (#match? @method \"^(ReadAllText|ReadAllBytes|ReadAllLines|OpenRead|Open|WriteAllText|WriteAllBytes)$\")) argument_list: (argument_list (argument (interpolated_string_expression) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
+  test_cases:
+    - code: 'var content = File.ReadAllText($"/uploads/{fileName}");'
+      expected: TruePositive
+    - code: 'var content = File.ReadAllText("/var/log/app.log");'
+      expected: TrueNegative
+
+- id: "csharp-xss-response-write"
+  name: "XSS via Response.Write with User Input"
+  description: "Writing user input directly to the HTTP response without encoding allows cross-site scripting. Use HttpUtility.HtmlEncode() before writing user data."
+  severity: High
+  confidence: medium
+  languages:
+    - CSharp
+  pattern:
+    query: "(invocation_expression function: (member_access_expression object: (identifier) @obj (#eq? @obj \"Response\") name: (identifier) @method (#eq? @method \"Write\")) argument_list: (argument_list (argument (interpolated_string_expression) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/www-community/attacks/xss/"
+  test_cases:
+    - code: 'Response.Write($"<p>Hello {Request["name"]}</p>");'
+      expected: TruePositive
+    - code: 'Response.Write(HttpUtility.HtmlEncode(Request["name"]));'
+      expected: TrueNegative
+
+- id: "csharp-hardcoded-secret"
+  name: "Hardcoded Secret or Password"
+  description: "Hardcoding secrets, passwords, or API keys in source code exposes them to version control. Use environment variables, Azure Key Vault, or a secrets manager."
+  severity: Critical
+  confidence: medium
+  languages:
+    - CSharp
+  pattern:
+    query: "(variable_declarator (identifier) @name (#match? @name \"(?i)(password|passwd|secret|apiKey|api_key|token|jwt|authToken|privateKey|accessKey|secretKey)\") (equals_value_clause (string_literal) @val)) @decl"
+    captures:
+      - "decl"
+  cwe_id: "CWE-798"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+  test_cases:
+    - code: 'string secretKey = "hardcoded_secret_1234";'
+      expected: TruePositive
+    - code: 'string secretKey = Environment.GetEnvironmentVariable("SECRET_KEY");'
+      expected: TrueNegative
+
+- id: "csharp-ssrf-httpclient-user-url"
+  name: "SSRF via HttpClient with User-Controlled URL"
+  description: "Making HTTP requests to user-controlled URLs allows Server-Side Request Forgery. Validate URLs against an allowlist before making requests."
+  severity: High
+  confidence: medium
+  languages:
+    - CSharp
+  pattern:
+    query: "(invocation_expression function: (member_access_expression object: (identifier) @obj (#match? @obj \"^(client|httpClient|_client|_httpClient)$\") name: (identifier) @method (#match? @method \"^(GetAsync|PostAsync|SendAsync|GetStringAsync|GetStreamAsync)$\")) argument_list: (argument_list (argument (interpolated_string_expression) @interp))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/"
+  test_cases:
+    - code: 'var response = await client.GetAsync($"https://api.example.com/{userInput}");'
+      expected: TruePositive
+    - code: 'var response = await client.GetAsync("https://api.example.com/data");'
+      expected: TrueNegative
+

@@ -344,6 +344,8 @@ function mapProject(p: any) {
     project_api_key: p.projectApiKey ?? null,
     severity_threshold: defaults.severityThreshold,
     auto_fix_enabled: defaults.autoFixEnabled,
+    slackWebhookUrl: p.slackWebhookUrl ?? null,
+    slackAlertSeverityThreshold: p.slackAlertSeverityThreshold ?? null,
   };
 }
 

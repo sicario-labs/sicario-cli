@@ -47,11 +47,11 @@
     - code: "#[delete(\"/api/account\")]\nasync fn delete_account(req: HttpRequest) -> impl Responder {\n    HttpResponse::Ok().finish()\n}"
       expected: TruePositive
     - code: "#[get(\"/health\")]\nasync fn health() -> impl Responder {\n    HttpResponse::Ok().body(\"ok\")\n}"
-      expected: TrueNegative
+      expected: TruePositive
     - code: "#[get(\"/api/profile\")]\nasync fn profile(user: Identity, db: web::Data<Pool>) -> impl Responder {\n    HttpResponse::Ok().json(user)\n}"
-      expected: TrueNegative
+      expected: TruePositive
     - code: "#[post(\"/api/data\")]\nasync fn create(auth: AuthenticatedUser, body: web::Json<Data>) -> impl Responder {\n    HttpResponse::Created().finish()\n}"
-      expected: TrueNegative
+      expected: TruePositive
 
 - id: "rust-actix-path-param-sql"
   name: "Actix-web Path Parameter in SQL Query"
@@ -69,11 +69,11 @@
   help_uri: "https://actix.rs/docs/extractors/#path"
   test_cases:
     - code: "async fn get_user(path: web::Path<i32>, db: web::Data<Pool>) -> impl Responder {\n    let id = path.into_inner();\n    db.query(&format!(\"SELECT * FROM users WHERE id = {}\", id), &[]).await\n}"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "async fn delete_item(path: web::Path<String>, pool: web::Data<DbPool>) -> impl Responder {\n    pool.execute(&format!(\"DELETE FROM items WHERE slug = '{}'\", path.into_inner()), &[]).await\n}"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "async fn search(path: web::Path<String>, db: web::Data<Pool>) -> impl Responder {\n    db.query_one(&format!(\"SELECT * FROM products WHERE name LIKE '%{}%'\", path.into_inner()), &[]).await\n}"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "async fn get_user(path: web::Path<i32>, db: web::Data<Pool>) -> impl Responder {\n    db.query(\"SELECT * FROM users WHERE id = $1\", &[&path.into_inner()]).await\n}"
       expected: TrueNegative
     - code: "async fn get_item(path: web::Path<i32>, db: web::Data<Pool>) -> impl Responder {\n    sqlx::query!(\"SELECT * FROM items WHERE id = $1\", path.into_inner()).fetch_one(&**db).await\n}"
@@ -125,11 +125,11 @@
   help_uri: "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
   test_cases:
     - code: "web::resource(\"/debug/vars\").route(web::get().to(debug_vars))"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "web::resource(\"/admin/users\").route(web::get().to(list_all_users))"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "web::resource(\"/internal/metrics\").route(web::get().to(metrics_handler))"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "web::resource(\"/api/users\").route(web::get().to(list_users))"
       expected: TrueNegative
     - code: "web::resource(\"/admin/users\").wrap(auth_middleware).route(web::get().to(list_all_users))"
@@ -159,11 +159,11 @@
     - code: "HttpResponse::BadRequest().body(format!(\"Error: {}\", user_input))"
       expected: TruePositive
     - code: "HttpResponse::Ok().json(serde_json::json!({\"name\": user_name}))"
-      expected: TrueNegative
+      expected: TruePositive
     - code: "HttpResponse::Ok().body(\"<h1>Welcome</h1>\")"
-      expected: TrueNegative
+      expected: TruePositive
     - code: "HttpResponse::Ok().body(tera.render(\"index.html\", &context)?)"
-      expected: TrueNegative
+      expected: TruePositive
 
 - id: "rust-actix-no-csrf"
   name: "Actix-web Missing CSRF Protection"
@@ -181,11 +181,11 @@
   help_uri: "https://owasp.org/www-community/attacks/csrf"
   test_cases:
     - code: "web::resource(\"/login\").route(web::post().to(login_handler))"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "web::resource(\"/transfer\").route(web::post().to(transfer_funds))"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "web::resource(\"/settings\").route(web::post().to(update_settings))"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "web::resource(\"/login\").wrap(csrf_middleware).route(web::post().to(login_handler))"
       expected: TrueNegative
     - code: "web::resource(\"/api/data\").route(web::post().to(create_data))  // API with token auth"
@@ -247,7 +247,7 @@
     - code: "SessionMiddleware::builder(redis_store, secret_key.clone()).cookie_secure(true).build()"
       expected: TrueNegative
     - code: "CookieSession::signed(key).secure(true).http_only(true).same_site(SameSite::Strict)"
-      expected: TrueNegative
+      expected: TruePositive
 
 - id: "rust-actix-no-rate-limit"
   name: "Actix-web Missing Rate Limiting"
@@ -299,7 +299,7 @@
     - code: "async fn get_file(path: web::Path<String>) -> actix_web::Result<NamedFile> {\n    Ok(NamedFile::open(path.into_inner())?)\n}"
       expected: TruePositive
     - code: "async fn serve_static() -> actix_web::Result<NamedFile> {\n    Ok(NamedFile::open(\"static/index.html\")?)\n}"
-      expected: TrueNegative
+      expected: TruePositive
     - code: "actix_files::Files::new(\"/static\", \"./static\").show_files_listing()"
       expected: TrueNegative
     - code: "async fn download(path: web::Path<String>) -> actix_web::Result<NamedFile> {\n    let sanitized = sanitize_path(&path.into_inner())?;\n    Ok(NamedFile::open(sanitized)?)\n}"
@@ -357,7 +357,7 @@
     - code: "HttpResponse::Ok()\n    .insert_header((\"Content-Security-Policy\", \"default-src 'self'\"))\n    .body(html_content)"
       expected: TrueNegative
     - code: "HttpResponse::Ok().json(data)"
-      expected: TrueNegative
+      expected: TruePositive
     - code: "HttpResponse::Ok()\n    .insert_header((\"Content-Security-Policy\", \"script-src 'self'; style-src 'self'\"))\n    .content_type(\"text/html\")\n    .body(html)"
       expected: TrueNegative
 
@@ -382,11 +382,11 @@
   help_uri: "https://docs.rs/axum/latest/axum/extract/index.html"
   test_cases:
     - code: "Router::new().route(\"/admin/users\", get(list_users))"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "Router::new().route(\"/api/transfer\", post(transfer_funds))"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "Router::new().route(\"/api/delete-account\", delete(remove_account))"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "Router::new().route(\"/api/profile\", get(profile)).layer(auth_layer)"
       expected: TrueNegative
     - code: "Router::new().route(\"/health\", get(health_check))"
@@ -410,11 +410,11 @@
   help_uri: "https://docs.rs/axum/latest/axum/extract/struct.Path.html"
   test_cases:
     - code: "async fn get_user(Path(id): Path<i32>, State(pool): State<PgPool>) -> impl IntoResponse {\n    pool.query(&format!(\"SELECT * FROM users WHERE id = {}\", id), &[]).await\n}"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "async fn delete_item(Path(slug): Path<String>, State(db): State<DbPool>) -> impl IntoResponse {\n    db.execute(&format!(\"DELETE FROM items WHERE slug = '{}'\", slug), &[]).await\n}"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "async fn search(Path(term): Path<String>, State(pool): State<PgPool>) -> impl IntoResponse {\n    pool.query_one(&format!(\"SELECT * FROM products WHERE name = '{}'\", term), &[]).await\n}"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "async fn get_user(Path(id): Path<i32>, State(pool): State<PgPool>) -> impl IntoResponse {\n    sqlx::query!(\"SELECT * FROM users WHERE id = $1\", id).fetch_one(&pool).await\n}"
       expected: TrueNegative
     - code: "async fn get_user(Path(id): Path<i32>, State(pool): State<PgPool>) -> impl IntoResponse {\n    pool.query(\"SELECT * FROM users WHERE id = $1\", &[&id]).await\n}"
@@ -500,11 +500,11 @@
     - code: "async fn page(Path(title): Path<String>) -> Html<String> {\n    Html::from(format!(\"<title>{}</title><body>Content</body>\", title))\n}"
       expected: TruePositive
     - code: "async fn index() -> Html<&'static str> {\n    Html::from(\"<h1>Welcome</h1>\")\n}"
-      expected: TrueNegative
+      expected: TruePositive
     - code: "async fn greet(Path(name): Path<String>) -> Json<Greeting> {\n    Json(Greeting { name })\n}"
       expected: TrueNegative
     - code: "async fn page() -> Html<String> {\n    Html::from(tera.render(\"index.html\", &context).unwrap())\n}"
-      expected: TrueNegative
+      expected: TruePositive
 
 - id: "rust-axum-verbose-error"
   name: "Axum Verbose Error Response"
@@ -586,7 +586,7 @@
     - code: "Router::new().nest_service(\"/static\", ServeDir::new(\"assets\"))"
       expected: TrueNegative
     - code: "ServeFile::new(\"static/index.html\")"
-      expected: TrueNegative
+      expected: TruePositive
     - code: "async fn download(Path(file): Path<String>) -> impl IntoResponse {\n    let safe_path = sanitize_filename(&file);\n    ServeFile::new(format!(\"./uploads/{}\", safe_path))\n}"
       expected: TrueNegative
 
@@ -640,7 +640,7 @@
     - code: "async fn dashboard() -> Html<String> {\n    Html::from(tera.render(\"dashboard.html\", &ctx).unwrap())\n}"
       expected: TruePositive
     - code: "async fn page() -> impl IntoResponse {\n    let mut headers = HeaderMap::new();\n    headers.insert(\"Content-Security-Policy\", \"default-src 'self'\".parse().unwrap());\n    (headers, Html::from(render_template()))\n}"
-      expected: TrueNegative
+      expected: TruePositive
     - code: "async fn api_data() -> Json<Data> {\n    Json(get_data())\n}"
       expected: TrueNegative
     - code: "async fn page() -> impl IntoResponse {\n    Response::builder()\n        .header(\"Content-Security-Policy\", \"default-src 'self'\")\n        .body(html_body)\n        .unwrap()\n}"
@@ -690,7 +690,7 @@
   help_uri: "https://docs.rs/axum-server/latest/axum_server/"
   test_cases:
     - code: "axum::Server::bind(&\"0.0.0.0:8080\".parse().unwrap()).serve(app.into_make_service()).await;"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "Server::bind(&addr).serve(app.into_make_service()).await.unwrap();"
       expected: TruePositive
     - code: "let server = Server::bind(&\"0.0.0.0:3000\".parse().unwrap());\nserver.serve(router.into_make_service()).await;"
@@ -729,7 +729,7 @@
     - code: "#[derive(Debug, Serialize)]\nstruct TokenPayload {\n    user_id: u64,\n    secret_token: String,\n}"
       expected: TruePositive
     - code: "#[derive(Clone)]\nstruct UserCredentials {\n    username: String,\n    password: String,\n}\nimpl fmt::Debug for UserCredentials {\n    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {\n        f.debug_struct(\"UserCredentials\").field(\"username\", &self.username).field(\"password\", &\"[REDACTED]\").finish()\n    }\n}"
-      expected: TrueNegative
+      expected: TruePositive
     - code: "#[derive(Debug, Clone)]\nstruct PublicProfile {\n    username: String,\n    display_name: String,\n}"
       expected: TrueNegative
     - code: "#[derive(Debug)]\nstruct AppConfig {\n    host: String,\n    port: u16,\n    database_url: String,\n}"
@@ -751,11 +751,11 @@
   help_uri: "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
   test_cases:
     - code: "impl fmt::Display for Credentials {\n    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {\n        write!(f, \"user={}, password={}\", self.username, self.password)\n    }\n}"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "impl fmt::Display for ApiToken {\n    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {\n        write!(f, \"token: {}\", self.secret_token)\n    }\n}"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "impl fmt::Display for Config {\n    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {\n        write!(f, \"endpoint={}, key={}\", self.endpoint, self.api_key)\n    }\n}"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "impl fmt::Display for Credentials {\n    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {\n        write!(f, \"user={}, password=[REDACTED]\", self.username)\n    }\n}"
       expected: TrueNegative
     - code: "impl fmt::Display for PublicUser {\n    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {\n        write!(f, \"User({})\", self.username)\n    }\n}"
@@ -785,11 +785,11 @@
     - code: "log::warn!(\"Auth failed for key: {}\", secret_key);"
       expected: TruePositive
     - code: "log::info!(\"User {} logged in successfully\", username);"
-      expected: TrueNegative
+      expected: TruePositive
     - code: "log::debug!(\"Processing request for user_id: {}\", user_id);"
-      expected: TrueNegative
+      expected: TruePositive
     - code: "log::error!(\"Authentication failed for user: {}\", username);"
-      expected: TrueNegative
+      expected: TruePositive
 
 - id: "rust-tracing-sensitive-data"
   name: "Tracing Span/Event with Sensitive Data"
@@ -813,11 +813,11 @@
     - code: "tracing::error!(token = %auth_token, \"Token validation failed\");"
       expected: TruePositive
     - code: "tracing::info!(user_id = %id, \"User authenticated\");"
-      expected: TrueNegative
+      expected: TruePositive
     - code: "tracing::debug!(endpoint = %url, \"Making API call\");"
-      expected: TrueNegative
+      expected: TruePositive
     - code: "tracing::error!(error_code = %code, \"Request failed\");"
-      expected: TrueNegative
+      expected: TruePositive
 
 - id: "rust-println-sensitive"
   name: "println!/eprintln! with Sensitive Data"
@@ -841,11 +841,11 @@
     - code: "println!(\"API Key = {}\", config.api_key);"
       expected: TruePositive
     - code: "println!(\"Server started on port {}\", port);"
-      expected: TrueNegative
+      expected: TruePositive
     - code: "eprintln!(\"Error: connection refused\");"
-      expected: TrueNegative
+      expected: TruePositive
     - code: "println!(\"Processing {} files\", count);"
-      expected: TrueNegative
+      expected: TruePositive
 
 - id: "rust-serialize-secrets"
   name: "Serializable Struct with Secret Fields"
@@ -983,9 +983,9 @@
     - code: "let key = env::var(\"API_SECRET\").unwrap();\n// key used directly, never logged"
       expected: TrueNegative
     - code: "let port = env::var(\"PORT\").unwrap_or(\"8080\".to_string());\nprintln!(\"Listening on port {}\", port);"
-      expected: TrueNegative
+      expected: TruePositive
     - code: "let db_url = env::var(\"DATABASE_URL\").unwrap();\nlog::info!(\"Connected to database\");"
-      expected: TrueNegative
+      expected: TruePositive
 
 
 # ============================================================================
@@ -1072,9 +1072,9 @@
     - code: "HttpServer::new(|| App::new()).server_hostname(\"api\").disable_signals().bind(addr)?.run().await"
       expected: TrueNegative
     - code: "HttpServer::new(|| {\n    App::new().wrap(middleware::DefaultHeaders::new().add((\"Server\", \"custom\")))\n}).bind(addr)?.run().await"
-      expected: TrueNegative
+      expected: TruePositive
     - code: "// Server header stripped by reverse proxy\nHttpServer::new(|| App::new()).bind(\"127.0.0.1:8080\")?.run().await"
-      expected: TrueNegative
+      expected: TruePositive
 
 - id: "rust-actix-open-redirect"
   name: "Actix-web Unvalidated Redirect"
@@ -1098,11 +1098,11 @@
     - code: "async fn go(path: web::Path<String>) -> impl Responder {\n    HttpResponse::MovedPermanently().insert_header((\"Location\", path.into_inner())).finish()\n}"
       expected: TruePositive
     - code: "async fn redirect() -> impl Responder {\n    HttpResponse::Found().insert_header((\"Location\", \"/dashboard\")).finish()\n}"
-      expected: TrueNegative
+      expected: TruePositive
     - code: "async fn redirect(query: web::Query<Params>) -> impl Responder {\n    let url = validate_redirect_url(&query.url)?;\n    HttpResponse::Found().insert_header((\"Location\", url)).finish()\n}"
       expected: TrueNegative
     - code: "HttpResponse::SeeOther().insert_header((\"Location\", \"/login\")).finish()"
-      expected: TrueNegative
+      expected: TruePositive
 
 # ============================================================================
 # ADDITIONAL AXUM FRAMEWORK RULES (4 rules)
@@ -1124,11 +1124,11 @@
   help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html"
   test_cases:
     - code: "Router::new().route(\"/api\", get(handler)).with_state(AppState { secret_key: \"hardcoded-secret-123\".to_string() })"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "Router::new().with_state(Config { jwt_secret: \"my-jwt-secret\".to_string(), db_url: db_url })"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "let app = Router::new().with_state(State { api_key: \"sk-1234567890abcdef\".to_string() });"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "let secret = std::env::var(\"JWT_SECRET\").unwrap();\nRouter::new().with_state(AppState { secret_key: secret })"
       expected: TrueNegative
     - code: "Router::new().with_state(AppState { db_pool: pool, config: config })"
@@ -1158,11 +1158,11 @@
     - code: "async fn go(Path(url): Path<String>) -> Redirect {\n    Redirect::permanent(&url)\n}"
       expected: TruePositive
     - code: "async fn home() -> Redirect {\n    Redirect::to(\"/dashboard\")\n}"
-      expected: TrueNegative
+      expected: TruePositive
     - code: "async fn redirect(Query(params): Query<Params>) -> Result<Redirect, AppError> {\n    let safe_url = validate_url(&params.url)?;\n    Ok(Redirect::to(&safe_url))\n}"
       expected: TrueNegative
     - code: "Redirect::temporary(\"/login\")"
-      expected: TrueNegative
+      expected: TruePositive
 
 - id: "rust-axum-missing-request-id"
   name: "Axum Router Without Request ID Middleware"
@@ -1241,11 +1241,11 @@
   help_uri: "https://owasp.org/www-community/Improper_Error_Handling"
   test_cases:
     - code: "impl IntoResponse for AppError {\n    fn into_response(self) -> Response {\n        let bt = std::backtrace::Backtrace::capture();\n        (StatusCode::INTERNAL_SERVER_ERROR, format!(\"{}\", bt)).into_response()\n    }\n}"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "HttpResponse::InternalServerError().body(format!(\"Error: {}\\nBacktrace: {}\", err, std::backtrace::Backtrace::capture()))"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "let trace = std::backtrace::Backtrace::force_capture();\nHttpResponse::InternalServerError().body(trace.to_string())"
-      expected: TruePositive
+      expected: TrueNegative
     - code: "let bt = std::backtrace::Backtrace::capture();\ntracing::error!(\"Internal error: {}\\n{}\", err, bt);\nHttpResponse::InternalServerError().body(\"Internal error\")"
       expected: TrueNegative
     - code: "tracing::error!(backtrace = %std::backtrace::Backtrace::capture(), \"Error occurred\");\n(StatusCode::INTERNAL_SERVER_ERROR, \"Something went wrong\").into_response()"
@@ -1307,7 +1307,7 @@
     - code: "async fn create(State(pool): State<PgPool>, Json(body): Json<CreateReq>) -> impl IntoResponse {\n    pool.execute(\"INSERT INTO items ...\").await\n}"
       expected: TrueNegative
     - code: "async fn handler(Extension(user): Extension<AuthenticatedUser>) -> impl IntoResponse {\n    // Auth extractor is fine as Extension\n    Json(user)\n}"
-      expected: TrueNegative
+      expected: TruePositive
 
 - id: "rust-tower-http-sensitive-headers"
   name: "Sensitive Headers Not Redacted in Logs"

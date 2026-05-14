@@ -4,7 +4,7 @@
 #   irm https://usesicario.xyz/install.ps1 | iex
 #
 # Environment variables (all optional):
-#   $env:SICARIO_VERSION     — version to install, e.g. "v0.2.1"  (default: latest)
+#   $env:SICARIO_VERSION     — version to install, e.g. "v0.3.5"  (default: latest)
 #   $env:SICARIO_INSTALL_DIR — directory to place the binary       (default: ~\.local\bin)
 #
 # Release asset: sicario-windows-amd64.zip
@@ -132,6 +132,28 @@ function Install-Binary {
     Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue
     Fail "Downloaded file is empty or missing. The release asset may not exist for this platform/version."
   }
+
+  # ── Task 80.5: Verify checksum before executing/extracting ──────────────────
+  $checksumUrl = "https://github.com/$GITHUB_REPO/releases/download/$version/$ASSET_NAME.sha256"
+  $tmpChecksum = Join-Path $tmpDir "$ASSET_NAME.sha256"
+  try {
+    Invoke-WebRequest -Uri $checksumUrl -OutFile $tmpChecksum -UseBasicParsing -ErrorAction SilentlyContinue
+    if (Test-Path $tmpChecksum) {
+      Write-Step "Verifying checksum..."
+      $checksumLine = (Get-Content -Path $tmpChecksum -TotalCount 1).Trim()
+      $expectedSha = ($checksumLine -split "\s+")[0]
+      $hasher = [System.Security.Cryptography.SHA256]::Create()
+      $stream = [System.IO.File]::OpenRead($tmpZip)
+      $hashBytes = $hasher.ComputeHash($stream)
+      $stream.Close()
+      $actualSha = ([System.BitConverter]::ToString($hashBytes) -replace "-","").ToLower()
+      if ($actualSha -ne $expectedSha) {
+        Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue
+        Fail "Checksum mismatch! Expected $expectedSha, got $actualSha. Installation aborted."
+      }
+      Write-Step "Checksum verified successfully."
+    }
+  } catch {}
 
   Write-Step "Extracting archive..."
   try {

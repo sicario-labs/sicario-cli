@@ -5,7 +5,7 @@
 #   curl -fsSL https://usesicario.xyz/install.sh | sh
 #
 # Environment variables (all optional):
-#   SICARIO_VERSION     — version to install, e.g. "v0.2.1"  (default: latest)
+#   SICARIO_VERSION     — version to install, e.g. "v0.3.5"  (default: latest)
 #   SICARIO_INSTALL_DIR — directory to place the binary       (default: auto)
 #
 # Supported platforms:
@@ -194,6 +194,31 @@ install_binary() {
   if [ ! -s "$tmp_archive" ]; then
     rm -rf "$tmp_dir"
     die "Downloaded file is empty. The release asset may not exist for this platform/version."
+  fi
+
+  # ── Task 80.5: Verify checksum before executing/extracting ──────────────────
+  local checksum_url="https://github.com/$GITHUB_REPO/releases/download/${VERSION}/${ASSET_NAME}.sha256"
+  local tmp_checksum="${tmp_dir}/${ASSET_NAME}.sha256"
+  if download "$checksum_url" "$tmp_checksum" 2>/dev/null; then
+    say "Verifying checksum..."
+    local expected_sha
+    expected_sha="$(awk '{print $1}' "$tmp_checksum")"
+    local actual_sha
+    if command -v sha256sum >/dev/null 2>&1; then
+      actual_sha="$(sha256sum "$tmp_archive" | awk '{print $1}')"
+    elif command -v shasum >/dev/null 2>&1; then
+      actual_sha="$(shasum -a 256 "$tmp_archive" | awk '{print $1}')"
+    else
+      warn "sha256sum/shasum not found — skipping checksum verification."
+      actual_sha="$expected_sha"
+    fi
+    if [ "$actual_sha" != "$expected_sha" ]; then
+      rm -rf "$tmp_dir"
+      die "Checksum mismatch! Expected $expected_sha, got $actual_sha. Installation aborted."
+    fi
+    say "Checksum verified successfully."
+  else
+    info "No .sha256 file available — skipping checksum verification."
   fi
 
   say "Extracting archive..."

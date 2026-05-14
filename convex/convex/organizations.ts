@@ -323,7 +323,12 @@ export const getByOrgId = query({
       .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId))
       .first();
     if (!org) return null;
-    return { orgId: org.orgId, name: org.name, createdAt: org.createdAt };
+    return {
+      ...org,
+      orgId: org.orgId,
+      name: org.name,
+      createdAt: org.createdAt,
+    };
   },
 });
 
@@ -373,6 +378,35 @@ export const updateNotificationSettings = mutation({
     if (args.slackAlertSeverityThreshold !== undefined) updates.slackAlertSeverityThreshold = args.slackAlertSeverityThreshold;
     if (args.weeklyDigestEnabled !== undefined) updates.weeklyDigestEnabled = args.weeklyDigestEnabled;
     if (args.criticalAlertsEnabled !== undefined) updates.criticalAlertsEnabled = args.criticalAlertsEnabled;
+
+    await ctx.db.patch(org._id, updates);
+  },
+});
+
+// ── Group O: updateGeneralSettings ───────────────────────────────────────────
+export const updateGeneralSettings = mutation({
+  args: {
+    orgId: v.string(),
+    scanSettings: v.optional(v.any()),
+    globalPathIgnores: v.optional(v.string()),
+    prCommentTriage: v.optional(v.object({
+      enabled: v.boolean(),
+      requireReason: v.boolean(),
+    })),
+    defaultMemberRole: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const org = await ctx.db
+      .query("organizations")
+      .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId))
+      .first();
+    if (!org) throw new Error("Organization not found");
+
+    const updates: Record<string, unknown> = {};
+    if (args.scanSettings !== undefined) updates.scanSettings = args.scanSettings;
+    if (args.globalPathIgnores !== undefined) updates.globalPathIgnores = args.globalPathIgnores;
+    if (args.prCommentTriage !== undefined) updates.prCommentTriage = args.prCommentTriage;
+    if (args.defaultMemberRole !== undefined) updates.defaultMemberRole = args.defaultMemberRole;
 
     await ctx.db.patch(org._id, updates);
   },

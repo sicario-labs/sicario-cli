@@ -1,0 +1,168 @@
+# PHP Security Rules
+# CWE-89: SQL Injection
+# CWE-78: OS Command Injection
+# CWE-22: Path Traversal
+# CWE-79: Cross-Site Scripting
+# CWE-798: Hardcoded Credentials
+# CWE-918: Server-Side Request Forgery
+
+- id: "php-sql-string-concat"
+  name: "SQL Injection via String Concatenation"
+  description: "Concatenating user input into SQL queries allows SQL injection. Use PDO prepared statements or MySQLi parameterized queries instead."
+  severity: Critical
+  confidence: medium
+  languages:
+    - Php
+  pattern:
+    query: "(binary_expression left: (_) @sql right: (_) @input (#match? @sql \"(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|FROM|WHERE)\")) @concat"
+    captures:
+      - "concat"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Query_Parameterization_Cheat_Sheet.html"
+  test_cases:
+    - code: '$query = "SELECT * FROM users WHERE id = " . $_GET["id"];'
+      expected: TruePositive
+    - code: '$stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");'
+      expected: TrueNegative
+
+- id: "php-sql-variable-interpolation"
+  name: "SQL Injection via Variable Interpolation in String"
+  description: "Interpolating variables directly into SQL strings allows SQL injection. Use PDO prepared statements with bound parameters instead."
+  severity: Critical
+  confidence: medium
+  languages:
+    - Php
+  pattern:
+    query: "(encapsed_string (variable) @var) @str"
+    captures:
+      - "str"
+  cwe_id: "CWE-89"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Query_Parameterization_Cheat_Sheet.html"
+  test_cases:
+    - code: '$query = "SELECT * FROM users WHERE name = ''$username''";'
+      expected: TruePositive
+    - code: '$query = "SELECT * FROM users WHERE id = ?";'
+      expected: TrueNegative
+
+- id: "php-command-injection-exec"
+  name: "OS Command Injection via exec/system/shell_exec"
+  description: "Passing user input to exec(), system(), or shell_exec() allows OS command injection. Avoid shell execution with user input; use escapeshellarg() if unavoidable."
+  severity: Critical
+  confidence: medium
+  languages:
+    - Php
+  pattern:
+    query: "(function_call_expression function: (name) @fn (#match? @fn \"^(exec|system|shell_exec|passthru|popen|proc_open)$\") arguments: (arguments (encapsed_string (variable) @var))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-78"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/www-community/attacks/Command_Injection"
+  test_cases:
+    - code: 'exec("convert $filename output.png");'
+      expected: TruePositive
+    - code: 'exec("ls -la /var/log");'
+      expected: TrueNegative
+
+- id: "php-path-traversal-include"
+  name: "Path Traversal via include/require with User Input"
+  description: "Including files based on user-controlled paths allows path traversal and remote file inclusion. Validate file paths against an allowlist."
+  severity: High
+  confidence: medium
+  languages:
+    - Php
+  pattern:
+    query: "(include_expression (encapsed_string (variable) @var)) @include"
+    captures:
+      - "include"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
+  test_cases:
+    - code: 'include("pages/$page.php");'
+      expected: TruePositive
+    - code: 'include("pages/home.php");'
+      expected: TrueNegative
+
+- id: "php-path-traversal-file-get-contents"
+  name: "Path Traversal via file_get_contents with User Input"
+  description: "Reading files using user-controlled paths allows path traversal. Validate and sanitize file paths before use."
+  severity: High
+  confidence: medium
+  languages:
+    - Php
+  pattern:
+    query: "(function_call_expression function: (name) @fn (#match? @fn \"^(file_get_contents|file_put_contents|fopen|readfile|unlink)$\") arguments: (arguments (encapsed_string (variable) @var))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-22"
+  owasp_category: A01_BrokenAccessControl
+  help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
+  test_cases:
+    - code: '$content = file_get_contents("/uploads/$filename");'
+      expected: TruePositive
+    - code: '$content = file_get_contents("/var/log/app.log");'
+      expected: TrueNegative
+
+- id: "php-xss-echo-user-input"
+  name: "XSS via echo with Unescaped User Input"
+  description: "Echoing user input without HTML encoding allows cross-site scripting. Use htmlspecialchars() or htmlentities() before outputting user data."
+  severity: High
+  confidence: medium
+  languages:
+    - Php
+  pattern:
+    query: "(echo_statement (subscript_expression object: (variable) @obj (#match? @obj \"^\\$_(GET|POST|REQUEST|COOKIE|SERVER)$\"))) @echo"
+    captures:
+      - "echo"
+  cwe_id: "CWE-79"
+  owasp_category: A03_Injection
+  help_uri: "https://owasp.org/www-community/attacks/xss/"
+  test_cases:
+    - code: 'echo $_GET["name"];'
+      expected: TruePositive
+    - code: 'echo htmlspecialchars($_GET["name"], ENT_QUOTES, "UTF-8");'
+      expected: TrueNegative
+
+- id: "php-hardcoded-secret"
+  name: "Hardcoded Secret or Password"
+  description: "Hardcoding secrets, passwords, or API keys in source code exposes them to version control. Use environment variables or a secrets manager."
+  severity: Critical
+  confidence: medium
+  languages:
+    - Php
+  pattern:
+    query: "(assignment_expression left: (variable) @name (#match? @name \"(?i)(password|passwd|secret|api_key|apikey|token|jwt|auth_token|private_key|access_key|secret_key)\") right: (string) @val) @assign"
+    captures:
+      - "assign"
+  cwe_id: "CWE-798"
+  owasp_category: A02_CryptographicFailures
+  help_uri: "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+  test_cases:
+    - code: '$secret_key = "hardcoded_secret_1234";'
+      expected: TruePositive
+    - code: '$secret_key = getenv("SECRET_KEY");'
+      expected: TrueNegative
+
+- id: "php-ssrf-curl-user-url"
+  name: "SSRF via curl with User-Controlled URL"
+  description: "Making HTTP requests to user-controlled URLs allows Server-Side Request Forgery. Validate URLs against an allowlist before making requests."
+  severity: High
+  confidence: medium
+  languages:
+    - Php
+  pattern:
+    query: "(function_call_expression function: (name) @fn (#eq? @fn \"curl_setopt\") arguments: (arguments (_) @handle (name) @opt (#eq? @opt \"CURLOPT_URL\") (encapsed_string (variable) @var))) @call"
+    captures:
+      - "call"
+  cwe_id: "CWE-918"
+  owasp_category: A10_SSRF
+  help_uri: "https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/"
+  test_cases:
+    - code: 'curl_setopt($ch, CURLOPT_URL, "https://api.example.com/$path");'
+      expected: TruePositive
+    - code: 'curl_setopt($ch, CURLOPT_URL, "https://api.example.com/data");'
+      expected: TrueNegative
+

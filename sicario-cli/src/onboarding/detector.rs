@@ -153,22 +153,9 @@ impl TechDetector {
         Ok(())
     }
 
-    /// Walk the directory tree (up to 3 levels deep) and infer languages from
-    /// file extensions. Skips common build/vendor directories.
+    /// Walk the directory tree (up to 3 levels deep) using high-efficiency ignore traversal
+    /// to infer languages from file extensions while aggressively pruning blacklisted subtrees.
     fn detect_from_extensions(root: &Path, languages: &mut HashSet<String>) -> Result<()> {
-        Self::walk_for_extensions(root, languages, 0, 3);
-        Ok(())
-    }
-
-    fn walk_for_extensions(
-        dir: &Path,
-        languages: &mut HashSet<String>,
-        depth: usize,
-        max_depth: usize,
-    ) {
-        if depth > max_depth {
-            return;
-        }
         let skip_dirs = [
             "node_modules",
             "target",
@@ -179,43 +166,44 @@ impl TechDetector {
             "__pycache__",
         ];
 
-        let entries = match std::fs::read_dir(dir) {
-            Ok(e) => e,
-            Err(_) => return,
-        };
+        let walker = ignore::WalkBuilder::new(root)
+            .max_depth(Some(3))
+            .hidden(false)
+            .filter_entry(move |entry| {
+                let name = entry.file_name().to_str().unwrap_or("");
+                !skip_dirs.contains(&name)
+            })
+            .build();
 
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                if skip_dirs.contains(&name) {
-                    continue;
-                }
-                Self::walk_for_extensions(&path, languages, depth + 1, max_depth);
-            } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                match ext {
-                    "js" | "mjs" | "cjs" => {
-                        languages.insert("JavaScript".to_string());
+        for result in walker.flatten() {
+            let path = result.path();
+            if path.is_file() {
+                if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                    match ext {
+                        "js" | "mjs" | "cjs" => {
+                            languages.insert("JavaScript".to_string());
+                        }
+                        "ts" | "tsx" => {
+                            languages.insert("TypeScript".to_string());
+                        }
+                        "py" => {
+                            languages.insert("Python".to_string());
+                        }
+                        "rs" => {
+                            languages.insert("Rust".to_string());
+                        }
+                        "go" => {
+                            languages.insert("Go".to_string());
+                        }
+                        "java" | "kt" => {
+                            languages.insert("Java".to_string());
+                        }
+                        _ => {}
                     }
-                    "ts" | "tsx" => {
-                        languages.insert("TypeScript".to_string());
-                    }
-                    "py" => {
-                        languages.insert("Python".to_string());
-                    }
-                    "rs" => {
-                        languages.insert("Rust".to_string());
-                    }
-                    "go" => {
-                        languages.insert("Go".to_string());
-                    }
-                    "java" | "kt" => {
-                        languages.insert("Java".to_string());
-                    }
-                    _ => {}
                 }
             }
         }
+        Ok(())
     }
 
     /// Detect frameworks from config files in the project root.

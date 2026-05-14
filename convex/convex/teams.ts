@@ -20,6 +20,8 @@ export const create = mutation({
     name: v.string(),
     org_id: v.string(),
     userId: v.optional(v.string()),
+    parentTeamId: v.optional(v.string()),
+    managerUserId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Enforce RBAC when auth context is provided
@@ -32,6 +34,8 @@ export const create = mutation({
       teamId: args.id,
       name: args.name,
       orgId: args.org_id,
+      parentTeamId: args.parentTeamId,
+      managerUserId: args.managerUserId,
       createdAt: now,
     });
     return { id: args.id };
@@ -43,6 +47,8 @@ function mapTeam(t: any) {
     id: t.teamId,
     name: t.name,
     org_id: t.orgId,
+    parentTeamId: t.parentTeamId,
+    managerUserId: t.managerUserId,
     created_at: t.createdAt,
   };
 }

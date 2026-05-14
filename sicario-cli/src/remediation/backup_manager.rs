@@ -24,6 +24,8 @@ pub struct PatchHistoryEntry {
     pub file_path: PathBuf,
     /// Path where the original file was backed up
     pub backup_path: PathBuf,
+    /// Resolution type: "fixed" or "removed"
+    pub resolution_type: Option<String>,
 }
 
 // ── BackupManager ─────────────────────────────────────────────────────────────
@@ -253,6 +255,7 @@ mod tests {
             applied_at: Utc::now().to_rfc3339(),
             file_path: PathBuf::from("src/main.rs"),
             backup_path: PathBuf::from(".sicario/backups/20240101_000000/main.rs"),
+            resolution_type: Some("fixed".to_string()),
         };
 
         mgr.record_patch(entry.clone()).unwrap();

@@ -589,7 +589,10 @@ http.route({
       // 12.5. Send critical findings alert email to org admins if critical/high findings found
       const criticalCount = findings.filter((f: any) => f.severity === "Critical").length;
       const highCount = findings.filter((f: any) => f.severity === "High").length;
-      if (criticalCount > 0 || highCount > 0) {
+      const project = await ctx.runQuery(api.projects.get, { id: body.projectId });
+      const orgDoc: any = await ctx.runQuery((api as any).organizations.getByOrgId, { orgId: orgId! });
+
+      if ((criticalCount > 0 || highCount > 0) && orgDoc?.criticalAlertsEnabled !== false) {
         try {
           const { sendCriticalFindingsAlertEmail } = await import("./emails");
           // Get org memberships to find admins/managers (direct db query from httpAction)
@@ -600,8 +603,6 @@ http.route({
           const adminMembers = orgMemberships.filter(
             (m: any) => m.role === "admin" || m.role === "manager"
           );
-          // Get project name
-          const project = orgProjects.find((p: any) => p.id === body.projectId);
           const projectName = project?.name ?? body.projectId;
           for (const member of adminMembers) {
             try {
@@ -623,6 +624,72 @@ http.route({
         } catch (err) {
           console.error("Failed to send critical findings alert:", err);
         }
+      }
+
+      // 12.6. Dispatch Slack Webhook alerts if configured at project level or organization fallback
+      try {
+        const webhookUrl = (project as any)?.slackWebhookUrl || orgDoc?.slackWebhookUrl;
+        const threshold = (project as any)?.slackAlertSeverityThreshold || orgDoc?.slackAlertSeverityThreshold || "High";
+
+        if (webhookUrl) {
+          // Filter findings by threshold
+          const severities = ["Critical", "High", "Medium", "Low"];
+          const thresholdIndex = severities.indexOf(threshold) >= 0 ? severities.indexOf(threshold) : 1; // default High
+          const eligibleSeverities = severities.slice(0, thresholdIndex + 1);
+
+          const alertFindings = findings.filter((f: any) => eligibleSeverities.includes(f.severity));
+          if (alertFindings.length > 0) {
+            const projectName = project?.name ?? body.projectId;
+            // Constrained to: rule name, severity, file path, line, permalink per Task 77.1 spec
+            const blocks = [
+              {
+                type: "header",
+                text: {
+                  type: "plain_text",
+                  text: `🛡️ Sicario Scan Alert: ${projectName}`,
+                  emoji: true,
+                },
+              },
+              {
+                type: "section",
+                text: {
+                  type: "mrkdwn",
+                  text: `Scan *${body.scanId}* completed and detected *${alertFindings.length}* new finding(s) matching your severity threshold (*${threshold}* and above).`,
+                },
+              },
+              {
+                type: "divider",
+              },
+              ...alertFindings.slice(0, 5).map((f: any) => ({
+                type: "section",
+                text: {
+                  type: "mrkdwn",
+                  text: `*Rule:* ${f.rule_name || f.rule_id}\n*Severity:* ${f.severity}\n*Location:* \`${f.file_path}:${f.line}\`\n*Link:* https://usesicario.xyz/dashboard/findings/${f.id || ""}`,
+                },
+              })),
+            ];
+
+            if (alertFindings.length > 5) {
+              blocks.push({
+                type: "context",
+                elements: [
+                  {
+                    type: "mrkdwn",
+                    text: `_+ ${alertFindings.length - 5} more finding(s) omitted. View all on the dashboard._`,
+                  },
+                ],
+              });
+            }
+
+            await fetch(webhookUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ blocks }),
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Failed to dispatch Slack alerts:", err);
       }
 
       // 13. Return success
@@ -1201,6 +1268,10 @@ http.route({
       const cliVersion: string =
         typeof body.cli_version === "string" ? body.cli_version : "";
 
+      const hookInstalled = typeof body.hook_installed === "boolean" ? body.hook_installed : undefined;
+      const vulnDbVersion = typeof body.vuln_db_version === "string" ? body.vuln_db_version : undefined;
+      const scanType = typeof body.scan_type === "string" ? body.scan_type : undefined;
+
       const receivedAt = new Date().toISOString();
 
       // Call the usagePings.record mutation — swallow any errors
@@ -1210,6 +1281,9 @@ http.route({
           environment,
           cliVersion,
           receivedAt,
+          hookInstalled,
+          vulnDbVersion,
+          scanType,
         });
       } catch {
         // Internal error — still return 204
@@ -1645,13 +1719,21 @@ http.route({
 // Used by `sicario ci` to fetch policy before scanning.
 // Cached by the CLI for 1 hour (TTL enforced client-side).
 http.route({
-  path: "/api/v1/orgs/{org_id}/policy",
+  pathPrefix: "/api/v1/orgs/",
   method: "GET",
   handler: httpAction(async (ctx, request) => {
     const url = new URL(request.url);
     const pathParts = url.pathname.split("/");
-    // /api/v1/orgs/{org_id}/policy → index 4 is org_id
-    const orgId = pathParts[4];
+    const orgIdIdx = pathParts.indexOf("orgs") + 1;
+    const orgId = pathParts[orgIdIdx];
+    const endpoint = pathParts[orgIdIdx + 1];
+
+    if (endpoint !== "policy") {
+      return new Response(JSON.stringify({ error: "Not found" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      });
+    }
 
     if (!orgId) {
       return new Response(JSON.stringify({ error: "org_id is required" }), {

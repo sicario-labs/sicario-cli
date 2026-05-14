@@ -26,8 +26,9 @@ pub struct TelemetryFinding {
     pub file: String,
     /// 1-indexed line number
     pub line: usize,
-    /// Code snippet, pre-truncated to ≤ 100 characters by the CLI
-    pub snippet: String,
+    /// Cryptographic hash of the file to prove identity without source code exfiltration
+    #[serde(rename = "fileHash")]
+    pub file_hash: String,
     /// Optional CWE identifier, e.g. `"CWE-89"`
     #[serde(rename = "cweId", skip_serializing_if = "Option::is_none")]
     pub cwe_id: Option<String>,
@@ -37,9 +38,6 @@ pub struct TelemetryFinding {
     /// Optional finding fingerprint for deduplication
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fingerprint: Option<String>,
-    /// Optional execution trace showing how the vulnerability was found
-    #[serde(rename = "executionTrace", skip_serializing_if = "Option::is_none")]
-    pub execution_trace: Option<Vec<String>>,
 }
 
 /// Payload sent by the CLI to `POST /api/v1/telemetry/scan`.
@@ -219,11 +217,10 @@ mod tests {
             severity: "High".to_string(),
             file: "src/db.py".to_string(),
             line: 42,
-            snippet: "cursor.execute(query)".to_string(),
+            file_hash: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".to_string(),
             cwe_id: Some("CWE-89".to_string()),
             owasp_category: Some("A03".to_string()),
             fingerprint: None,
-            execution_trace: None,
         }
     }
 
@@ -284,11 +281,10 @@ mod tests {
             severity: "Medium".to_string(),
             file: "src/view.js".to_string(),
             line: 10,
-            snippet: "innerHTML = input".to_string(),
+            file_hash: "sha256:dummyhash".to_string(),
             cwe_id: None,
             owasp_category: None,
             fingerprint: None,
-            execution_trace: None,
         };
         let json = serde_json::to_string(&finding).unwrap();
         assert!(!json.contains("cweId"), "cweId should be omitted when None");

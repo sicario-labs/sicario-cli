@@ -188,6 +188,10 @@ pub struct ScanArgs {
     #[arg(long)]
     pub staged: bool,
 
+    /// Execute minimalist hook mode: pauses commit with an auto-fix prompt on High/Critical findings
+    #[arg(long)]
+    pub hook_mode: bool,
+
     /// Include dataflow traces in output
     #[arg(long)]
     pub dataflow_traces: bool,
@@ -246,6 +250,10 @@ pub struct ScanArgs {
     /// Write text results to this file
     #[arg(long)]
     pub text_output: Option<String>,
+
+    /// Write results in the selected --format to this file
+    #[arg(long)]
+    pub output: Option<String>,
 
     /// Print timing information
     #[arg(long)]
@@ -422,6 +430,7 @@ impl Default for ScanArgs {
             max_lines_per_finding: 5,
             max_chars_per_line: 160,
             staged: false,
+            hook_mode: false,
             dataflow_traces: false,
             trace: false,
             taint: false,
@@ -434,6 +443,7 @@ impl Default for ScanArgs {
             json_output: None,
             sarif_output: None,
             text_output: None,
+            output: None,
             time: false,
             no_cache: false,
             no_cache_write: false,

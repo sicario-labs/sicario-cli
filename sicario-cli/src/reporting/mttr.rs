@@ -98,6 +98,11 @@ pub fn compute_mttr(project_root: &Path, since: Option<DateTime<Utc>>) -> Result
     let mut total_remediated = 0usize;
 
     for entry in &history {
+        // Exclude findings that were "removed" rather than "fixed"
+        if entry.resolution_type.as_deref().unwrap_or("fixed") != "fixed" {
+            continue;
+        }
+
         // Parse fix timestamp
         let fix_ts = match chrono::DateTime::parse_from_rfc3339(&entry.applied_at) {
             Ok(ts) => ts.with_timezone(&Utc),
@@ -367,6 +372,7 @@ mod tests {
                 applied_at: ts.to_rfc3339(),
                 file_path: PathBuf::from("src/db.js"),
                 backup_path: PathBuf::from(".sicario/backups/backup/db.js"),
+                resolution_type: Some("fixed".to_string()),
             })
             .collect();
 
@@ -409,6 +415,7 @@ mod tests {
                     .to_rfc3339(),
                 file_path: PathBuf::from("src/auth.js"),
                 backup_path: PathBuf::from(".sicario/backups/backup/auth.js"),
+                resolution_type: Some("fixed".to_string()),
             })
             .collect();
 
@@ -441,6 +448,7 @@ mod tests {
                     .to_rfc3339(),
                 file_path: PathBuf::from("src/view.js"),
                 backup_path: PathBuf::from(".sicario/backups/backup/view.js"),
+                resolution_type: Some("fixed".to_string()),
             })
             .collect();
 
@@ -480,6 +488,7 @@ mod tests {
                     .to_rfc3339(),
                 file_path: PathBuf::from("src/db.js"),
                 backup_path: PathBuf::from(".sicario/backups/backup/db.js"),
+                resolution_type: Some("fixed".to_string()),
             });
         }
         // After cutoff (Jul–Sep)
@@ -492,6 +501,7 @@ mod tests {
                     .to_rfc3339(),
                 file_path: PathBuf::from("src/db.js"),
                 backup_path: PathBuf::from(".sicario/backups/backup/db.js"),
+                resolution_type: Some("fixed".to_string()),
             });
         }
 
@@ -530,6 +540,7 @@ mod tests {
                     .to_rfc3339(),
                 file_path: PathBuf::from("src/db.js"),
                 backup_path: PathBuf::from(".sicario/backups/backup/db.js"),
+                resolution_type: Some("fixed".to_string()),
             })
             .collect();
 
@@ -584,6 +595,7 @@ mod tests {
                     applied_at: (detection_ts + Duration::hours(i as i64 + 1)).to_rfc3339(),
                     file_path: PathBuf::from(format!("src/file{}.js", i % 50)),
                     backup_path: PathBuf::from(".sicario/backups/backup/file.js"),
+                    resolution_type: Some("fixed".to_string()),
                 }
             })
             .collect();
@@ -695,5 +707,46 @@ mod tests {
             table.contains("Insufficient data"),
             "Table must show 'Insufficient data' for <3 findings"
         );
+    }
+
+    #[test]
+    fn test_mttr_excludes_removed_findings() {
+        let dir = make_temp_project();
+        let project_root = dir.path();
+
+        let detection_ts = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        write_baseline(project_root, detection_ts, 1);
+
+        // 3 fixes: 2 "fixed", 1 "removed"
+        let entries = vec![
+            PatchHistoryEntry {
+                patch_id: "rule-1-0001".to_string(),
+                applied_at: Utc.with_ymd_and_hms(2024, 1, 1, 2, 0, 0).unwrap().to_rfc3339(),
+                file_path: PathBuf::from("src/app.js"),
+                backup_path: PathBuf::from(".sicario/backups/1/app.js"),
+                resolution_type: Some("fixed".to_string()),
+            },
+            PatchHistoryEntry {
+                patch_id: "rule-1-0002".to_string(),
+                applied_at: Utc.with_ymd_and_hms(2024, 1, 1, 4, 0, 0).unwrap().to_rfc3339(),
+                file_path: PathBuf::from("src/app.js"),
+                backup_path: PathBuf::from(".sicario/backups/2/app.js"),
+                resolution_type: Some("fixed".to_string()),
+            },
+            PatchHistoryEntry {
+                patch_id: "rule-1-0003".to_string(),
+                applied_at: Utc.with_ymd_and_hms(2024, 1, 1, 6, 0, 0).unwrap().to_rfc3339(),
+                file_path: PathBuf::from("src/app.js"),
+                backup_path: PathBuf::from(".sicario/backups/3/app.js"),
+                resolution_type: Some("removed".to_string()),
+            },
+        ];
+
+        write_patch_history(project_root, &entries);
+
+        let report = compute_mttr(project_root, None).unwrap();
+        // Since only 2 findings are "fixed", total_remediated should be 2, resulting in Insufficient data
+        assert_eq!(report.total_remediated, 2);
+        assert!(report.entries[0].mttr_hours.is_none());
     }
 }

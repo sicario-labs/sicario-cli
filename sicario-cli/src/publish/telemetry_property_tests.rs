@@ -43,18 +43,17 @@ mod tests {
             arb_severity(),
             "[a-z][a-z0-9/._\\-]{1,60}", // file
             1usize..=10000usize,         // line
-            arb_snippet(),
+            "sha256:[a-f0-9]{64}",       // file_hash
         )
-            .prop_map(|(rule, severity, file, line, snippet)| TelemetryFinding {
+            .prop_map(|(rule, severity, file, line, file_hash)| TelemetryFinding {
                 rule,
                 severity,
                 file,
                 line,
-                snippet,
+                file_hash,
                 cwe_id: None,
                 owasp_category: None,
                 fingerprint: None,
-                execution_trace: None,
             })
     }
 
@@ -156,21 +155,20 @@ mod tests {
 
         /// Feature: zero-exfil-edge-scanning, Property 1: Serialization Round-Trip
         ///
-        /// For any valid TelemetryFinding, the snippet field must be ≤ 100 chars
+        /// For any valid TelemetryFinding, the file_hash field must be preserved
         /// after round-trip serialization.
         ///
         /// Validates: Requirements 9.3
         #[test]
-        fn prop1_snippet_length_preserved_through_round_trip(finding in arb_finding()) {
+        fn prop1_file_hash_preserved_through_round_trip(finding in arb_finding()) {
             let json = serde_json::to_string(&finding)
                 .expect("TelemetryFinding must serialize to JSON");
             let back: TelemetryFinding = serde_json::from_str(&json)
                 .expect("TelemetryFinding JSON must deserialize back");
 
-            prop_assert!(
-                back.snippet.len() <= 100,
-                "snippet length {} exceeds 100 chars after round-trip",
-                back.snippet.len()
+            prop_assert_eq!(
+                &back.file_hash, &finding.file_hash,
+                "file_hash must survive round-trip"
             );
         }
 

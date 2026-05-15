@@ -483,120 +483,6 @@ fn json_rpc_error(id: Option<serde_json::Value>, error: JsonRpcError) -> String 
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    #[test]
-    fn test_analyze_ast_security_path_traversal() {
-        let dir = TempDir::new().unwrap();
-        let engine = Arc::new(Mutex::new(SastEngine::new(dir.path()).unwrap()));
-        let raw = r#"{"jsonrpc":"2.0","method":"analyze_ast_security","params":{"file_path":"../../etc/shadow"},"id":1}"#;
-        let result = dispatch_kiro_tool(raw, &engine).unwrap();
-        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert!(v["error"].is_object());
-        assert_eq!(v["error"]["code"], JsonRpcError::INVALID_PARAMS);
-        assert!(v["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("Path traversal"));
-    }
-
-    #[test]
-    fn test_analyze_ast_security_missing_file() {
-        let dir = TempDir::new().unwrap();
-        let engine = Arc::new(Mutex::new(SastEngine::new(dir.path()).unwrap()));
-        let raw = r#"{"jsonrpc":"2.0","method":"analyze_ast_security","params":{"file_path":"/nonexistent/file.js"},"id":2}"#;
-        let result = dispatch_kiro_tool(raw, &engine).unwrap();
-        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert!(v["error"].is_object());
-        assert_eq!(v["error"]["code"], JsonRpcError::INVALID_PARAMS);
-    }
-
-    #[test]
-    fn test_analyze_ast_security_valid_file() {
-        let dir = TempDir::new().unwrap();
-        let file = dir.path().join("test.js");
-        std::fs::write(&file, "const x = 1;").unwrap();
-        let engine = Arc::new(Mutex::new(SastEngine::new(dir.path()).unwrap()));
-        let raw = format!(
-            r#"{{"jsonrpc":"2.0","method":"analyze_ast_security","params":{{"file_path":"{}"}},"id":3}}"#,
-            file.to_string_lossy().replace('\\', "/")
-        );
-        let result = dispatch_kiro_tool(&raw, &engine).unwrap();
-        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert_eq!(v["jsonrpc"], "2.0");
-        assert!(v["result"]["vulnerabilities"].is_array());
-        assert_eq!(v["result"]["scan_engine"], "sicario-ast-v1");
-    }
-
-    #[test]
-    fn test_request_remediation_patch_path_traversal() {
-        let dir = TempDir::new().unwrap();
-        let engine = Arc::new(Mutex::new(SastEngine::new(dir.path()).unwrap()));
-        let raw = r#"{"jsonrpc":"2.0","method":"request_remediation_patch","params":{"vulnerability_id":"abc","file_path":"../../etc/passwd"},"id":4}"#;
-        let result = dispatch_kiro_tool(raw, &engine).unwrap();
-        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert!(v["error"].is_object());
-        assert_eq!(v["error"]["code"], JsonRpcError::INVALID_PARAMS);
-    }
-
-    #[test]
-    fn test_request_remediation_patch_valid() {
-        let dir = TempDir::new().unwrap();
-        let file = dir.path().join("vuln.py");
-        std::fs::write(&file, "cursor.execute(query)").unwrap();
-        let engine = Arc::new(Mutex::new(SastEngine::new(dir.path()).unwrap()));
-        let raw = format!(
-            r#"{{"jsonrpc":"2.0","method":"request_remediation_patch","params":{{"vulnerability_id":"vuln-123","file_path":"{}"}},"id":5}}"#,
-            file.to_string_lossy().replace('\\', "/")
-        );
-        let result = dispatch_kiro_tool(&raw, &engine).unwrap();
-        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert_eq!(v["jsonrpc"], "2.0");
-        assert_eq!(v["result"]["status"], "queued");
-        assert!(v["result"]["patch"].as_str().unwrap().contains("vuln-123"));
-    }
-
-    #[test]
-    fn test_log_telemetry_audit_empty_project_id() {
-        let dir = TempDir::new().unwrap();
-        let engine = Arc::new(Mutex::new(SastEngine::new(dir.path()).unwrap()));
-        let raw = r#"{"jsonrpc":"2.0","method":"log_telemetry_audit","params":{"project_id":"","scan_results":[]},"id":6}"#;
-        let result = dispatch_kiro_tool(raw, &engine).unwrap();
-        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert!(v["error"].is_object());
-        assert_eq!(v["error"]["code"], JsonRpcError::INVALID_PARAMS);
-    }
-
-    #[test]
-    fn test_log_telemetry_audit_valid() {
-        let dir = TempDir::new().unwrap();
-        let engine = Arc::new(Mutex::new(SastEngine::new(dir.path()).unwrap()));
-        let raw = r#"{"jsonrpc":"2.0","method":"log_telemetry_audit","params":{"project_id":"proj_abc","scan_results":[{"rule_id":"sql-injection","severity":"High","file_path":"src/db.py","line":42}]},"id":7}"#;
-        let result = dispatch_kiro_tool(raw, &engine).unwrap();
-        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert_eq!(v["jsonrpc"], "2.0");
-        assert_eq!(v["result"]["findings_count"], 1);
-        assert_eq!(v["result"]["status"], "submitted");
-        assert!(v["result"]["scan_id"]
-            .as_str()
-            .unwrap()
-            .starts_with("mcp-scan-"));
-    }
-
-    #[test]
-    fn test_dispatch_returns_none_for_unknown_tool() {
-        let dir = TempDir::new().unwrap();
-        let engine = Arc::new(Mutex::new(SastEngine::new(dir.path()).unwrap()));
-        let raw = r#"{"jsonrpc":"2.0","method":"scan_file","params":{"path":"test.js"},"id":8}"#;
-        // scan_file is handled by the main dispatcher, not kiro_tools
-        let result = dispatch_kiro_tool(raw, &engine);
-        assert!(result.is_none());
-    }
-}
-
 // ── StdioMcpRunner ────────────────────────────────────────────────────────────
 
 /// Runs the full stdio MCP server with Kiro Power tools integrated.
@@ -874,5 +760,119 @@ impl StdioMcpRunner {
 
         eprintln!("sicario mcp: stdin closed, exiting cleanly");
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_analyze_ast_security_path_traversal() {
+        let dir = TempDir::new().unwrap();
+        let engine = Arc::new(Mutex::new(SastEngine::new(dir.path()).unwrap()));
+        let raw = r#"{"jsonrpc":"2.0","method":"analyze_ast_security","params":{"file_path":"../../etc/shadow"},"id":1}"#;
+        let result = dispatch_kiro_tool(raw, &engine).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert!(v["error"].is_object());
+        assert_eq!(v["error"]["code"], JsonRpcError::INVALID_PARAMS);
+        assert!(v["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Path traversal"));
+    }
+
+    #[test]
+    fn test_analyze_ast_security_missing_file() {
+        let dir = TempDir::new().unwrap();
+        let engine = Arc::new(Mutex::new(SastEngine::new(dir.path()).unwrap()));
+        let raw = r#"{"jsonrpc":"2.0","method":"analyze_ast_security","params":{"file_path":"/nonexistent/file.js"},"id":2}"#;
+        let result = dispatch_kiro_tool(raw, &engine).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert!(v["error"].is_object());
+        assert_eq!(v["error"]["code"], JsonRpcError::INVALID_PARAMS);
+    }
+
+    #[test]
+    fn test_analyze_ast_security_valid_file() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("test.js");
+        std::fs::write(&file, "const x = 1;").unwrap();
+        let engine = Arc::new(Mutex::new(SastEngine::new(dir.path()).unwrap()));
+        let raw = format!(
+            r#"{{"jsonrpc":"2.0","method":"analyze_ast_security","params":{{"file_path":"{}"}},"id":3}}"#,
+            file.to_string_lossy().replace('\\', "/")
+        );
+        let result = dispatch_kiro_tool(&raw, &engine).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(v["jsonrpc"], "2.0");
+        assert!(v["result"]["vulnerabilities"].is_array());
+        assert_eq!(v["result"]["scan_engine"], "sicario-ast-v1");
+    }
+
+    #[test]
+    fn test_request_remediation_patch_path_traversal() {
+        let dir = TempDir::new().unwrap();
+        let engine = Arc::new(Mutex::new(SastEngine::new(dir.path()).unwrap()));
+        let raw = r#"{"jsonrpc":"2.0","method":"request_remediation_patch","params":{"vulnerability_id":"abc","file_path":"../../etc/passwd"},"id":4}"#;
+        let result = dispatch_kiro_tool(raw, &engine).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert!(v["error"].is_object());
+        assert_eq!(v["error"]["code"], JsonRpcError::INVALID_PARAMS);
+    }
+
+    #[test]
+    fn test_request_remediation_patch_valid() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("vuln.py");
+        std::fs::write(&file, "cursor.execute(query)").unwrap();
+        let engine = Arc::new(Mutex::new(SastEngine::new(dir.path()).unwrap()));
+        let raw = format!(
+            r#"{{"jsonrpc":"2.0","method":"request_remediation_patch","params":{{"vulnerability_id":"vuln-123","file_path":"{}"}},"id":5}}"#,
+            file.to_string_lossy().replace('\\', "/")
+        );
+        let result = dispatch_kiro_tool(&raw, &engine).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(v["jsonrpc"], "2.0");
+        assert_eq!(v["result"]["status"], "queued");
+        assert!(v["result"]["patch"].as_str().unwrap().contains("vuln-123"));
+    }
+
+    #[test]
+    fn test_log_telemetry_audit_empty_project_id() {
+        let dir = TempDir::new().unwrap();
+        let engine = Arc::new(Mutex::new(SastEngine::new(dir.path()).unwrap()));
+        let raw = r#"{"jsonrpc":"2.0","method":"log_telemetry_audit","params":{"project_id":"","scan_results":[]},"id":6}"#;
+        let result = dispatch_kiro_tool(raw, &engine).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert!(v["error"].is_object());
+        assert_eq!(v["error"]["code"], JsonRpcError::INVALID_PARAMS);
+    }
+
+    #[test]
+    fn test_log_telemetry_audit_valid() {
+        let dir = TempDir::new().unwrap();
+        let engine = Arc::new(Mutex::new(SastEngine::new(dir.path()).unwrap()));
+        let raw = r#"{"jsonrpc":"2.0","method":"log_telemetry_audit","params":{"project_id":"proj_abc","scan_results":[{"rule_id":"sql-injection","severity":"High","file_path":"src/db.py","line":42}]},"id":7}"#;
+        let result = dispatch_kiro_tool(raw, &engine).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(v["jsonrpc"], "2.0");
+        assert_eq!(v["result"]["findings_count"], 1);
+        assert_eq!(v["result"]["status"], "submitted");
+        assert!(v["result"]["scan_id"]
+            .as_str()
+            .unwrap()
+            .starts_with("mcp-scan-"));
+    }
+
+    #[test]
+    fn test_dispatch_returns_none_for_unknown_tool() {
+        let dir = TempDir::new().unwrap();
+        let engine = Arc::new(Mutex::new(SastEngine::new(dir.path()).unwrap()));
+        let raw = r#"{"jsonrpc":"2.0","method":"scan_file","params":{"path":"test.js"},"id":8}"#;
+        // scan_file is handled by the main dispatcher, not kiro_tools
+        let result = dispatch_kiro_tool(raw, &engine);
+        assert!(result.is_none());
     }
 }

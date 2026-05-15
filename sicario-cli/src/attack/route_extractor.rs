@@ -667,7 +667,7 @@ def users():
         write_temp_file(&dir, "app.py", content);
         let routes = RouteExtractor::extract(dir.path()).unwrap();
         // Should produce 2 routes (GET and POST)
-        assert!(routes.len() >= 1, "Expected at least 1 Flask route");
+        assert!(!routes.is_empty(), "Expected at least 1 Flask route");
         assert!(
             routes.iter().any(|r| r.path == "/users"),
             "Expected /users route"

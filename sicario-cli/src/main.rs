@@ -6673,10 +6673,10 @@ mod tests {
         let mut loaded = 0usize;
         for entry in fs::read_dir(&sicario_rules_dir).unwrap() {
             let path = entry.unwrap().path();
-            if path.extension().and_then(|e| e.to_str()) == Some("yaml") {
-                if eng.load_rules(&path).is_ok() {
-                    loaded += 1;
-                }
+            if path.extension().and_then(|e| e.to_str()) == Some("yaml")
+                && eng.load_rules(&path).is_ok()
+            {
+                loaded += 1;
             }
         }
 

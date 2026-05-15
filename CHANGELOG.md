@@ -7,6 +7,32 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.3.5] — 2026-05-15
+
+### Added
+
+**Core Engine & UX**
+
+- **Smart Viewport-Aware Thresholding** — Automatically truncates CLI output to the top 10 most critical findings when exceeding 25 findings, preventing alert fatigue in interactive TTY sessions. Includes a brutalist summary footer with total counts.
+- **Hardened Pre-Commit Hook** — Optimized the `auto-fix` hook workflow with robust error recovery, idempotency checks, and zero-exfiltration safety. Suppresses verbose output in favor of a minimalist intercept prompt.
+- **Agentic Remediation Workflow (`--auto-pr`)** — Integrated end-to-end pull request generation for fixes. `sicario fix --auto-pr` handles branch creation, committing deterministic patches, and opening PRs on GitHub/GitLab.
+- **Pre-Compiled Rule Sets (`CompiledRule`)** — Optimized scan engine by pre-compiling tree-sitter queries, significantly reducing per-file overhead during large-scale scans.
+- **Parallel File Scanning (`scan_file_parallel`)** — Refactored the core scanning loop to utilize Rayon for even faster multi-core throughput.
+
+**Language Support**
+
+- **Enterprise Expansion (v0.3.0+)** — Full production-ready support for **Ruby, PHP, and C#**, bringing the total to 9 supported languages.
+- **PHP Rule Hardening** — Resolved high-confidence syntax issues and false positives in the PHP rule set.
+
+### Fixed
+
+- **JSON Parsing Stability** — Resolved edge cases in JSON output serialization for complex taint traces.
+- **Smoke Test Reliability** — Updated `smoke-test.sh` and `smoke-test.bat` for robust binary path resolution and non-blocking output collection.
+- **Tree-Sitter Pattern Matching** — Fixed incorrect matching logic for `js/session-no-httponly` and `go/http-redirect-user-input` rules.
+- **Zero-Exfiltration Invariant** — Hardened the agentic fallback loop to ensure no local source code fragments are ever included in telemetry or external API calls.
+
+---
+
 ## [0.3.0] — 2026-05-06
 
 ### Added

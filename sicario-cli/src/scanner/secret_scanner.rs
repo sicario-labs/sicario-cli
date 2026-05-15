@@ -267,8 +267,8 @@ mod tests {
     #[test]
     fn test_scan_content_detects_aws_key() {
         let scanner = create_scanner();
-        let content = &format!("const key = \"{}\";", concat!("AKIA", "IOSFODNN7EXAMPLE"));
-        let secrets = scanner.scan_content_for_secrets(content, Path::new("test.js"));
+        let content = format!("const key = \"{}\";", concat!("AKIA", "IOSFODNN7EXAMPLE"));
+        let secrets = scanner.scan_content_for_secrets(&content, Path::new("test.js"));
         assert!(!secrets.is_empty());
         let aws = secrets
             .iter()
@@ -380,7 +380,7 @@ mod tests {
         let secret_file = temp_dir.path().join("secrets.js");
         std::fs::write(
             &secret_file,
-            &format!("const key = \"{}\";", concat!("AKIA", "IOSFODNN7EXAMPLE")),
+            format!("const key = \"{}\";", concat!("AKIA", "IOSFODNN7EXAMPLE")),
         )
         .unwrap();
 
@@ -605,7 +605,7 @@ mod property_tests {
 
                 let file_name = format!("branch_secret_{}.js", i);
                 let file_path = temp_dir.path().join(&file_name);
-                std::fs::write(&file_path, &format!("const key = \"{}\";", concat!("AKIA", "IOSFODNN7EXAMPLE"))).unwrap();
+                std::fs::write(&file_path, format!("const key = \"{}\";", concat!("AKIA", "IOSFODNN7EXAMPLE"))).unwrap();
 
                 let mut index = repo.index().unwrap();
                 index.add_path(Path::new(&file_name)).unwrap();

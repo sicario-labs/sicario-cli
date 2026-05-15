@@ -37,41 +37,43 @@ mod tests {
         // Cargo sets this env-var for integration tests; it points to the
         // compiled binary for the current profile (debug by default).
         if let Ok(p) = std::env::var("CARGO_BIN_EXE_sicario") {
-            return PathBuf::from(p);
-        }
-
-        // Fallback: derive from CARGO_MANIFEST_DIR
-        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-
-        // Walk up to the workspace root (one level above the crate manifest)
-        let workspace_root = PathBuf::from(&manifest_dir)
-            .parent()
-            .map(|p| p.to_path_buf())
-            .unwrap_or_else(|| PathBuf::from("."));
-
-        // Try debug build first, then release
-        let debug_bin = workspace_root
-            .join("target")
-            .join("debug")
-            .join(if cfg!(windows) {
-                "sicario.exe"
-            } else {
-                "sicario"
-            });
-
-        let release_bin = workspace_root
-            .join("target")
-            .join("release")
-            .join(if cfg!(windows) {
-                "sicario.exe"
-            } else {
-                "sicario"
-            });
-
-        if release_bin.exists() {
-            release_bin
+            PathBuf::from(p)
         } else {
-            debug_bin
+            // Fallback: derive from CARGO_MANIFEST_DIR
+            let manifest_dir =
+                std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
+
+            // Walk up to the workspace root (one level above the crate manifest)
+            let workspace_root = PathBuf::from(&manifest_dir)
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|| PathBuf::from("."));
+
+            // Try debug build first, then release
+            let debug_bin = workspace_root
+                .join("target")
+                .join("debug")
+                .join(if cfg!(windows) {
+                    "sicario.exe"
+                } else {
+                    "sicario"
+                });
+
+            let release_bin =
+                workspace_root
+                    .join("target")
+                    .join("release")
+                    .join(if cfg!(windows) {
+                        "sicario.exe"
+                    } else {
+                        "sicario"
+                    });
+
+            if release_bin.exists() {
+                release_bin
+            } else {
+                debug_bin
+            }
         }
     }
 
@@ -116,7 +118,6 @@ mod tests {
                 "SKIP: binary not found at '{}'. Run `cargo build` before running this test.",
                 path.display()
             );
-            return;
         }
         // Binary exists — test passes.
     }
@@ -131,33 +132,30 @@ mod tests {
     #[test]
     fn prop30_binary_size_within_budget() {
         let path = binary_path();
-        if !path.exists() {
-            // Skip gracefully if the binary hasn't been built yet
-            return;
-        }
+        if path.exists() {
+            let metadata = std::fs::metadata(&path).expect("Must be able to read binary metadata");
+            let size = metadata.len();
 
-        let metadata = std::fs::metadata(&path).expect("Must be able to read binary metadata");
-        let size = metadata.len();
-
-        let limit = if is_release_build() {
-            MAX_BINARY_SIZE_BYTES
-        } else {
-            MAX_DEBUG_BINARY_SIZE_BYTES
-        };
-
-        assert!(
-            size <= limit,
-            "Binary size {} bytes ({:.1} MB) exceeds the {} MB limit for a {} build. \
-             Check for unnecessary large dependencies or embedded assets.",
-            size,
-            size as f64 / (1024.0 * 1024.0),
-            limit / (1024 * 1024),
-            if is_release_build() {
-                "release"
+            let limit = if is_release_build() {
+                MAX_BINARY_SIZE_BYTES
             } else {
-                "debug"
-            }
-        );
+                MAX_DEBUG_BINARY_SIZE_BYTES
+            };
+
+            assert!(
+                size <= limit,
+                "Binary size {} bytes ({:.1} MB) exceeds the {} MB limit for a {} build. \
+                 Check for unnecessary large dependencies or embedded assets.",
+                size,
+                size as f64 / (1024.0 * 1024.0),
+                limit / (1024 * 1024),
+                if is_release_build() {
+                    "release"
+                } else {
+                    "debug"
+                }
+            );
+        }
     }
 
     /// The binary must be executable on the current platform.

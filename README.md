@@ -97,10 +97,13 @@ sicario scan . --format sarif --output results.sarif
 # 5. Apply Safe Deterministic Remediation Patches
 sicario fix src/database.js --rule js/sql-injection
 
-# 6. Install the Minimalist Intercept Git Hook
+# 6. Agentic Remediation: Auto-Fix and Open Pull Request
+sicario fix --auto-pr
+
+# 7. Install the Minimalist Intercept Git Hook
 sicario hook auto-fix
 
-# 7. Launch the Fully Interactive Terminal User Interface (TUI)
+# 8. Launch the Fully Interactive Terminal User Interface (TUI)
 sicario tui
 ```
 

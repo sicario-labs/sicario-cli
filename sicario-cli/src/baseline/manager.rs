@@ -441,9 +441,11 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let mgr = BaselineManager::new(tmp.path());
 
-        let findings = vec![make_finding("sql-injection", "src/db.rs", "query(input)")];
+        let findings = [make_finding("sql-injection", "src/db.rs", "query(input)")];
 
-        let path = mgr.save(&findings, Some("v1-release")).unwrap();
+        let path = mgr
+            .save(std::slice::from_ref(&findings[0]), Some("v1-release"))
+            .unwrap();
         assert!(path.exists());
         assert!(path.to_string_lossy().contains("v1-release"));
 
@@ -458,9 +460,9 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let mgr = BaselineManager::new(tmp.path());
 
-        let findings = vec![make_finding("xss", "src/view.js", "innerHTML = data")];
+        let findings = [make_finding("xss", "src/view.js", "innerHTML = data")];
 
-        let path = mgr.save(&findings, None).unwrap();
+        let path = mgr.save(std::slice::from_ref(&findings[0]), None).unwrap();
         assert!(path.exists());
         // No tag in filename
         let filename = path.file_name().unwrap().to_string_lossy();
@@ -480,7 +482,7 @@ mod tests {
 
         // Current scan has findings A and C (B resolved, C is new)
         let finding_c = make_finding("cmd-injection", "src/exec.rs", "Command::new(user_input)");
-        let current = vec![finding_a.clone(), finding_c.clone()];
+        let current = [finding_a.clone(), finding_c.clone()];
 
         let delta = mgr.compare("baseline1", &current).unwrap();
 
@@ -515,7 +517,7 @@ mod tests {
         mgr.save(&[finding_a.clone(), finding_b.clone()], Some("old"))
             .unwrap();
 
-        let current = vec![finding_b.clone(), finding_c.clone()];
+        let current = [finding_a.clone(), finding_c.clone()];
         let delta = mgr.compare("old", &current).unwrap();
 
         let new_fps: HashSet<&str> = delta
@@ -584,7 +586,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let mgr = BaselineManager::new(tmp.path());
 
-        let findings = vec![
+        let findings = [
             make_finding("sql-injection", "src/db.rs", "query(input)"),
             make_finding("xss", "src/view.js", "innerHTML = data"),
         ];
@@ -615,7 +617,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let mgr = BaselineManager::new(tmp.path());
 
-        let findings = vec![make_finding("rule-a", "a.rs", "snippet")];
+        let findings = [make_finding("rule-a", "a.rs", "snippet")];
         mgr.save(&findings, Some("release-1.0")).unwrap();
 
         let found = mgr.find_baseline("release-1.0").unwrap();
@@ -680,10 +682,11 @@ mod tests {
 
         let finding_a = make_finding_with_severity("rule-a", "a.rs", "snippet_a", Severity::High);
         // Save baseline with finding_a
-        mgr.save(&[finding_a.clone()], Some("v1")).unwrap();
+        mgr.save(std::slice::from_ref(&finding_a), Some("v1"))
+            .unwrap();
 
         // Current scan: same finding (no new findings)
-        let delta = mgr.compare("v1", &[finding_a.clone()]).unwrap();
+        let delta = mgr.compare("v1", std::slice::from_ref(&finding_a)).unwrap();
 
         let threshold = Severity::High;
         let blocking: Vec<_> = delta
@@ -703,11 +706,12 @@ mod tests {
         let mgr = BaselineManager::new(tmp.path());
 
         let finding_a = make_finding_with_severity("rule-a", "a.rs", "snippet_a", Severity::Medium);
-        mgr.save(&[finding_a.clone()], Some("v1")).unwrap();
+        mgr.save(std::slice::from_ref(&finding_a), Some("v1"))
+            .unwrap();
 
         // New High finding introduced
         let finding_b = make_finding_with_severity("rule-b", "b.rs", "snippet_b", Severity::High);
-        let current = vec![finding_a.clone(), finding_b.clone()];
+        let current = [finding_a.clone(), finding_b.clone()];
 
         let delta = mgr.compare("v1", &current).unwrap();
 
@@ -729,11 +733,12 @@ mod tests {
         let mgr = BaselineManager::new(tmp.path());
 
         let finding_a = make_finding_with_severity("rule-a", "a.rs", "snippet_a", Severity::Low);
-        mgr.save(&[finding_a.clone()], Some("v1")).unwrap();
+        mgr.save(std::slice::from_ref(&finding_a), Some("v1"))
+            .unwrap();
 
         // New Medium finding introduced
         let finding_b = make_finding_with_severity("rule-b", "b.rs", "snippet_b", Severity::Medium);
-        let current = vec![finding_a.clone(), finding_b.clone()];
+        let current = [finding_a.clone(), finding_b.clone()];
 
         let delta = mgr.compare("v1", &current).unwrap();
 
@@ -771,7 +776,7 @@ mod tests {
         let mgr = BaselineManager::new(tmp.path());
 
         let finding = make_finding_with_severity("rule-a", "a.rs", "snippet_a", Severity::High);
-        mgr.save(&[finding], None).unwrap();
+        mgr.save(std::slice::from_ref(&finding), None).unwrap();
 
         assert!(
             mgr.has_baselines(),
@@ -789,7 +794,8 @@ mod tests {
         let finding_b = make_finding_with_severity("rule-b", "b.rs", "snippet_b", Severity::Medium);
 
         // Save two baselines with different tags
-        mgr.save(&[finding_a.clone()], Some("release-1")).unwrap();
+        mgr.save(std::slice::from_ref(&finding_a), Some("release-1"))
+            .unwrap();
         std::thread::sleep(std::time::Duration::from_millis(10));
         mgr.save(&[finding_a.clone(), finding_b.clone()], Some("release-2"))
             .unwrap();
@@ -822,7 +828,7 @@ mod tests {
             .unwrap();
 
         // Current: a (unchanged), c (new), b resolved
-        let current = vec![finding_a.clone(), finding_c.clone()];
+        let current = [finding_a.clone(), finding_c.clone()];
         let delta = mgr.compare("base", &current).unwrap();
 
         // Serialize to JSON and back
@@ -864,14 +870,17 @@ mod tests {
         let finding_b = make_finding_with_severity("rule-b", "b.rs", "snippet_b", Severity::Medium);
 
         // Save two baselines: first with only A, then with A+B
-        mgr.save(&[finding_a.clone()], Some("first")).unwrap();
+        mgr.save(std::slice::from_ref(&finding_a), Some("first"))
+            .unwrap();
         std::thread::sleep(std::time::Duration::from_millis(10));
         mgr.save(&[finding_a.clone(), finding_b.clone()], Some("second"))
             .unwrap();
 
         // compare_latest should compare against "second" (most recent)
         // Current scan: only A — so B should appear as resolved
-        let delta = mgr.compare_latest(&[finding_a.clone()]).unwrap();
+        let delta = mgr
+            .compare_latest(std::slice::from_ref(&finding_a))
+            .unwrap();
         assert_eq!(delta.resolved_findings.len(), 1);
         assert_eq!(delta.resolved_findings[0].rule_id, "rule-b");
         assert_eq!(delta.new_findings.len(), 0);

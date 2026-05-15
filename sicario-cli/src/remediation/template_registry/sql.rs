@@ -919,7 +919,7 @@ const y = "hello";
     fn test_windows_path_separator_normalization() {
         // Simulate the path normalization logic from cmd_fix_staged.
         // On Windows, `git diff --cached --name-only` may return backslash paths.
-        let windows_paths = vec![
+        let windows_paths = [
             r"src\db.js",
             r"src\auth\login.js",
             r"lib\utils\helpers.ts",
@@ -934,7 +934,7 @@ const y = "hello";
         assert_eq!(normalized[3], "test/unit/db.test.js");
 
         // Verify forward-slash paths are unchanged.
-        let unix_paths = vec!["src/db.js", "src/auth/login.js"];
+        let unix_paths = ["src/db.js", "src/auth/login.js"];
         let normalized_unix: Vec<String> =
             unix_paths.iter().map(|p| p.replace('\\', "/")).collect();
         assert_eq!(normalized_unix[0], "src/db.js");

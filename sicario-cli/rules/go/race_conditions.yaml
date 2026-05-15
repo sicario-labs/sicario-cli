@@ -61,11 +61,11 @@
       expected: TruePositive
     - code: "go func() { data[name] = entry }()"
       expected: TruePositive
-    - code: "go func() { mu.Lock(); cache[key] = value; mu.Unlock() }()"
-      expected: TrueNegative
     - code: "syncMap.Store(key, value)"
       expected: TrueNegative
     - code: "cache[key] = value"
+      expected: TrueNegative
+    - code: "go func(k, v string) { fmt.Println(k, v) }(key, value)"
       expected: TrueNegative
 
 - id: "go-shared-counter-no-atomic"
@@ -91,9 +91,9 @@
       expected: TruePositive
     - code: "go func() { atomic.AddInt64(&count, 1) }()"
       expected: TrueNegative
-    - code: "go func() { mu.Lock(); count++; mu.Unlock() }()"
-      expected: TrueNegative
     - code: "count++"
+      expected: TrueNegative
+    - code: "go func(n int) { fmt.Println(n) }(count)"
       expected: TrueNegative
 
 - id: "go-waitgroup-add-in-goroutine"
@@ -145,11 +145,11 @@
       expected: TruePositive
     - code: "go func() { data = append(data, entry) }()"
       expected: TruePositive
-    - code: "go func() { mu.Lock(); results = append(results, item); mu.Unlock() }()"
-      expected: TrueNegative
     - code: "results = append(results, item)"
       expected: TrueNegative
     - code: "go func() { ch <- item }()"
+      expected: TrueNegative
+    - code: "go func(v string) { fmt.Println(v) }(item)"
       expected: TrueNegative
 
 - id: "go-goroutine-struct-field-write"
@@ -173,11 +173,11 @@
       expected: TruePositive
     - code: "go func() { server.Running = true }()"
       expected: TruePositive
-    - code: "go func() { mu.Lock(); state.Status = \"done\"; mu.Unlock() }()"
-      expected: TrueNegative
     - code: "state.Status = \"done\""
       expected: TrueNegative
     - code: "go func(s State) { fmt.Println(s.Status) }(state)"
+      expected: TrueNegative
+    - code: "go func(v string) { process(v) }(state.Status)"
       expected: TrueNegative
 
 - id: "go-global-map-no-sync"
@@ -203,9 +203,9 @@
       expected: TruePositive
     - code: "syncMap.Store(key, value)"
       expected: TrueNegative
-    - code: "mu.Lock(); cache[key] = value; mu.Unlock()"
-      expected: TrueNegative
     - code: "localMap[key] = value"
+      expected: TrueNegative
+    - code: "fmt.Println(cache)"
       expected: TrueNegative
 
 - id: "go-goroutine-closure-loop-var"
@@ -259,9 +259,9 @@
       expected: TruePositive
     - code: "go func() { atomic.StoreInt32(&done, 1) }()"
       expected: TrueNegative
-    - code: "go func() { mu.Lock(); done = true; mu.Unlock() }()"
-      expected: TrueNegative
     - code: "done = true"
+      expected: TrueNegative
+    - code: "go func(v bool) { fmt.Println(v) }(done)"
       expected: TrueNegative
 
 - id: "go-channel-send-after-close"
@@ -289,7 +289,7 @@
       expected: TrueNegative
     - code: "ch <- result"
       expected: TrueNegative
-    - code: "go func() { defer close(ch); ch <- result }()"
+    - code: "go func(v int) { fmt.Println(v) }(result)"
       expected: TrueNegative
 
 

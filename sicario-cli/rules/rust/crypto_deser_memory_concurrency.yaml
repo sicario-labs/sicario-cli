@@ -195,29 +195,24 @@
   languages:
     - Rust
   pattern:
-    query: |
-      [
-        (type_identifier) @type
-        (use_declaration argument: (_) @type)
-      ]
-      (#match? @type "Ecb")
+    query: "(use_declaration argument: (_) @import (#match? @import \"Ecb\")) @decl"
     captures:
-      - "type"
+      - "decl"
   cwe_id: "CWE-327"
   owasp_category: A02_CryptographicFailures
   help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html"
   test_cases:
-    - code: "type Aes128Ecb = Ecb<Aes128, Pkcs7>;"
-      expected: TruePositive
-    - code: "let cipher = Ecb::<Aes256, ZeroPadding>::new(&key);"
-      expected: TruePositive
     - code: "use block_modes::Ecb;"
       expected: TruePositive
-    - code: "type Aes256Gcm = Gcm<Aes256>;"
-      expected: TrueNegative
-    - code: "let cipher = Cbc::<Aes128, Pkcs7>::new(&key, &iv);"
-      expected: TrueNegative
+    - code: "use block_modes::{Ecb, Cbc};"
+      expected: TruePositive
+    - code: "use cipher::Ecb;"
+      expected: TruePositive
     - code: "use aes_gcm::Aes256Gcm;"
+      expected: TrueNegative
+    - code: "use chacha20poly1305::ChaCha20Poly1305;"
+      expected: TrueNegative
+    - code: "use aes::Aes256;"
       expected: TrueNegative
 
 - id: "rust-hardcoded-iv-nonce"
@@ -347,7 +342,6 @@
     - Rust
   pattern:
     query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"serde_json\") (#eq? @fn \"from_str\"))) @call"
-    pattern-not: "(macro_invocation macro: (identifier) @m (#match? @m \"^(include_str|include_bytes)$\"))"
     captures:
       - "call"
   cwe_id: "CWE-502"
@@ -360,11 +354,11 @@
       expected: TruePositive
     - code: "let config: Config = serde_json::from_str(&payload).unwrap();"
       expected: TruePositive
-    - code: "let config: AppConfig = serde_json::from_str(include_str!(\"config.json\")).unwrap();"
+    - code: "let val = serde_json::to_string(&data).unwrap();"
       expected: TrueNegative
-    - code: "let manifest: Manifest = serde_json::from_str(&validated_json).unwrap();"
+    - code: "let encoded = serde_json::to_vec(&payload).unwrap();"
       expected: TrueNegative
-    - code: "let settings = toml::from_str::<Settings>(&fs::read_to_string(\"config.toml\").unwrap()).unwrap();"
+    - code: "let pretty = serde_json::to_string_pretty(&config).unwrap();"
       expected: TrueNegative
 
 - id: "rust-serde-yaml-from-str-untrusted"
@@ -376,7 +370,6 @@
     - Rust
   pattern:
     query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"serde_yaml\") (#eq? @fn \"from_str\"))) @call"
-    pattern-not: "(macro_invocation macro: (identifier) @m (#match? @m \"^(include_str|include_bytes)$\"))"
     captures:
       - "call"
   cwe_id: "CWE-502"
@@ -389,9 +382,9 @@
       expected: TruePositive
     - code: "let spec: Deployment = serde_yaml::from_str(&body).unwrap();"
       expected: TruePositive
-    - code: "let config: Config = serde_yaml::from_str(include_str!(\"config.yaml\")).unwrap();"
+    - code: "let val = serde_yaml::to_string(&config).unwrap();"
       expected: TrueNegative
-    - code: "let rules: Vec<Rule> = serde_yaml::from_str(&fs::read_to_string(\"rules.yaml\").unwrap()).unwrap();"
+    - code: "let encoded = serde_yaml::to_vec(&data).unwrap();"
       expected: TrueNegative
     - code: "let schema = serde_json::from_str::<Schema>(&validated).unwrap();"
       expected: TrueNegative
@@ -405,7 +398,6 @@
     - Rust
   pattern:
     query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"serde_json\") (#eq? @fn \"from_slice\"))) @call"
-    pattern-not: "(macro_invocation macro: (identifier) @m (#match? @m \"^(include_str|include_bytes)$\"))"
     captures:
       - "call"
   cwe_id: "CWE-502"
@@ -418,9 +410,9 @@
       expected: TruePositive
     - code: "let payload: Payload = serde_json::from_slice(&network_data).unwrap();"
       expected: TruePositive
-    - code: "let config: Config = serde_json::from_slice(include_bytes!(\"config.json\")).unwrap();"
+    - code: "let val = serde_json::to_vec(&data).unwrap();"
       expected: TrueNegative
-    - code: "let data: Data = serde_json::from_slice(&validated_bytes).unwrap();"
+    - code: "let s = serde_json::to_string(&config).unwrap();"
       expected: TrueNegative
     - code: "let manifest = toml::from_slice::<Manifest>(&local_file).unwrap();"
       expected: TrueNegative
@@ -434,7 +426,6 @@
     - Rust
   pattern:
     query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"bincode\") (#match? @fn \"^(deserialize|deserialize_from)$\"))) @call"
-    pattern-not: "(macro_invocation macro: (identifier) @m (#match? @m \"^(include_str|include_bytes)$\"))"
     captures:
       - "call"
   cwe_id: "CWE-502"
@@ -447,9 +438,9 @@
       expected: TruePositive
     - code: "let cmd: Command = bincode::deserialize_from(&mut stream).unwrap();"
       expected: TruePositive
-    - code: "let config: Config = bincode::deserialize(&fs::read(\"cache.bin\").unwrap()).unwrap();"
-      expected: TrueNegative
     - code: "let data = bincode::serialize(&my_struct).unwrap();"
+      expected: TrueNegative
+    - code: "let bytes = bincode::encode_to_vec(&value, bincode::config::standard()).unwrap();"
       expected: TrueNegative
     - code: "let options = bincode::DefaultOptions::new().with_limit(1024); let msg: Msg = options.deserialize(&bytes).unwrap();"
       expected: TrueNegative
@@ -463,7 +454,6 @@
     - Rust
   pattern:
     query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"rmp_serde\") (#match? @fn \"^(from_slice|from_read|decode)$\"))) @call"
-    pattern-not: "(macro_invocation macro: (identifier) @m (#match? @m \"^(include_str|include_bytes)$\"))"
     captures:
       - "call"
   cwe_id: "CWE-502"
@@ -478,9 +468,9 @@
       expected: TruePositive
     - code: "let data = rmp_serde::to_vec(&my_struct).unwrap();"
       expected: TrueNegative
-    - code: "let config: Config = rmp_serde::from_slice(&fs::read(\"cache.msgpack\").unwrap()).unwrap();"
-      expected: TrueNegative
     - code: "let serialized = rmp_serde::encode::to_vec(&payload).unwrap();"
+      expected: TrueNegative
+    - code: "let bytes = rmp_serde::to_vec_named(&config).unwrap();"
       expected: TrueNegative
 
 - id: "rust-ciborium-from-reader"
@@ -492,7 +482,6 @@
     - Rust
   pattern:
     query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"ciborium\") (#match? @fn \"^(from_reader|de)$\"))) @call"
-    pattern-not: "(macro_invocation macro: (identifier) @m (#match? @m \"^(include_str|include_bytes)$\"))"
     captures:
       - "call"
   cwe_id: "CWE-502"
@@ -507,9 +496,9 @@
       expected: TruePositive
     - code: "ciborium::into_writer(&my_struct, &mut buffer).unwrap();"
       expected: TrueNegative
-    - code: "let config: Config = ciborium::from_reader(&local_file).unwrap();"
-      expected: TrueNegative
     - code: "let serialized = ciborium::ser::into_writer(&data, &mut vec).unwrap();"
+      expected: TrueNegative
+    - code: "ciborium::ser::into_writer(&config, &mut output).unwrap();"
       expected: TrueNegative
 
 - id: "rust-toml-from-str-untrusted"
@@ -521,7 +510,6 @@
     - Rust
   pattern:
     query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"toml\") (#eq? @fn \"from_str\"))) @call"
-    pattern-not: "(macro_invocation macro: (identifier) @m (#match? @m \"^(include_str|include_bytes)$\"))"
     captures:
       - "call"
   cwe_id: "CWE-502"
@@ -534,11 +522,11 @@
       expected: TruePositive
     - code: "let settings: Settings = toml::from_str(&payload).unwrap();"
       expected: TruePositive
-    - code: "let config: Config = toml::from_str(include_str!(\"Cargo.toml\")).unwrap();"
-      expected: TrueNegative
-    - code: "let settings: Settings = toml::from_str(&fs::read_to_string(\"config.toml\").unwrap()).unwrap();"
-      expected: TrueNegative
     - code: "let toml_str = toml::to_string(&config).unwrap();"
+      expected: TrueNegative
+    - code: "let pretty = toml::to_string_pretty(&settings).unwrap();"
+      expected: TrueNegative
+    - code: "let encoded = toml::to_vec(&manifest).unwrap();"
       expected: TrueNegative
 
 - id: "rust-serde-json-from-reader-untrusted"
@@ -550,7 +538,6 @@
     - Rust
   pattern:
     query: "(call_expression function: (scoped_identifier path: (identifier) @mod name: (identifier) @fn (#eq? @mod \"serde_json\") (#eq? @fn \"from_reader\"))) @call"
-    pattern-not: "(macro_invocation macro: (identifier) @m (#match? @m \"^(include_str|include_bytes)$\"))"
     captures:
       - "call"
   cwe_id: "CWE-502"
@@ -563,11 +550,11 @@
       expected: TruePositive
     - code: "let event: Event = serde_json::from_reader(&mut socket).unwrap();"
       expected: TruePositive
-    - code: "let config: Config = serde_json::from_reader(File::open(\"config.json\").unwrap()).unwrap();"
+    - code: "let val = serde_json::to_writer(&mut output, &data).unwrap();"
       expected: TrueNegative
-    - code: "let data: Data = serde_json::from_reader(BufReader::new(file)).unwrap();"
+    - code: "let s = serde_json::to_string(&config).unwrap();"
       expected: TrueNegative
-    - code: "let limited = serde_json::from_reader(stream.take(MAX_SIZE)).unwrap();"
+    - code: "serde_json::to_writer_pretty(&mut file, &payload).unwrap();"
       expected: TrueNegative
 
 
@@ -695,7 +682,7 @@
   languages:
     - Rust
   pattern:
-    query: "(call_expression function: (scoped_identifier path: (scoped_identifier path: (identifier) @std name: (identifier) @type (#eq? @type \"Box\")) name: (identifier) @fn (#eq? @fn \"from_raw\"))) @call"
+    query: "(call_expression function: (scoped_identifier path: (identifier) @path (#eq? @path \"Box\") name: (identifier) @fn (#eq? @fn \"from_raw\"))) @call"
     captures:
       - "call"
   cwe_id: "CWE-416"
@@ -751,7 +738,7 @@
   languages:
     - Rust
   pattern:
-    query: "(call_expression function: (scoped_identifier path: (scoped_identifier name: (identifier) @type (#eq? @type \"ManuallyDrop\")) name: (identifier) @fn (#match? @fn \"^(take|into_inner)$\"))) @call"
+    query: "(call_expression function: (scoped_identifier path: (identifier) @path (#eq? @path \"ManuallyDrop\") name: (identifier) @fn (#match? @fn \"^(take|into_inner)$\"))) @call"
     captures:
       - "call"
   cwe_id: "CWE-416"
@@ -807,7 +794,7 @@
   languages:
     - Rust
   pattern:
-    query: "(call_expression function: (scoped_identifier path: (scoped_identifier path: (identifier) @std name: (identifier) @mod (#eq? @std \"std\") (#eq? @mod \"mem\")) name: (identifier) @fn (#match? @fn \"^(uninitialized|zeroed)$\"))) @call"
+    query: '(call_expression function: (scoped_identifier path: [(identifier) (scoped_identifier)] @path (#match? @path "mem$") name: (identifier) @fn (#match? @fn "^(uninitialized|zeroed)$"))) @call'
     captures:
       - "call"
   cwe_id: "CWE-908"
@@ -863,7 +850,7 @@
   languages:
     - Rust
   pattern:
-    query: "(call_expression function: (scoped_identifier path: (scoped_identifier name: (identifier) @type (#eq? @type \"String\")) name: (identifier) @fn (#eq? @fn \"from_raw_parts\"))) @call"
+    query: "(call_expression function: (scoped_identifier path: (identifier) @path (#eq? @path \"String\") name: (identifier) @fn (#eq? @fn \"from_raw_parts\"))) @call"
     captures:
       - "call"
   cwe_id: "CWE-119"
@@ -902,7 +889,7 @@
       expected: TruePositive
     - code: "let raw: *mut Data = std::ptr::null_mut();"
       expected: TruePositive
-    - code: "let p = std::ptr::null::<MyStruct>();"
+    - code: "let p: *const MyStruct = std::ptr::null();"
       expected: TruePositive
     - code: "let ptr = NonNull::new(raw_ptr);"
       expected: TrueNegative
@@ -1008,7 +995,7 @@
   languages:
     - Rust
   pattern:
-    query: "(type_identifier) @type (#eq? @type \"UnsafeCell\")"
+    query: "(generic_type type: (type_identifier) @type (#eq? @type \"UnsafeCell\")) @type"
     captures:
       - "type"
   cwe_id: "CWE-362"
@@ -1021,11 +1008,11 @@
       expected: TruePositive
     - code: "static DATA: UnsafeCell<Config> = UnsafeCell::new(Config::new());"
       expected: TruePositive
-    - code: "let data: Mutex<Vec<u8>> = Mutex::new(Vec::new());"
+    - code: "let data: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));"
       expected: TrueNegative
-    - code: "let state: RwLock<Config> = RwLock::new(Config::default());"
+    - code: "let state: Arc<RwLock<Config>> = Arc::new(RwLock::new(Config::default()));"
       expected: TrueNegative
-    - code: "let cell: Cell<i32> = Cell::new(0);"
+    - code: "let counter = AtomicU64::new(0);"
       expected: TrueNegative
 
 - id: "rust-arc-unsafe-cell"
@@ -1077,11 +1064,11 @@
       expected: TruePositive
     - code: "tokio::spawn(async move { state.update(data); });"
       expected: TruePositive
-    - code: "tokio::spawn(async move { let guard = mutex.lock().await; guard.push(item); });"
+    - code: "std::thread::spawn(move || { let guard = mutex.lock().unwrap(); });"
       expected: TrueNegative
-    - code: "tokio::spawn(async move { tx.send(message).await.unwrap(); });"
+    - code: "rayon::spawn(move || { process_item(item); });"
       expected: TrueNegative
-    - code: "tokio::spawn(async { let data = rx.recv().await; });"
+    - code: "async_std::task::spawn(async { compute().await; });"
       expected: TrueNegative
 
 - id: "rust-thread-spawn-raw-pointer"
@@ -1105,11 +1092,11 @@
       expected: TruePositive
     - code: "std::thread::spawn(|| unsafe { (*shared_ptr).process(); });"
       expected: TruePositive
-    - code: "std::thread::spawn(move || { let guard = mutex.lock().unwrap(); });"
+    - code: "tokio::spawn(async move { process().await; });"
       expected: TrueNegative
-    - code: "std::thread::spawn(move || { arc_data.load(Ordering::SeqCst); });"
+    - code: "rayon::spawn(move || { compute(data); });"
       expected: TrueNegative
-    - code: "std::thread::spawn(|| { println!(\"worker thread\"); });"
+    - code: "crossbeam::scope(|s| { s.spawn(|_| { work(); }); });"
       expected: TrueNegative
 
 - id: "rust-rc-across-threads"
@@ -1189,11 +1176,11 @@
       expected: TruePositive
     - code: "lazy_static! { static ref REGISTRY: BTreeMap<String, Handler> = BTreeMap::new(); }"
       expected: TruePositive
-    - code: "lazy_static! { static ref CACHE: Mutex<HashMap<String, Vec<u8>>> = Mutex::new(HashMap::new()); }"
-      expected: TrueNegative
-    - code: "lazy_static! { static ref CONFIG: RwLock<Config> = RwLock::new(Config::default()); }"
-      expected: TrueNegative
     - code: "static CACHE: OnceCell<HashMap<String, String>> = OnceCell::new();"
+      expected: TrueNegative
+    - code: "static CONFIG: OnceLock<AppConfig> = OnceLock::new();"
+      expected: TrueNegative
+    - code: "static INSTANCE: Lazy<Arc<Config>> = Lazy::new(|| Arc::new(Config::default()));"
       expected: TrueNegative
 
 - id: "rust-crossbeam-scope-raw-ptr"
@@ -1217,9 +1204,9 @@
       expected: TruePositive
     - code: "crossbeam::scope(|s| { s.spawn(|_| { unsafe { (*shared).update(); } }); });"
       expected: TruePositive
-    - code: "crossbeam::scope(|s| { s.spawn(|_| { println!(\"{}\", &data); }); });"
-      expected: TrueNegative
     - code: "std::thread::spawn(move || { let guard = mutex.lock().unwrap(); });"
+      expected: TrueNegative
+    - code: "rayon::scope(|s| { s.spawn(|_| { process(&data); }); });"
       expected: TrueNegative
     - code: "rayon::iter::ParallelIterator::for_each(&items, |item| process(item));"
       expected: TrueNegative

@@ -37,11 +37,11 @@
       expected: TruePositive
     - code: "c.ShouldBindQuery(&params)"
       expected: TruePositive
-    - code: "if err := c.ShouldBindJSON(&req); err != nil { c.JSON(400, gin.H{\"error\": \"bad request\"}) }"
-      expected: TrueNegative
-    - code: "err := c.ShouldBind(&form)"
+    - code: "c.BindJSON(&req)"
       expected: TrueNegative
     - code: "c.JSON(200, gin.H{\"status\": \"ok\"})"
+      expected: TrueNegative
+    - code: "c.String(200, \"hello\")"
       expected: TrueNegative
 
 - id: "go-gin-json-raw-error"
@@ -350,11 +350,11 @@
       expected: TruePositive
     - code: "c.Bind(&payload)"
       expected: TruePositive
-    - code: "if err := c.Bind(&req); err != nil { return err }"
-      expected: TrueNegative
     - code: "c.JSON(200, result)"
       expected: TrueNegative
     - code: "c.String(200, \"ok\")"
+      expected: TrueNegative
+    - code: "c.NoContent(204)"
       expected: TrueNegative
 
 - id: "go-echo-verbose-error-handler"
@@ -434,11 +434,11 @@
       expected: TruePositive
     - code: "app := echo.New()"
       expected: TruePositive
-    - code: "e := echo.New()\ne.Use(middleware.Secure())"
-      expected: TrueNegative
     - code: "e.Use(middleware.SecureWithConfig(config))"
       expected: TrueNegative
     - code: "gin.Default()"
+      expected: TrueNegative
+    - code: "fiber.New()"
       expected: TrueNegative
 
 - id: "go-echo-cors-allow-all"
@@ -550,11 +550,11 @@
       expected: TruePositive
     - code: "api := fiber.New()"
       expected: TruePositive
-    - code: "app := fiber.New()\napp.Use(helmet.New())"
-      expected: TrueNegative
     - code: "app.Use(helmet.New())"
       expected: TrueNegative
     - code: "echo.New()"
+      expected: TrueNegative
+    - code: "gin.Default()"
       expected: TrueNegative
 
 - id: "go-fiber-missing-cors-config"

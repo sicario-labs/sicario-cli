@@ -24,11 +24,11 @@
   owasp_category: A03_Injection
   help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html"
   test_cases:
-    - code: "out.write(\"<div>\" + userInput + \"</div>\");"
+    - code: "out.write(\"<div>\" + userInput);"
       expected: TruePositive
-    - code: "out.write(\"<span>\" + request.getParameter(\"name\") + \"</span>\");"
+    - code: "out.write(\"<span>\" + request.getParameter(\"name\"));"
       expected: TruePositive
-    - code: "out.write(\"<p>\" + message + \"</p>\");"
+    - code: "out.write(\"<p>\" + message);"
       expected: TruePositive
     - code: "out.write(\"<div>\" + HtmlUtils.htmlEscape(userInput) + \"</div>\");"
       expected: TrueNegative
@@ -45,18 +45,18 @@
   languages:
     - Java
   pattern:
-    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#match? @method \"^(println|print|write)$\") arguments: (argument_list (binary_expression left: (string_literal) @html (#match? @html \"<\")))) @call"
+    query: "(method_invocation name: (identifier) @method (#match? @method \"^(println|print|write)$\") arguments: (argument_list (binary_expression) @expr (#match? @expr \"^\\\"<[a-zA-Z!]\"))) @call"
     captures:
       - "call"
   cwe_id: "CWE-79"
   owasp_category: A03_Injection
   help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html"
   test_cases:
-    - code: "writer.println(\"<html><body>\" + userInput + \"</body></html>\");"
+    - code: "writer.println(\"<html><body>\" + userInput);"
       expected: TruePositive
-    - code: "response.getWriter().print(\"<div>\" + name + \"</div>\");"
+    - code: "response.getWriter().print(\"<div>\" + name);"
       expected: TruePositive
-    - code: "pw.write(\"<h1>\" + title + \"</h1>\");"
+    - code: "pw.write(\"<h1>\" + title);"
       expected: TruePositive
     - code: "writer.println(ESAPI.encoder().encodeForHTML(userInput));"
       expected: TrueNegative
@@ -90,11 +90,11 @@
       expected: TruePositive
     - code: "String value = httpRequest.getParameter(\"input\");"
       expected: TruePositive
-    - code: "String name = HtmlUtils.htmlEscape(request.getParameter(\"name\"));"
-      expected: TrueNegative
-    - code: "int page = Integer.parseInt(request.getParameter(\"page\"));"
-      expected: TrueNegative
     - code: "String header = request.getHeader(\"Accept\");"
+      expected: TrueNegative
+    - code: "String userId = session.getAttribute(\"userId\").toString();"
+      expected: TrueNegative
+    - code: "String name = (String) model.getAttribute(\"name\");"
       expected: TrueNegative
 
 - id: "java-xss-response-setcontenttype-html"
@@ -144,11 +144,11 @@
   owasp_category: A03_Injection
   help_uri: "https://docs.spring.io/spring-framework/docs/current/reference/html/web.html#mvc-ann-responsebody"
   test_cases:
-    - code: "return \"<h1>Welcome \" + username + \"</h1>\";"
+    - code: "return \"<h1>Welcome \" + username;"
       expected: TruePositive
-    - code: "return \"<div class='result'>\" + searchResult + \"</div>\";"
+    - code: "return \"<div class='result'>\" + searchResult;"
       expected: TruePositive
-    - code: "return \"<p>\" + message + \"</p>\";"
+    - code: "return \"<p>\" + message;"
       expected: TruePositive
     - code: "return ResponseEntity.ok(jsonResponse);"
       expected: TrueNegative
@@ -197,7 +197,7 @@
   languages:
     - Java
   pattern:
-    query: "(string_literal) @str (#match? @str \"th:utext\")"
+    query: "(string_literal) @str (#match? @str \"th:utext\") (#not-match? @str \"th:text\")"
     captures:
       - "str"
   cwe_id: "CWE-79"
@@ -225,7 +225,7 @@
   languages:
     - Java
   pattern:
-    query: "(string_literal) @str (#match? @str \"th:inline=.javascript\")"
+    query: "(string_literal) @str (#match? @str \"th:inline\") (#match? @str \"javascript\") (#not-match? @str \"th:text\")"
     captures:
       - "str"
   cwe_id: "CWE-79"

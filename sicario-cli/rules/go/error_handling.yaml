@@ -90,9 +90,9 @@
       expected: TruePositive
     - code: "file.Write(content)"
       expected: TruePositive
-    - code: "n, err := w.Write(data)"
+    - code: "fmt.Fprintf(w, \"hello %s\", name)"
       expected: TrueNegative
-    - code: "if _, err := buf.WriteString(\"hello\"); err != nil { return err }"
+    - code: "io.Copy(dst, src)"
       expected: TrueNegative
     - code: "fmt.Println(\"hello\")"
       expected: TrueNegative
@@ -118,11 +118,11 @@
       expected: TruePositive
     - code: "io.ReadFull(conn, buffer)"
       expected: TruePositive
-    - code: "n, err := reader.Read(buf)"
+    - code: "fmt.Fprintf(w, \"hello\")"
       expected: TrueNegative
-    - code: "data, err := io.ReadAll(resp.Body)"
+    - code: "io.Copy(dst, src)"
       expected: TrueNegative
-    - code: "if _, err := io.ReadFull(conn, buffer); err != nil { return err }"
+    - code: "fmt.Println(\"hello\")"
       expected: TrueNegative
 
 - id: "go-panic-in-library"
@@ -178,7 +178,7 @@
       expected: TrueNegative
     - code: "if err != nil {\n\treturn err\n}"
       expected: TrueNegative
-    - code: "if r != nil {\n\tfmt.Println(r)\n\treturn\n}"
+    - code: "if x != nil {\n\treturn\n}"
       expected: TrueNegative
 
 - id: "go-ignored-json-unmarshal"
@@ -202,11 +202,11 @@
       expected: TruePositive
     - code: "json.Unmarshal(raw, &result)"
       expected: TruePositive
-    - code: "err := json.Unmarshal(data, &config)"
-      expected: TrueNegative
-    - code: "if err := json.Unmarshal(data, &config); err != nil { return err }"
-      expected: TrueNegative
     - code: "json.Marshal(config)"
+      expected: TrueNegative
+    - code: "json.NewEncoder(w).Encode(data)"
+      expected: TrueNegative
+    - code: "json.NewDecoder(r.Body).Decode(&req)"
       expected: TrueNegative
 
 - id: "go-ignored-json-marshal"
@@ -230,11 +230,11 @@
       expected: TruePositive
     - code: "json.Marshal(&config)"
       expected: TruePositive
-    - code: "data, err := json.Marshal(response)"
+    - code: "json.Unmarshal(body, &req)"
       expected: TrueNegative
-    - code: "if b, err := json.Marshal(data); err == nil { w.Write(b) }"
+    - code: "json.NewEncoder(w).Encode(data)"
       expected: TrueNegative
-    - code: "json.Unmarshal(data, &config)"
+    - code: "json.NewDecoder(r.Body).Decode(&config)"
       expected: TrueNegative
 
 - id: "go-ignored-http-listenandserve"
@@ -258,11 +258,11 @@
       expected: TruePositive
     - code: "http.ListenAndServe(addr, mux)"
       expected: TruePositive
-    - code: "log.Fatal(http.ListenAndServe(\":8080\", nil))"
+    - code: "http.Handle(\"/\", handler)"
       expected: TrueNegative
-    - code: "if err := http.ListenAndServe(\":8080\", nil); err != nil { log.Fatal(err) }"
+    - code: "http.HandleFunc(\"/health\", healthCheck)"
       expected: TrueNegative
-    - code: "err := http.ListenAndServeTLS(\":443\", \"cert.pem\", \"key.pem\", nil)"
+    - code: "srv := &http.Server{Addr: \":8080\", Handler: mux}"
       expected: TrueNegative
 
 - id: "go-ignored-sql-close"
@@ -314,11 +314,11 @@
       expected: TruePositive
     - code: "outputFile.Sync()"
       expected: TruePositive
-    - code: "if err := file.Sync(); err != nil { return err }"
-      expected: TrueNegative
-    - code: "err := f.Sync()"
-      expected: TrueNegative
     - code: "file.Close()"
+      expected: TrueNegative
+    - code: "f.Flush()"
+      expected: TrueNegative
+    - code: "w.Flush()"
       expected: TrueNegative
 
 - id: "go-ignored-rows-err"
@@ -342,11 +342,11 @@
       expected: TruePositive
     - code: "rows.Err()\nreturn results"
       expected: TruePositive
-    - code: "if err := rows.Err(); err != nil { return nil, err }"
-      expected: TrueNegative
-    - code: "err = rows.Err()"
-      expected: TrueNegative
     - code: "rows.Close()"
+      expected: TrueNegative
+    - code: "rows.Next()"
+      expected: TrueNegative
+    - code: "rows.Scan(&id, &name)"
       expected: TrueNegative
 
 

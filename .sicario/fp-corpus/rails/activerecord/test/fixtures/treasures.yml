@@ -1,0 +1,14 @@
+diamond:
+  name: $LABEL
+
+sapphire:
+  name: $LABEL
+  looter: redbeard (Pirate)
+
+ruby:
+  name: $LABEL
+  looter: louis (Parrot)
+
+emerald:
+  id: 1
+  name: $LABEL

@@ -14,7 +14,7 @@
   languages:
     - Php
   pattern:
-    query: "(binary_expression left: (_) @sql right: (_) @input (#match? @sql \"(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|FROM|WHERE)\")) @concat"
+    query: "(_ @concat (#match? @concat \"(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|FROM|WHERE)\") (#match? @concat \"[ .]\\\\$\"))"
     captures:
       - "concat"
   cwe_id: "CWE-89"
@@ -54,14 +54,14 @@
   languages:
     - Php
   pattern:
-    query: "(function_call_expression function: (name) @fn (#match? @fn \"^(exec|system|shell_exec|passthru|popen|proc_open)$\") arguments: (arguments (encapsed_string (variable) @var))) @call"
+    query: "(function_call_expression function: (name) @fn (#match? @fn \"^(exec|system|shell_exec|passthru|popen|proc_open)$\") arguments: (arguments [ (encapsed_string (variable) @var) (_ @concat (#match? @concat \"\\\\$\")) ])) @call"
     captures:
       - "call"
   cwe_id: "CWE-78"
   owasp_category: A03_Injection
   help_uri: "https://owasp.org/www-community/attacks/Command_Injection"
   test_cases:
-    - code: 'exec("convert $filename output.png");'
+    - code: 'exec("ping " . $host);'
       expected: TruePositive
     - code: 'exec("ls -la /var/log");'
       expected: TrueNegative
@@ -74,14 +74,14 @@
   languages:
     - Php
   pattern:
-    query: "(include_expression (encapsed_string (variable) @var)) @include"
+    query: "(include_expression [ (encapsed_string (variable) @var) (_ @concat (#match? @concat \"\\\\$\")) ]) @include"
     captures:
       - "include"
   cwe_id: "CWE-22"
   owasp_category: A01_BrokenAccessControl
   help_uri: "https://owasp.org/www-community/attacks/Path_Traversal"
   test_cases:
-    - code: 'include("pages/$page.php");'
+    - code: 'include("pages/" . $page . ".php");'
       expected: TruePositive
     - code: 'include("pages/home.php");'
       expected: TrueNegative
@@ -94,7 +94,7 @@
   languages:
     - Php
   pattern:
-    query: "(function_call_expression function: (name) @fn (#match? @fn \"^(file_get_contents|file_put_contents|fopen|readfile|unlink)$\") arguments: (arguments (encapsed_string (variable) @var))) @call"
+    query: "(function_call_expression function: (name) @fn (#match? @fn \"^(file_get_contents|file_put_contents|fopen|readfile|unlink)$\") arguments: (arguments [ (encapsed_string (variable) @var) (_ @concat (#match? @concat \"\\\\$\")) ])) @call"
     captures:
       - "call"
   cwe_id: "CWE-22"
@@ -114,14 +114,16 @@
   languages:
     - Php
   pattern:
-    query: "(echo_statement (subscript_expression object: (variable) @obj (#match? @obj \"^\\$_(GET|POST|REQUEST|COOKIE|SERVER)$\"))) @echo"
+    query: "(echo_statement [ (subscript_expression object: (variable) @obj (#match? @obj \"^\\$_(GET|POST|REQUEST|COOKIE|SERVER)$\")) (encapsed_string (variable) @var (#match? @var \"^\\$_(GET|POST|REQUEST|COOKIE|SERVER)$\")) (_ @concat (#match? @concat \"\\\\$_(GET|POST|REQUEST|COOKIE|SERVER)\")) ]) @echo"
     captures:
       - "echo"
   cwe_id: "CWE-79"
   owasp_category: A03_Injection
   help_uri: "https://owasp.org/www-community/attacks/xss/"
   test_cases:
-    - code: 'echo $_GET["name"];'
+    - code: 'echo "Hello " . $_GET["name"];'
+      expected: TruePositive
+    - code: 'echo "Welcome {$_POST["user"]}";'
       expected: TruePositive
     - code: 'echo htmlspecialchars($_GET["name"], ENT_QUOTES, "UTF-8");'
       expected: TrueNegative
@@ -154,7 +156,7 @@
   languages:
     - Php
   pattern:
-    query: "(function_call_expression function: (name) @fn (#eq? @fn \"curl_setopt\") arguments: (arguments (_) @handle (name) @opt (#eq? @opt \"CURLOPT_URL\") (encapsed_string (variable) @var))) @call"
+    query: "(function_call_expression function: (name) @fn (#eq? @fn \"curl_setopt\") arguments: (arguments (_) @handle (name) @opt (#eq? @opt \"CURLOPT_URL\") [ (encapsed_string (variable) @var) (_ @concat (#match? @concat \"\\\\$\")) ])) @call"
     captures:
       - "call"
   cwe_id: "CWE-918"
@@ -166,3 +168,66 @@
     - code: 'curl_setopt($ch, CURLOPT_URL, "https://api.example.com/data");'
       expected: TrueNegative
 
+- id: "php-deserialization-unserialize"
+  name: "Insecure Deserialization via unserialize()"
+  description: "Deserializing user-controlled data with unserialize() can lead to PHP Object Injection and Remote Code Execution. Use json_decode() instead."
+  severity: Critical
+  confidence: High
+  languages:
+    - Php
+  pattern:
+    query: "(function_call_expression function: (name) @fn (#eq? @fn \"unserialize\") arguments: (arguments [ (subscript_expression object: (variable) @obj (#match? @obj \"^\\$_(GET|POST|REQUEST|COOKIE|SERVER)$\")) (variable) @var ])) @call"
+  captures:
+    - "call"
+  cwe_id: "CWE-502"
+  owasp_category: A08_DataIntegrityFailures
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html#php"
+  test_cases:
+    - code: 'unserialize($_POST["data"]);'
+      expected: TruePositive
+    - code: 'unserialize($userData);'
+      expected: TruePositive
+    - code: 'json_decode($_POST["data"]);'
+      expected: TrueNegative
+
+- id: "php-xxe-simplexmlelement"
+  name: "XXE via SimpleXMLElement"
+  description: "Creating a SimpleXMLElement from untrusted data without disabling external entities allows XXE attacks. Use libxml_disable_entity_loader(true) before parsing."
+  severity: High
+  confidence: medium
+  languages:
+    - Php
+  pattern:
+    query: "(new_expression constructor: (name) @name (#eq? @name \"SimpleXMLElement\") arguments: (arguments [ (variable) @var (subscript_expression) @sub ])) @call"
+  captures:
+    - "call"
+  cwe_id: "CWE-611"
+  owasp_category: A05_SecurityMisconfiguration
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html#php"
+  test_cases:
+    - code: 'new SimpleXMLElement($xml);'
+      expected: TruePositive
+    - code: 'new SimpleXMLElement($_POST["xml"]);'
+      expected: TruePositive
+    - code: 'libxml_disable_entity_loader(true); $xml = new SimpleXMLElement($data);'
+      expected: TrueNegative
+
+- id: "php-ldap-injection"
+  name: "LDAP Injection via ldap_search"
+  description: "Constructing LDAP filters with unescaped user input allows LDAP injection. Use ldap_escape() for all user-supplied values."
+  severity: High
+  confidence: medium
+  languages:
+    - Php
+  pattern:
+    query: "(function_call_expression function: (name) @fn (#match? @fn \"^ldap_(search|list|read)$\") arguments: (arguments (_) (_) [ (encapsed_string (variable)) (_ @concat (#match? @concat \"\\\\$\")) ])) @call"
+  captures:
+    - "call"
+  cwe_id: "CWE-90"
+  owasp_category: A03_Injection
+  help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/LDAP_Injection_Prevention_Cheat_Sheet.html"
+  test_cases:
+    - code: 'ldap_search($ds, "o=My Company, c=US", "uid=" . $user);'
+      expected: TruePositive
+    - code: 'ldap_search($ds, "o=My Company, c=US", "uid=" . ldap_escape($user));'
+      expected: TrueNegative

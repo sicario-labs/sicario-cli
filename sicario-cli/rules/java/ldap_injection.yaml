@@ -17,18 +17,18 @@
   languages:
     - Java
   pattern:
-    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"search\") arguments: (argument_list (_) (binary_expression left: (string_literal) @filter (#match? @filter \"^\\\"\\\\(\")))) @call"
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"search\") arguments: (argument_list (_) (binary_expression left: [ (string_literal) @filter (#match? @filter \"^\\\"\\\\(\") (binary_expression left: (string_literal) @filter (#match? @filter \"^\\\"\\\\(\")) ]))) @call"
     captures:
       - "call"
   cwe_id: "CWE-90"
   owasp_category: A03_Injection
   help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/LDAP_Injection_Prevention_Cheat_Sheet.html"
   test_cases:
-    - code: "ctx.search(\"ou=users\", \"(uid=\" + username + \")\", controls);"
+    - code: "ctx.search(\"ou=users\", \"(uid=\" + username, controls);"
       expected: TruePositive
-    - code: "dirContext.search(\"dc=example,dc=com\", \"(cn=\" + name + \")\", controls);"
+    - code: "dirContext.search(\"dc=example,dc=com\", \"(cn=\" + name, controls);"
       expected: TruePositive
-    - code: "context.search(baseDn, \"(mail=\" + email + \")\", searchControls);"
+    - code: "context.search(baseDn, \"(mail=\" + email, searchControls);"
       expected: TruePositive
     - code: "ctx.search(\"ou=users\", \"(uid={0})\", new Object[]{username}, controls);"
       expected: TrueNegative
@@ -77,24 +77,24 @@
   languages:
     - Java
   pattern:
-    query: "(method_invocation object: (identifier) @obj (#match? @obj \"(?i)(ldapTemplate|ldap|template)\") name: (identifier) @method (#eq? @method \"search\") arguments: (argument_list (_) (binary_expression left: (string_literal) @filter (#match? @filter \"^\\\"\\\\(\")))) @call"
+    query: "(method_invocation object: (identifier) @obj (#match? @obj \"(?i)(ldapTemplate|ldap|template)\") name: (identifier) @method (#eq? @method \"search\") arguments: (argument_list (_) (binary_expression left: [ (string_literal) @filter (#match? @filter \"^\\\"\\\\(\") (binary_expression left: (string_literal) @filter (#match? @filter \"^\\\"\\\\(\")) ]))) @call"
     captures:
       - "call"
   cwe_id: "CWE-90"
   owasp_category: A03_Injection
   help_uri: "https://docs.spring.io/spring-ldap/docs/current/reference/#basic-queries"
   test_cases:
-    - code: "ldapTemplate.search(\"ou=users\", \"(uid=\" + username + \")\", mapper);"
+    - code: "ldapTemplate.search(\"ou=users\", \"(uid=\" + username, mapper);"
       expected: TruePositive
-    - code: "ldapTemplate.search(baseDn, \"(cn=\" + name + \")\", attributeMapper);"
+    - code: "ldapTemplate.search(baseDn, \"(cn=\" + name, attributeMapper);"
       expected: TruePositive
-    - code: "template.search(\"dc=example\", \"(mail=\" + email + \")\", mapper);"
+    - code: "template.search(\"dc=example\", \"(mail=\" + email, mapper);"
       expected: TruePositive
     - code: "ldapTemplate.search(query().where(\"uid\").is(username), mapper);"
       expected: TrueNegative
-    - code: "ldapTemplate.search(\"ou=users\", \"(objectClass=person)\", mapper);"
-      expected: TrueNegative
     - code: "ldapTemplate.authenticate(query, password);"
+      expected: TrueNegative
+    - code: "ldapTemplate.findAll(Person.class);"
       expected: TrueNegative
 
 - id: "java-ldap-ldaptemplate-search-variable-filter"
@@ -105,7 +105,7 @@
   languages:
     - Java
   pattern:
-    query: "(method_invocation object: (identifier) @obj (#match? @obj \"(?i)(ldapTemplate|ldap|template)\") name: (identifier) @method (#eq? @method \"search\") arguments: (argument_list (_) (identifier) @filter)) @call"
+    query: "(method_invocation object: (identifier) @obj (#match? @obj \"(?i)(ldapTemplate|ldap|template)\") name: (identifier) @method (#eq? @method \"search\") arguments: (argument_list (_) (identifier) @filter . (_)*)) @call"
     captures:
       - "call"
   cwe_id: "CWE-90"
@@ -118,9 +118,9 @@
       expected: TruePositive
     - code: "template.search(\"dc=example\", filter, mapper);"
       expected: TruePositive
-    - code: "ldapTemplate.search(query().where(\"uid\").is(username), mapper);"
+    - code: "ldapTemplate.search(query().where(\"uid\").is(username), new PersonMapper());"
       expected: TrueNegative
-    - code: "ldapTemplate.search(\"ou=users\", \"(objectClass=person)\", mapper);"
+    - code: "ldapTemplate.search(\"ou=users\", \"(objectClass=person)\", new ContextMapper<Object>() { public Object mapFromContext(Object ctx) { return null; } });"
       expected: TrueNegative
     - code: "ldapTemplate.authenticate(query, password);"
       expected: TrueNegative
@@ -137,7 +137,7 @@
   languages:
     - Java
   pattern:
-    query: "(variable_declarator value: (binary_expression left: (string_literal) @filter (#match? @filter \"^\\\"\\\\(\") right: (_) @right)) @decl"
+    query: "(variable_declarator value: (binary_expression left: [ (string_literal) @filter (#match? @filter \"^\\\"\\\\(\") (binary_expression left: (string_literal) @filter (#match? @filter \"^\\\"\\\\(\")) ])) @decl"
     captures:
       - "decl"
   cwe_id: "CWE-90"

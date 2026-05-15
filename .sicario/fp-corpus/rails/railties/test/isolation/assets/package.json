@@ -1,0 +1,8 @@
+{
+  "name": "dummy",
+  "private": true,
+  "dependencies": {
+    "@rails/actioncable": "file:../../../../actioncable",
+    "@rails/activestorage": "file:../../../../activestorage"
+  }
+}

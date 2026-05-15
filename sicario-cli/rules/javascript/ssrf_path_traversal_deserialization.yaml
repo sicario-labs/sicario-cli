@@ -188,9 +188,9 @@
       expected: TruePositive
     - code: "fs.readFile(requestedFile, callback);"
       expected: TruePositive
-    - code: "fs.readFile('/etc/config.json', callback);"
+    - code: "fs.readFile('/etc/config.json', 'utf8', (err, data) => {});"
       expected: TrueNegative
-    - code: "fs.readFile('./data/config.json', 'utf8', callback);"
+    - code: "fs.readFile('./data/config.json', 'utf8', (err, data) => {});"
       expected: TrueNegative
     - code: "console.log('fs.readFile called');"
       expected: TrueNegative
@@ -333,7 +333,7 @@
       expected: TruePositive
     - code: "fs.writeFile(outputFile, buffer, callback);"
       expected: TruePositive
-    - code: "fs.writeFile('/tmp/output.json', data, callback);"
+    - code: "fs.writeFile('/tmp/output.json', JSON.stringify(data), (err) => {});"
       expected: TrueNegative
     - code: "fs.writeFileSync('./config.json', JSON.stringify(config));"
       expected: TrueNegative
@@ -362,7 +362,7 @@
       expected: TruePositive
     - code: "fs.rm(targetFile, callback);"
       expected: TruePositive
-    - code: "fs.unlink('/tmp/session.tmp', callback);"
+    - code: "fs.unlink('/tmp/session.tmp', (err) => {});"
       expected: TrueNegative
     - code: "fs.rmSync('./cache/old.json');"
       expected: TrueNegative

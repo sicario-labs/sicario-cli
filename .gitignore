@@ -3,6 +3,9 @@
 **/target/
 **/*.rs.bk
 *.pdb
+*.exe
+*.o
+*.rcgu.*
 
 # IDE
 .vscode/

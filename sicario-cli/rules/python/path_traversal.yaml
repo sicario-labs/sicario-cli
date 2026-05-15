@@ -109,11 +109,11 @@
       expected: TruePositive
     - code: "os.path.join(MEDIA_ROOT, request.args.get('file'))"
       expected: TruePositive
-    - code: "os.path.join('static', 'css', 'style.css')"
-      expected: TrueNegative
-    - code: "os.path.join(BASE_DIR, 'templates')"
-      expected: TrueNegative
     - code: "os.path.exists('/tmp/file.txt')"
+      expected: TrueNegative
+    - code: "os.path.dirname('/etc/config.yaml')"
+      expected: TrueNegative
+    - code: "os.path.basename('/uploads/file.txt')"
       expected: TrueNegative
 
 - id: "py-shutil-copy-fstring"

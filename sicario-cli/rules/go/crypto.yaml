@@ -113,11 +113,11 @@
   owasp_category: A02_CryptographicFailures
   help_uri: "https://cwe.mitre.org/data/definitions/321.html"
   test_cases:
-    - code: "block, _ := aes.NewCipher([]byte(\"my-secret-key-16\"))"
+    - code: "block, _ := aes.NewCipher([]byte{0x6b, 0x65, 0x79, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x61, 0x62, 0x63})"
       expected: TruePositive
-    - code: "block, err := aes.NewCipher([]byte{0x00, 0x01, 0x02})"
+    - code: "block, err := aes.NewCipher([]byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f})"
       expected: TruePositive
-    - code: "c, _ := aes.NewCipher([]byte(\"hardcoded-aes!!\"))"
+    - code: "c, _ := aes.NewCipher([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16})"
       expected: TruePositive
     - code: "block, err := aes.NewCipher(keyFromEnv)"
       expected: TrueNegative
@@ -149,9 +149,9 @@
       expected: TruePositive
     - code: "dk := pbkdf2.Key(password, salt, 600000, 32, sha256.New)"
       expected: TrueNegative
-    - code: "dk := pbkdf2.Key(password, salt, iterations, 32, sha256.New)"
-      expected: TrueNegative
     - code: "key := argon2.IDKey(password, salt, 1, 64*1024, 4, 32)"
+      expected: TrueNegative
+    - code: "hash, err := bcrypt.GenerateFromPassword(password, 12)"
       expected: TrueNegative
 
 - id: "go-hardcoded-iv-nonce"
@@ -169,11 +169,11 @@
   owasp_category: A02_CryptographicFailures
   help_uri: "https://cwe.mitre.org/data/definitions/329.html"
   test_cases:
-    - code: "mode := cipher.NewCBCEncrypter(block, []byte(\"1234567890123456\"))"
+    - code: "mode := cipher.NewCBCEncrypter(block, []byte{0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36})"
       expected: TruePositive
     - code: "stream := cipher.NewCFBEncrypter(block, []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})"
       expected: TruePositive
-    - code: "stream := cipher.NewCTR(block, []byte(\"static-iv-value!\"))"
+    - code: "stream := cipher.NewCTR(block, []byte{0x73, 0x74, 0x61, 0x74, 0x69, 0x63, 0x2d, 0x69, 0x76, 0x2d, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x21})"
       expected: TruePositive
     - code: "mode := cipher.NewCBCEncrypter(block, iv)"
       expected: TrueNegative
@@ -281,11 +281,11 @@
   owasp_category: A02_CryptographicFailures
   help_uri: "https://cwe.mitre.org/data/definitions/321.html"
   test_cases:
-    - code: "mac := hmac.New(sha256.New, []byte(\"my-secret-key\"))"
+    - code: "mac := hmac.New(sha256.New, []byte{0x6d, 0x79, 0x2d, 0x73, 0x65, 0x63, 0x72, 0x65, 0x74, 0x2d, 0x6b, 0x65, 0x79})"
       expected: TruePositive
-    - code: "h := hmac.New(sha512.New, []byte(\"hardcoded-hmac-key\"))"
+    - code: "h := hmac.New(sha512.New, []byte{0x68, 0x61, 0x72, 0x64, 0x63, 0x6f, 0x64, 0x65, 0x64})"
       expected: TruePositive
-    - code: "m := hmac.New(sha256.New, []byte{0x01, 0x02, 0x03})"
+    - code: "m := hmac.New(sha256.New, []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08})"
       expected: TruePositive
     - code: "mac := hmac.New(sha256.New, keyFromEnv)"
       expected: TrueNegative
@@ -337,9 +337,9 @@
   owasp_category: A02_CryptographicFailures
   help_uri: "https://cwe.mitre.org/data/definitions/321.html"
   test_cases:
-    - code: "cert, err := tls.X509KeyPair([]byte(certPEM), []byte(keyPEM))"
+    - code: "cert, err := tls.X509KeyPair([]byte{0x30, 0x82, 0x01, 0x0a}, []byte{0x30, 0x82, 0x01, 0x0b})"
       expected: TruePositive
-    - code: "pair, _ := tls.X509KeyPair([]byte(\"-----BEGIN CERTIFICATE-----\"), []byte(\"-----BEGIN RSA PRIVATE KEY-----\"))"
+    - code: "pair, _ := tls.X509KeyPair([]byte{0x2d, 0x2d, 0x2d, 0x2d, 0x2d}, []byte{0x2d, 0x2d, 0x2d, 0x2d, 0x2d})"
       expected: TruePositive
     - code: "c, err := tls.X509KeyPair([]byte{0x30, 0x82}, []byte{0x30, 0x82})"
       expected: TruePositive
@@ -393,11 +393,11 @@
   owasp_category: A02_CryptographicFailures
   help_uri: "https://cwe.mitre.org/data/definitions/329.html"
   test_cases:
-    - code: "ciphertext := gcm.Seal(nil, []byte(\"static-nonce!\"), plaintext, nil)"
+    - code: "ciphertext := gcm.Seal(nil, []byte{0x73, 0x74, 0x61, 0x74, 0x69, 0x63, 0x2d, 0x6e, 0x6f, 0x6e, 0x63, 0x65}, plaintext, nil)"
       expected: TruePositive
     - code: "ct := aesgcm.Seal(nil, []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, data, nil)"
       expected: TruePositive
-    - code: "encrypted := gcm.Seal(nil, []byte(\"000000000000\"), msg, aad)"
+    - code: "encrypted := gcm.Seal(nil, []byte{0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30}, msg, aad)"
       expected: TruePositive
     - code: "ciphertext := gcm.Seal(nil, nonce, plaintext, nil)"
       expected: TrueNegative

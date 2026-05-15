@@ -3,594 +3,700 @@
     "patch_id": "c50339e8-d5cc-460f-a14c-34814d0ccb77",
     "applied_at": "2026-04-29T14:48:19.230530300+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144819_227478400\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144819_227478400\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "204257d1-7560-4077-a636-9b8012181003",
     "applied_at": "2026-04-29T14:48:20.056776900+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144820_53484900\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144820_53484900\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "e9370e35-c97f-4453-a1d4-8a5c78f76504",
     "applied_at": "2026-04-29T14:48:20.847394100+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144820_838520800\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144820_838520800\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "5837a5e1-8d8e-4cf8-87a1-9f68b5a30f76",
     "applied_at": "2026-04-29T14:48:21.692951100+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144821_689013200\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144821_689013200\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "d369c833-3096-4ebe-8a48-d60b71101413",
     "applied_at": "2026-04-29T14:48:22.528488700+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144822_526100200\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144822_526100200\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "a86da5e0-29d5-4476-9088-4e916e0c13e9",
     "applied_at": "2026-04-29T14:48:23.378666400+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144823_375698200\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144823_375698200\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "35ed7795-d735-4edb-8cbc-6bfdeb600d07",
     "applied_at": "2026-04-29T14:48:24.202574800+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144824_199792300\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144824_199792300\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "c70ee11f-1651-4e7f-81a0-fd812b6c2a20",
     "applied_at": "2026-04-29T14:48:25.307408400+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144825_305430600\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144825_305430600\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "7ee35303-d9d8-40af-adcd-82ac201767b2",
     "applied_at": "2026-04-29T14:48:26.215440400+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144826_209244200\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144826_209244200\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "fa0fabe2-26db-42b5-8d38-d32bbbdf0e22",
     "applied_at": "2026-04-29T14:48:34.370912900+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144834_366862400\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144834_366862400\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "be58b646-43fe-44c7-82df-6d849cf6bcb8",
     "applied_at": "2026-04-29T14:49:03.817354100+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144903_815079800\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144903_815079800\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "8fd72a86-2e52-4756-8057-066878c8ddb9",
     "applied_at": "2026-04-29T14:49:04.587331400+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144904_585019900\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144904_585019900\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "a5e82a85-efb2-4633-ab1b-68b52bbe51f0",
     "applied_at": "2026-04-29T14:49:05.357347200+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144905_355358900\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144905_355358900\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "1bc37285-caf2-4b29-b95a-c18cf95bcf07",
     "applied_at": "2026-04-29T14:49:06.140870600+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144906_138245700\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144906_138245700\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "5fcec961-913e-4196-804a-aa4267c2fe19",
     "applied_at": "2026-04-29T14:49:06.979981100+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144906_977704000\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144906_977704000\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "e9f94828-31dd-447d-bf91-616bb8017b66",
     "applied_at": "2026-04-29T14:49:07.747511100+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144907_738074000\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144907_738074000\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "fb949fad-4e4e-4bc1-be32-e9d845680230",
     "applied_at": "2026-04-29T14:49:08.547006700+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144908_536196600\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144908_536196600\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "53b99f92-20dd-4ba6-b730-0a4eb55802e4",
     "applied_at": "2026-04-29T14:49:09.886054200+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144909_870745400\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144909_870745400\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "d28eb764-9aec-4572-91d7-a5b59c8cf02e",
     "applied_at": "2026-04-29T14:49:10.720911700+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144910_709806300\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144910_709806300\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "ea887a59-3695-4338-bf80-e9211ebcce00",
     "applied_at": "2026-04-29T14:49:11.499463800+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144911_488416400\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144911_488416400\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "c89327e1-ee47-4034-a62c-9c60a8e92eb2",
     "applied_at": "2026-04-29T14:49:12.368655500+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144912_366126800\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144912_366126800\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "cb8edd50-d66d-439e-becb-2a6e010ec7ed",
     "applied_at": "2026-04-29T14:49:13.120853500+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144913_107824400\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144913_107824400\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "ca46ae54-3cab-4ebf-bf87-a2c9d0cd4bbf",
     "applied_at": "2026-04-29T14:49:16.073367800+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144916_58737300\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144916_58737300\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "3af6734c-e304-43b4-bb51-77641306947f",
     "applied_at": "2026-04-29T14:49:16.822034400+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144916_809663400\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144916_809663400\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "c84fb2eb-0478-45ea-873d-814961afad11",
     "applied_at": "2026-04-29T14:49:20.990833300+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144920_987101300\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144920_987101300\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "30575838-3b36-45fc-b65f-345f1cfe7efb",
     "applied_at": "2026-04-29T14:49:21.882314300+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144921_872409900\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_144921_872409900\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "9f94b96b-c70a-4288-bf41-8269d01178e1",
     "applied_at": "2026-04-29T14:58:46.178973500+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_145846_176886000\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_145846_176886000\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "405dc83f-fcb1-44da-9377-cf959dda4c42",
     "applied_at": "2026-04-29T14:58:50.390496600+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_145850_387396700\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_145850_387396700\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "aabf102a-3df7-4bc5-a25b-3f0fb7220dc5",
     "applied_at": "2026-04-29T14:58:54.551026800+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_145854_547948200\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_145854_547948200\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "8caaa9a8-c8a8-40db-80b1-e052ffeefe44",
     "applied_at": "2026-04-29T14:59:05.742580100+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_145905_738961500\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_145905_738961500\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "3e885845-d65d-485d-85bb-cc027789ec40",
     "applied_at": "2026-04-29T14:59:09.911629700+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_145909_908827500\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_145909_908827500\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "3959840e-eb84-4f63-88b9-725c68e938a5",
     "applied_at": "2026-04-29T14:59:14.061026300+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_145914_58191600\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_145914_58191600\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "693b41ce-74cc-447e-b12f-6cd7b9ffaa02",
     "applied_at": "2026-04-29T14:59:18.411153400+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_145918_408327300\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_145918_408327300\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "d0fd5d96-af7e-4d3d-b129-1a25a8af6f96",
     "applied_at": "2026-04-29T15:03:13.992521+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_150313_988283100\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_150313_988283100\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "21d4db47-476e-4b47-a104-fe6e1b949656",
     "applied_at": "2026-04-29T15:03:19.421909200+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_150319_418293900\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_150319_418293900\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "a7025710-eb1b-4150-bee1-e386612417a8",
     "applied_at": "2026-04-29T15:03:23.559101300+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_150323_557200800\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_150323_557200800\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "740b3d14-b702-42ba-b868-34206f06ff1d",
     "applied_at": "2026-04-29T15:03:27.895422300+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_150327_892259000\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_150327_892259000\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "a8285cc4-7704-448b-b1d2-ae64125ab425",
     "applied_at": "2026-04-29T15:03:32.010966700+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_150332_7648300\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_150332_7648300\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "faf8313c-7073-473c-ba00-ba8981ef5921",
     "applied_at": "2026-04-29T15:03:36.167199800+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_150336_158966100\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_150336_158966100\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "0f3054f1-c5c3-4ef2-9483-1a3e8a26e966",
     "applied_at": "2026-04-29T15:03:40.424114+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_150340_420624500\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_150340_420624500\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "86b6b2b1-6a37-4e0f-9f1a-90770727f34c",
     "applied_at": "2026-04-29T15:03:44.713594800+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_150344_708537600\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_150344_708537600\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "7bb74a9c-102d-4657-bdd3-5f85ccf722f7",
     "applied_at": "2026-04-29T15:03:49.233907900+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_150349_232128000\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_150349_232128000\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "43dee1f5-4da3-43f1-9869-f2b37ba43049",
     "applied_at": "2026-04-29T15:03:53.662488500+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_150353_651079400\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_150353_651079400\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "d6643a87-0304-4ff4-8bed-44c52389c067",
     "applied_at": "2026-04-29T15:19:23.446296900+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_151923_441856000\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_151923_441856000\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "730138a5-6e13-41f4-b422-9e58f1bf565d",
     "applied_at": "2026-04-29T15:19:28.462594400+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_151928_459893200\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_151928_459893200\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "f0439667-58d9-4ff1-9aa4-6c54d9e37928",
     "applied_at": "2026-04-29T15:19:34.461421800+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_151934_460066700\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_151934_460066700\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "4cf126d6-30a1-43c6-bc39-5cc0922eec66",
     "applied_at": "2026-04-29T15:19:38.807145400+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_151938_805219400\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_151938_805219400\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "43cbc9dc-9a0a-40e2-bbde-5a4df65d9771",
     "applied_at": "2026-04-29T15:19:43.602715200+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_151943_601086600\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_151943_601086600\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "ea523a51-5be6-481a-90b7-5d612f5defea",
     "applied_at": "2026-04-29T15:19:48.578366+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_151948_574608400\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_151948_574608400\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "ce272a11-cd3b-4700-b19f-ca20815f459b",
     "applied_at": "2026-04-29T15:19:53.572769100+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_151953_559879700\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_151953_559879700\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "05fe0136-4911-44d6-a026-c8afc0488370",
     "applied_at": "2026-04-29T15:19:57.845829400+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_151957_844496900\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_151957_844496900\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "185eea7d-d1c7-45d0-bdf5-4391b7c5a9cf",
     "applied_at": "2026-04-29T15:20:10.264384500+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152010_260785300\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152010_260785300\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "e00dc248-15c4-488b-b859-a5bcb85aba35",
     "applied_at": "2026-04-29T15:22:54.852613700+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152254_850359300\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152254_850359300\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "d409c940-4c09-430d-a068-14f49dbae9e0",
     "applied_at": "2026-04-29T15:23:03.055601500+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152303_53162600\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152303_53162600\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "af124767-3b43-44fd-8f93-de9daa18bcf8",
     "applied_at": "2026-04-29T15:23:07.151906400+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152307_150392200\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152307_150392200\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "56c8c76f-36b1-4858-bb16-fb5b29113fe8",
     "applied_at": "2026-04-29T15:23:11.318004800+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152311_316532400\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152311_316532400\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "37ea8975-51ca-45bc-8bb9-be489418b504",
     "applied_at": "2026-04-29T15:23:15.463955300+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152315_461896700\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152315_461896700\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "2cb08927-585b-4ef3-b1a4-58aa872ab34e",
     "applied_at": "2026-04-29T15:23:19.985221800+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152319_983757600\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152319_983757600\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "938e45bc-8c62-4bf0-bb57-0c7a2962db8b",
     "applied_at": "2026-04-29T15:23:24.788409600+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152324_778271000\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152324_778271000\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "0a7c9280-25b1-4776-8a99-6f7daf367b8c",
     "applied_at": "2026-04-29T15:23:29.902429+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152329_900836000\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152329_900836000\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "f60185ab-43cd-45c8-b25a-38856e14355c",
     "applied_at": "2026-04-29T15:23:34.055746800+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152334_54335400\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152334_54335400\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "c671dee8-8b58-4dfd-a412-94426d1e6c94",
     "applied_at": "2026-04-29T15:23:39.090155+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152339_88157300\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152339_88157300\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "ff2cf6ab-86f4-494b-b4c4-205053c98cbe",
     "applied_at": "2026-04-29T15:25:23.858447700+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152523_849132700\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152523_849132700\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "737a47eb-52b0-44a4-be1c-9d460d6ee050",
     "applied_at": "2026-04-29T15:25:29.064189600+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152529_61532000\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152529_61532000\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "2444efcc-41ec-415b-af76-eb11c98604f4",
     "applied_at": "2026-04-29T15:25:34.227896600+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152534_224955900\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152534_224955900\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "c5dfa46a-30fc-49fb-b7f3-2218a9e4a91d",
     "applied_at": "2026-04-29T15:25:46.162603500+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152546_161119200\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152546_161119200\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "5b80dc87-6ce6-492e-a432-b19f67d04f20",
     "applied_at": "2026-04-29T15:25:50.160919800+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152550_159241700\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152550_159241700\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "d54fad05-5345-4d8f-bd30-9edaee39c3f5",
     "applied_at": "2026-04-29T15:25:54.719488100+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152554_717299100\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152554_717299100\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "112f064f-590b-4a38-a90f-75e1c13d14ec",
     "applied_at": "2026-04-29T15:25:58.702670500+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152558_699541200\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152558_699541200\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "6cde3ec3-b847-458a-b8aa-403f43f1c7f4",
     "applied_at": "2026-04-29T15:26:06.024487+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152606_22447900\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_152606_22447900\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "0f8c0c7e-38de-4aee-a083-77bd7f6731a4",
     "applied_at": "2026-04-29T15:30:06.794342700+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153006_791754600\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153006_791754600\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "8f9781d4-b661-4775-baf6-1449f1b768ca",
     "applied_at": "2026-04-29T15:30:10.772873+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153010_770013100\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153010_770013100\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "df3d55c5-9181-4a25-9318-b662183aa692",
     "applied_at": "2026-04-29T15:30:14.924888500+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153014_923109400\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153014_923109400\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "11430622-942c-413c-aa2c-c555027330e6",
     "applied_at": "2026-04-29T15:30:19.180544300+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153019_179039000\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153019_179039000\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "73230c02-50a6-4e82-aa00-bf5ad40130a8",
     "applied_at": "2026-04-29T15:30:23.123194500+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153023_120168800\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153023_120168800\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "3a458318-4f0e-4ceb-996e-339a81f299f4",
     "applied_at": "2026-04-29T15:30:27.365238+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153027_362798800\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153027_362798800\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "93f99149-c3ff-4cab-969e-546aae1b0266",
     "applied_at": "2026-04-29T15:30:31.877512+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153031_874732700\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153031_874732700\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "aa600fc9-f569-45c4-b7be-1cb0d957e0f2",
     "applied_at": "2026-04-29T15:30:35.862046300+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153035_859460600\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153035_859460600\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "fcf650b7-05f9-4ab9-8655-9f94bdea6b47",
     "applied_at": "2026-04-29T15:35:01.146051400+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153501_142759600\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153501_142759600\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "0343026f-b6aa-4cdd-952a-25d12621f3ff",
     "applied_at": "2026-04-29T15:35:06.114779900+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153506_112976000\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153506_112976000\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "a5177d59-d4ac-4432-bbb5-51a9e053072d",
     "applied_at": "2026-04-29T15:35:10.112246400+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153510_110546300\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153510_110546300\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "065b5139-f9fe-4c4f-ab91-c81721d18000",
     "applied_at": "2026-04-29T15:35:14.805269100+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153514_803885100\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153514_803885100\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "f8936377-091d-4704-9ca5-d7c1f22e5667",
     "applied_at": "2026-04-29T15:35:22.522769500+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153522_521357000\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153522_521357000\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "506e400a-2841-4414-b578-b11a6ab23792",
     "applied_at": "2026-04-29T15:35:26.605967400+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153526_604214000\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153526_604214000\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "e1dd0dd5-05a9-419b-9da9-5906176983c5",
     "applied_at": "2026-04-29T15:35:31.692740900+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153531_691125700\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_153531_691125700\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "7aad7ed7-30bc-4692-a798-6b38047e1824",
     "applied_at": "2026-04-29T16:03:31.097326200+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_160331_94066300\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_160331_94066300\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "1af8510f-c16f-4b89-9d85-14cedc3f9d6d",
     "applied_at": "2026-04-29T16:03:34.486834700+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_160334_485523100\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_160334_485523100\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "dd07fe27-c144-4b6a-95c7-063120431b63",
     "applied_at": "2026-04-29T16:03:38.022731500+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_160338_21563100\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_160338_21563100\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "fc53f350-f675-4d6c-a795-4b7b9f23a1b0",
     "applied_at": "2026-04-29T16:03:41.375931500+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_160341_367308700\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_160341_367308700\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "cc6fe915-bf43-4185-b259-4bf088ba2fbf",
     "applied_at": "2026-04-29T16:03:45.395682300+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_160345_393496400\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_160345_393496400\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "306e727e-2fd6-4bcb-a81b-54eab65d35c9",
     "applied_at": "2026-04-29T16:03:49.617398100+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_160349_612591400\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_160349_612591400\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "e140a7e1-35bb-4343-bcce-27f7f0336e26",
     "applied_at": "2026-04-29T16:03:57.370842+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_160357_369627600\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_160357_369627600\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "1d0fac10-c247-448f-adaa-0abca0762edb",
     "applied_at": "2026-04-29T16:11:52.285112900+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_161152_282658700\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_161152_282658700\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "d18e03bd-720a-4cba-8107-0f55cf72d06b",
     "applied_at": "2026-04-29T16:11:55.717968800+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_161155_716343500\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_161155_716343500\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "2c076175-537d-4462-8db1-68cb13d5b764",
     "applied_at": "2026-04-29T16:11:59.119149500+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_161159_117509500\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_161159_117509500\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "e5cc60db-e94f-4277-aef5-4400adcf3617",
     "applied_at": "2026-04-29T16:12:02.492393+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_161202_490988300\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_161202_490988300\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "8f12262d-b29f-4495-90b9-9eb8c39454f1",
     "applied_at": "2026-04-29T16:12:13.012508700+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_161213_10733800\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_161213_10733800\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "73e28877-eb40-455a-9754-5836afdd9472",
     "applied_at": "2026-04-29T16:12:17.224589200+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_161217_223145800\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_161217_223145800\\vulnerable.js",
+    "resolution_type": null
   },
   {
     "patch_id": "293cea46-a449-46c3-89e4-a3de7e3fe494",
     "applied_at": "2026-04-29T16:12:21.385764100+00:00",
     "file_path": "C:\\Sicario-OS\\vuln-test\\vulnerable.js",
-    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_161221_384380200\\vulnerable.js"
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260429_161221_384380200\\vulnerable.js",
+    "resolution_type": null
+  },
+  {
+    "patch_id": "6fd6ae9b-bd51-4e19-8369-a02acdf704ec",
+    "applied_at": "2026-05-15T16:48:19.279873500+00:00",
+    "file_path": "C:\\Sicario-OS\\demo-vuln.js",
+    "backup_path": "C:\\Sicario-OS\\.sicario\\backups\\20260515_164819_276437000\\demo-vuln.js",
+    "resolution_type": "fixed"
   }
 ]

@@ -209,7 +209,7 @@
   languages:
     - Python
   pattern:
-    query: "(call function: (attribute attribute: (identifier) @fn (#match? @fn \"^(DES|DES3|TripleDES)$\"))) @call"
+    query: "(call function: (attribute object: (identifier) @obj (#match? @obj \"^(DES|DES3|TripleDES)$\"))) @call"
     captures:
       - "call"
   cwe_id: "CWE-327"

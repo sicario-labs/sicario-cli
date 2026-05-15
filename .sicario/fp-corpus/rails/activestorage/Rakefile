@@ -1,0 +1,38 @@
+# frozen_string_literal: true
+
+require "bundler/setup"
+require "bundler/gem_tasks"
+require "rake/testtask"
+
+ENV["RAILS_MINITEST_PLUGIN"] = "true"
+
+Rake::TestTask.new do |t|
+  t.libs << "app/controllers"
+  t.libs << "test"
+  t.test_files = FileList["test/**/*_test.rb"]
+  if ENV["CI"]
+    t.verbose = true
+    t.options = "--profile --defer-output"
+  end
+  t.warning = true
+end
+
+if ENV["encrypted_0fb9444d0374_key"] && ENV["encrypted_0fb9444d0374_iv"]
+  config_file = "test/service/configurations.yml"
+  file config_file do
+    puts "Generating #{config_file} for Active Storage tests..."
+    system "openssl aes-256-cbc -K $encrypted_0fb9444d0374_key -iv $encrypted_0fb9444d0374_iv -in #{config_file}.enc -out #{config_file} -d"
+  end
+
+  task test: config_file
+end
+
+namespace :test do
+  task :railties do
+    ["active_storage/engine"].all? do |railtie|
+      sh(Gem.ruby, "-r", railtie, "-e", "'OK'")
+    end || raise("Failures")
+  end
+end
+
+task default: :test

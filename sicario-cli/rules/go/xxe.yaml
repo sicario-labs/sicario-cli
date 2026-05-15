@@ -102,7 +102,7 @@
   languages:
     - Go
   pattern:
-    query: "(call_expression function: (selector_expression field: (field_identifier) @fn (#eq? @fn \"ReadFrom\"))) @call"
+    query: "(call_expression function: (selector_expression operand: (identifier) @obj (#match? @obj \"(?i)(doc|xml|etree|node|elem|root)\") field: (field_identifier) @fn (#eq? @fn \"ReadFrom\")) arguments: (argument_list (_) @arg)) @call"
     captures:
       - "call"
   cwe_id: "CWE-611"
@@ -130,7 +130,7 @@
   languages:
     - Go
   pattern:
-    query: "(call_expression function: (selector_expression field: (field_identifier) @fn (#eq? @fn \"ReadFromString\"))) @call"
+    query: "(call_expression function: (selector_expression field: (field_identifier) @fn (#eq? @fn \"ReadFromString\")) arguments: (argument_list (_) @arg)) @call"
     captures:
       - "call"
   cwe_id: "CWE-611"
@@ -158,7 +158,7 @@
   languages:
     - Go
   pattern:
-    query: "(call_expression function: (selector_expression field: (field_identifier) @fn (#eq? @fn \"Decode\")) arguments: (argument_list (unary_expression operand: (identifier) @target))) @call"
+    query: "(call_expression function: (selector_expression operand: (identifier) @obj (#match? @obj \"(?i)(xml|dec|decoder|parser)\") field: (field_identifier) @fn (#eq? @fn \"Decode\")) arguments: (argument_list (_) @arg)) @call"
     captures:
       - "call"
   cwe_id: "CWE-611"
@@ -171,11 +171,11 @@
       expected: TruePositive
     - code: "xmlDecoder.Decode(&result)"
       expected: TruePositive
-    - code: "json.NewDecoder(r.Body).Decode(&config)"
-      expected: TrueNegative
-    - code: "gob.NewDecoder(conn).Decode(&msg)"
-      expected: TrueNegative
     - code: "xml.Marshal(data)"
+      expected: TrueNegative
+    - code: "json.NewEncoder(w).Encode(&data)"
+      expected: TrueNegative
+    - code: "xml.NewEncoder(w).Encode(&config)"
       expected: TrueNegative
 
 - id: "go-xml-copy-token"

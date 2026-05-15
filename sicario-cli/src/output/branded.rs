@@ -165,6 +165,14 @@ pub fn print_scan_summary(
         width = width - 2
     )?;
     writeln!(writer, "{v_char}{bar}{v_char}")?;
+    let badge = "🛡️  Zero-Exfiltration Guaranteed";
+    writeln!(
+        writer,
+        "{v_char}  {:<width$}{v_char}",
+        badge,
+        width = width - 2
+    )?;
+    writeln!(writer, "{v_char}{bar}{v_char}")?;
 
     let duration_secs = summary.scan_duration.as_secs_f64();
     let semgrep_estimate = duration_secs * 10.0;

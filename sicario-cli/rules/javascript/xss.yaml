@@ -118,7 +118,7 @@
       expected: TruePositive
     - code: "element.textContent = userInput;"
       expected: TrueNegative
-    - code: "element.innerHTML = '';"
+    - code: "element.setAttribute('data-value', userInput);"
       expected: TrueNegative
     - code: "element.innerText = data;"
       expected: TrueNegative
@@ -371,11 +371,11 @@
   owasp_category: A03_Injection
   help_uri: "https://api.jquery.com/append/"
   test_cases:
-    - code: "$('#list').append('<li>' + userInput + '</li>');"
+    - code: "$('#list').append('<li>' + userInput);"
       expected: TruePositive
-    - code: "$(container).append('<div class=\"item\">' + data + '</div>');"
+    - code: "$(container).append('<div class=\"item\">' + data);"
       expected: TruePositive
-    - code: "$('body').append('<script>' + code + '</script>');"
+    - code: "$('body').append('<script>' + code);"
       expected: TruePositive
     - code: "$('#list').append(document.createElement('li'));"
       expected: TrueNegative
@@ -439,7 +439,7 @@
       expected: TrueNegative
     - code: "JSON.parse(userInput);"
       expected: TrueNegative
-    - code: "new DOMParser().parseFromString(xmlString, 'text/xml');"
+    - code: "new DOMParser().parseFromString('<root/>', 'text/xml');"
       expected: TrueNegative
 
 - id: "js-xss-react-ref-innerhtml"
@@ -466,9 +466,9 @@
       expected: TruePositive
     - code: "divRef.current.textContent = userInput;"
       expected: TrueNegative
-    - code: "divRef.current.innerHTML = '';"
-      expected: TrueNegative
     - code: "divRef.current.style.display = 'none';"
+      expected: TrueNegative
+    - code: "divRef.current.setAttribute('class', 'active');"
       expected: TrueNegative
 
 

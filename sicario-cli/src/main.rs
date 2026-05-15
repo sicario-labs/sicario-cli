@@ -4884,6 +4884,71 @@ fn cmd_fix(args: cli::fix::FixArgs) -> Result<ExitCode> {
         }
     }
 
+    // ── Task 15.2: --auto-pr in fix command ───────────────────────────────
+    // If --auto-pr is set and we've applied at least one fix in batch mode,
+    // push the changes and open a pull request.
+    if args.auto_pr && args.yes {
+        let ts = chrono::Utc::now().format("%Y%m%dT%H%M%S");
+        let branch_name = format!("sicario/autofix-{}", ts);
+        
+        // Check if there are uncommitted changes (the fixes we just applied)
+        let has_changes = std::process::Command::new("git")
+            .args(["diff", "--quiet"])
+            .current_dir(&cwd)
+            .status()
+            .map(|s| !s.success())
+            .unwrap_or(false);
+
+        if has_changes {
+            // Create branch, commit, push, PR
+            let _ = std::process::Command::new("git")
+                .args(["checkout", "-b", &branch_name])
+                .current_dir(&cwd)
+                .status();
+
+            let _ = std::process::Command::new("git")
+                .args(["add", "-A"])
+                .current_dir(&cwd)
+                .status();
+
+            let commit_msg = format!(
+                "[Sicario] Auto-fix security findings in {}\n\n> Zero-exfiltration notice: These are verified patches generated locally.",
+                args.file
+            );
+            let _ = std::process::Command::new("git")
+                .args(["commit", "-m", &commit_msg])
+                .current_dir(&cwd)
+                .status();
+
+            let push_ok = std::process::Command::new("git")
+                .args(["push", "-u", "origin", &branch_name])
+                .current_dir(&cwd)
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+
+            if push_ok {
+                let pr_title = format!("[Sicario] Fix security findings in {}", args.file);
+                let pr_body = format!(
+                    "## Sicario Auto-Fix\n\nThis PR applies security fixes to `{}`.\n\n> **Zero-exfiltration notice:** These patches were generated locally. No source code was transmitted to Sicario Cloud.",
+                    args.file
+                );
+
+                match create_auto_pr_from_scan(&branch_name, &pr_title, &pr_body) {
+                    Ok(url) => {
+                        println!("{}", url);
+                        eprintln!("[auto-pr] Pull request created: {}", url);
+                    }
+                    Err(e) => {
+                        eprintln!("[auto-pr] error: could not create PR/MR: {e}");
+                    }
+                }
+            }
+        } else {
+            eprintln!("sicario: no changes to commit for auto-pr");
+        }
+    }
+
     Ok(ExitCode::Clean)
 }
 

@@ -1,0 +1,16 @@
+{
+  "generated_at": "2026-05-15T15:58:39.854283400+00:00",
+  "sicario_version": "0.3.5",
+  "scan_summary": {
+    "total_findings": 0,
+    "critical_count": 0,
+    "high_count": 0,
+    "medium_count": 0,
+    "low_count": 0,
+    "info_count": 0
+  },
+  "remediation_log": [],
+  "suppression_log": [],
+  "baseline_history": [],
+  "mttr_by_rule": []
+}

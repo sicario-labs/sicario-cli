@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "guarantee": "Source code is never transmitted to Sicario Cloud. A one-way SHA-256 hash of matched code is uploaded for deduplication. The hash is not reversible to source code. Raw code excerpts are only transmitted when --publish-with-snippet is explicitly provided by the user.",
+  "scan_id": "scan-20260515T162643Z",
+  "started_at": "2026-05-15T16:26:43.210134800+00:00",
+  "completed_at": "2026-05-15T16:26:43.210149400+00:00",
+  "files_scanned": 4,
+  "findings_count": 11,
+  "transmissions": []
+}

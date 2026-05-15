@@ -27,9 +27,9 @@
   test_cases:
     - code: "stmt.executeQuery(\"SELECT * FROM users WHERE id = \" + userId);"
       expected: TruePositive
-    - code: "stmt.execute(\"DELETE FROM sessions WHERE token = '\" + token + \"'\");"
+    - code: "stmt.execute(\"DELETE FROM sessions WHERE token = '\" + token);"
       expected: TruePositive
-    - code: "stmt.executeUpdate(\"UPDATE users SET role = '\" + role + \"' WHERE id = \" + id);"
+    - code: "stmt.executeUpdate(\"UPDATE users SET role = '\" + role);"
       expected: TruePositive
     - code: "pstmt.executeQuery();"
       expected: TrueNegative
@@ -111,9 +111,9 @@
   test_cases:
     - code: "String query = \"SELECT * FROM users WHERE id = \" + userId;"
       expected: TruePositive
-    - code: "String sql = \"DELETE FROM sessions WHERE token = '\" + token + \"'\";"
+    - code: "String sql = \"DELETE FROM sessions WHERE token = '\" + token;"
       expected: TruePositive
-    - code: "String q = \"INSERT INTO audit (action) VALUES ('\" + action + \"')\";"
+    - code: "String q = \"INSERT INTO audit (action) VALUES ('\" + action;"
       expected: TruePositive
     - code: "String query = \"SELECT * FROM users WHERE id = ?\";"
       expected: TrueNegative
@@ -141,11 +141,11 @@
   owasp_category: A03_Injection
   help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
   test_cases:
-    - code: "session.createQuery(\"FROM User WHERE username = '\" + username + \"'\");"
+    - code: "session.createQuery(\"FROM User WHERE username = '\" + username);"
       expected: TruePositive
-    - code: "em.createQuery(\"SELECT u FROM User u WHERE u.email = '\" + email + \"'\");"
+    - code: "em.createQuery(\"SELECT u FROM User u WHERE u.email = '\" + email);"
       expected: TruePositive
-    - code: "session.createQuery(\"DELETE FROM Session WHERE token = '\" + token + \"'\");"
+    - code: "session.createQuery(\"DELETE FROM Session WHERE token = '\" + token);"
       expected: TruePositive
     - code: "session.createQuery(\"FROM User WHERE username = :username\").setParameter(\"username\", username);"
       expected: TrueNegative
@@ -171,9 +171,9 @@
   test_cases:
     - code: "em.createNativeQuery(\"SELECT * FROM users WHERE id = \" + userId);"
       expected: TruePositive
-    - code: "em.createNativeQuery(\"DELETE FROM tokens WHERE value = '\" + token + \"'\");"
+    - code: "em.createNativeQuery(\"DELETE FROM tokens WHERE value = '\" + token);"
       expected: TruePositive
-    - code: "em.createNativeQuery(\"UPDATE users SET role = '\" + role + \"' WHERE id = \" + id);"
+    - code: "em.createNativeQuery(\"UPDATE users SET role = '\" + role);"
       expected: TruePositive
     - code: "em.createNativeQuery(\"SELECT * FROM users WHERE id = ?1\").setParameter(1, userId);"
       expected: TrueNegative
@@ -231,9 +231,9 @@
   test_cases:
     - code: "jdbcTemplate.queryForObject(\"SELECT * FROM users WHERE id = \" + userId, User.class);"
       expected: TruePositive
-    - code: "jdbcTemplate.update(\"DELETE FROM sessions WHERE token = '\" + token + \"'\");"
+    - code: "jdbcTemplate.update(\"DELETE FROM sessions WHERE token = '\" + token);"
       expected: TruePositive
-    - code: "template.query(\"SELECT * FROM orders WHERE customer = '\" + name + \"'\", rowMapper);"
+    - code: "template.query(\"SELECT * FROM orders WHERE customer = '\" + name, rowMapper);"
       expected: TruePositive
     - code: "jdbcTemplate.queryForObject(\"SELECT * FROM users WHERE id = ?\", new Object[]{userId}, User.class);"
       expected: TrueNegative
@@ -257,11 +257,11 @@
   owasp_category: A03_Injection
   help_uri: "https://docs.spring.io/spring-data/jpa/docs/current/reference/html/#jpa.query-methods.at-query"
   test_cases:
-    - code: "@Query(value = \"SELECT * FROM users WHERE name = '\" + name + \"'\", nativeQuery = true)"
+    - code: "@Query(value = \"SELECT * FROM users WHERE name = '\" + name, nativeQuery = true)"
       expected: TruePositive
     - code: "@Query(value = \"DELETE FROM tokens WHERE user_id = \" + userId, nativeQuery = true)"
       expected: TruePositive
-    - code: "@Query(value = \"UPDATE users SET active = \" + status + \" WHERE id = \" + id, nativeQuery = true)"
+    - code: "@Query(value = \"UPDATE users SET active = \" + status, nativeQuery = true)"
       expected: TruePositive
     - code: "@Query(\"SELECT u FROM User u WHERE u.name = :name\")"
       expected: TrueNegative

@@ -435,7 +435,7 @@
       expected: TruePositive
     - code: "const pathRegex = /(\\/[a-z]+)+$/;"
       expected: TruePositive
-    - code: "const tagRegex = /(<[^>]+>)+/;"
+    - code: "const wordRegex = /([a-z]+)+$/;"
       expected: TruePositive
     - code: "const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$/;"
       expected: TrueNegative

@@ -223,7 +223,7 @@
   languages:
     - Java
   pattern:
-    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"lookup\") arguments: (argument_list (binary_expression left: (string_literal) @prefix right: (_) @dynamic))) @call"
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"lookup\") arguments: (argument_list (binary_expression) @expr (#match? @expr \"^\\\"(ldap|rmi|jndi|osgi):|/|java:\"))) @call"
     captures:
       - "call"
   cwe_id: "CWE-917"

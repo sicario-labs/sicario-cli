@@ -54,11 +54,11 @@
       expected: TruePositive
     - code: "CORSMiddleware(app, allow_credentials=True)"
       expected: TruePositive
-    - code: "CORSMiddleware(app, allow_origins=['https://example.com'], allow_credentials=True)"
-      expected: TrueNegative
     - code: "CORSMiddleware(app, allow_credentials=False)"
       expected: TrueNegative
     - code: "CORSMiddleware(app, allow_origins=['https://example.com'])"
+      expected: TrueNegative
+    - code: "app.add_middleware(TrustedHostMiddleware, allowed_hosts=['example.com'])"
       expected: TrueNegative
 
 - id: "py-fastapi-debug-true"

@@ -6,7 +6,11 @@
 
 <p align="center">
   <strong>The Ambient, Zero-Exfiltration Security Engine for Application Code & Supply Chains.</strong><br/>
-  SAST &nbsp;·&nbsp; SCA &nbsp;·&nbsp; Secrets &nbsp;·&nbsp; Dataflow Reachability &nbsp;·&nbsp; Deterministic Auto-Remediation &nbsp;·&nbsp; Supply-Chain Guard
+  SAST &nbsp;·&nbsp; SCA &nbsp;·&nbsp; Secrets &nbsp;·&nbsp; Dataflow Reachability &nbsp;·&nbsp; **Agentic Auto-Remediation** &nbsp;·&nbsp; Supply-Chain Guard
+</p>
+
+<p align="center">
+  <a href="BENCHMARKS.md"><strong>📊 View Public Accuracy Benchmarks</strong></a>
 </p>
 
 <p align="center">
@@ -43,10 +47,14 @@ Sicario embeds highly optimized `tree-sitter` parsers directly into a single por
 * **Core Web/Backend:** JavaScript, TypeScript, Python, Go, Rust, Java
 * **Enterprise Expansion:** Ruby, PHP, C#
 
-### 3. Deterministic Auto-Remediation
-Most modern AI agents attempt probabilistic code generation that breaks builds or hallucinates logic. Sicario utilizes a **Deterministic Template Registry** paired with abstract syntax tree rewrites (e.g., rewriting vulnerable string concatenations into safe parameterized SQL queries).
+### 3. Agentic & Deterministic Remediation (The Core Differentiator)
+Most modern AI agents attempt probabilistic code generation that breaks builds or hallucinates logic. Sicario solves this with a **Deterministic Template Registry** paired with a **3-Stage Verification Loop**:
+1. **AST Rewrite**: Initial patch generated via deterministic template or local LLM.
+2. **Sandbox Validation**: Syntax checked via Tree-Sitter + Scope identifier verification.
+3. **SAST Re-Scan**: Security rule re-executed in memory to ensure the bug is *actually* gone.
+
 * Features automatic line-level backups and instant single-command rollbacks (`sicario fix --revert <patch_id>`).
-* Includes an opt-in, highly secured local LLM interface (`--agent=local` targeting local Ollama instances) for complex structural refactoring.
+* Includes an opt-in, highly secured local LLM interface (`--agent=local` targeting local Ollama instances) for complex structural refactoring with **Zero-Exfiltration Guaranteed**.
 
 ### 4. "Invisible UX" & Alert Fatigue Hardening
 Engineered for ultimate developer adoption, Sicario avoids blocking workflows with noise:

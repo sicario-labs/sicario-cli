@@ -1,0 +1,141 @@
+# frozen_string_literal: true
+
+require "rake/testtask"
+
+Rake::TestTask.new do |t|
+  t.libs << "test"
+  t.pattern = "test/**/*_test.rb"
+  t.warning = true
+  if ENV["BUILDKITE"]
+    t.verbose = true
+    t.options = "--profile --defer-output"
+  end
+end
+
+namespace :guides do
+  desc 'Generate guides (for authors), use ONLY=foo to process just "foo.md"'
+  task generate: "generate:html"
+
+  namespace :generate do
+    desc "Generate HTML guides"
+    task :html do
+      generate_guides
+    end
+
+    desc "Generate .mobi file"
+    task :kindle do
+      warn("DEPRECATION WARNING: The guides:generate:kindle rake task is deprecated and will be removed in 7.2. Run rake guides:generate:epub instead.")
+      Rake::Task["guides:generate:epub"].invoke
+    end
+
+    desc "Generate .epub file"
+    task :epub do
+      ENV["EPUB"] = "1"
+      Rake::Task["guides:generate:html"].invoke
+    end
+  end
+
+  desc "Lint guides, using `mdl` and check for broken links"
+  task lint: ["lint:check_links", "lint:mdl"]
+
+  namespace :lint do
+    desc "Check links in generated HTML guides"
+    task :check_links do
+      ENV["GUIDES_LINT"] = "1"
+      generate_guides
+    end
+
+    desc "Run mdl to check Markdown files for style guide violations and lint errors"
+    task :mdl do
+      require "mdl"
+      all = Dir.glob("#{__dir__}/source/*.md")
+      files = all - Dir.glob("#{__dir__}/**/*_release_notes.md") # Ignore release notes
+      MarkdownLint.run files
+    end
+  end
+
+  # Validate guides -------------------------------------------------------------------------
+  desc 'Validate guides, use ONLY=foo to process just "foo.html"'
+  task :validate do
+    require_relative "w3c_validator.rb"
+    RailsGuides::Validator.new.validate
+  end
+
+  task :vendor_javascript do
+    require "importmap-rails"
+    require "importmap/packager"
+
+    packager = Importmap::Packager.new(vendor_path: "assets/javascripts")
+    imports = packager.import("@hotwired/turbo", from: "unpkg")
+    imports.each do |package, url|
+      umd_url = url.gsub("esm.js", "umd.js")
+      puts %(Vendoring "#{package}" to #{packager.vendor_path}/#{package}.js via download from #{umd_url})
+      packager.download(package, umd_url)
+    end
+  end
+
+  desc "Show help"
+  task :help do
+    puts <<HELP
+
+Guides are taken from the source directory, and the result goes into the
+output directory. Assets are stored under files, and copied to output/files as
+part of the generation process.
+
+You can generate HTML, Kindle or both formats using the `guides:generate` task.
+
+All of these processes are handled via rake tasks, here's a full list of them:
+
+#{%x[rake -T]}
+Some arguments may be passed via environment variables:
+
+  RAILS_VERSION=tag
+    If guides are being generated for a specific Rails version set the Git tag
+    here, otherwise the current SHA1 is going to be used to generate edge guides.
+
+  ALL=1
+    Force generation of all guides.
+
+  ONLY=name
+    Useful if you want to generate only one or a set of guides.
+
+    Generate only association_basics.html:
+      ONLY=assoc
+
+    Separate many using commas:
+      ONLY=assoc,migrations
+
+  GUIDES_LANGUAGE
+    Use it when you want to generate translated guides in
+    source/<GUIDES_LANGUAGE> folder (such as source/es)
+
+Examples:
+  $ rake guides:generate ALL=1 RAILS_VERSION=v5.1.0
+  $ rake guides:generate ONLY=migrations
+  $ rake guides:generate:epub
+  $ rake guides:generate GUIDES_LANGUAGE=es
+HELP
+  end
+end
+
+task default: "guides:help"
+
+def generate_guides
+  require_relative "rails_guides"
+  env_value = ->(name) { ENV[name].presence }
+  env_flag  = ->(name) { "1" == env_value[name] }
+
+  version = env_value["RAILS_VERSION"]
+  edge    = `git rev-parse HEAD`.strip unless version
+
+  RailsGuides::Generator.new(
+    edge:      edge,
+    version:   version,
+    all:       env_flag["ALL"],
+    only:      env_value["ONLY"],
+    epub:      env_flag["EPUB"],
+    language:  env_value["GUIDES_LANGUAGE"],
+    direction: env_value["DIRECTION"],
+    lint:      env_flag["GUIDES_LINT"]
+  ).generate
+end

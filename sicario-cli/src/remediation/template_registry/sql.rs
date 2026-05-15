@@ -20,7 +20,9 @@ impl PatchTemplate for SqlStringConcatTemplate {
             || lower.contains("db.exec(")
             || lower.contains("db.query(")
             || lower.contains(".execute(")
-            || lower.contains("db.raw(");
+            || lower.contains("db.raw(")
+            || lower.contains("query =")
+            || lower.contains("sql =");
         if !is_query {
             return None;
         }

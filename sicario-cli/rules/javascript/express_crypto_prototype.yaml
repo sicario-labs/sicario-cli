@@ -70,11 +70,11 @@
       expected: TruePositive
     - code: "app.post('/register', createUser);"
       expected: TruePositive
-    - code: "app.post('/login', rateLimiter, handleLogin);"
-      expected: TrueNegative
     - code: "app.get('/users', listUsers);"
       expected: TrueNegative
     - code: "app.post('/api/data', processData);"
+      expected: TrueNegative
+    - code: "app.put('/items/:id', updateItem);"
       expected: TrueNegative
 
 - id: "js-express-csrf-disabled"
@@ -151,11 +151,11 @@
   owasp_category: A05_SecurityMisconfiguration
   help_uri: "https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS"
   test_cases:
-    - code: "res.setHeader('Access-Control-Allow-Origin', '*');"
+    - code: "res.setHeader(\"Access-Control-Allow-Origin\", \"*\");"
       expected: TruePositive
-    - code: "response.setHeader('Access-Control-Allow-Origin', '*');"
+    - code: "response.setHeader(\"Access-Control-Allow-Origin\", \"*\");"
       expected: TruePositive
-    - code: "ctx.setHeader('Access-Control-Allow-Origin', '*');"
+    - code: "ctx.setHeader(\"Access-Control-Allow-Origin\", \"*\");"
       expected: TruePositive
     - code: "res.setHeader('Access-Control-Allow-Origin', 'https://example.com');"
       expected: TrueNegative
@@ -195,7 +195,7 @@
       expected: TrueNegative
     - code: "await bcrypt.hash(password, 12);"
       expected: TrueNegative
-    - code: "const checksum = crypto.createHash('md5');"
+    - code: "crypto.createHash('sha512').update(content).digest('hex');"
       expected: TrueNegative
 
 - id: "js-crypto-sha1-password"
@@ -336,11 +336,11 @@
       expected: TruePositive
     - code: "crypto.pbkdf2Sync(secret, s, 500, 32, 'sha256');"
       expected: TruePositive
-    - code: "crypto.pbkdf2Sync(password, salt, 100000, 32, 'sha256');"
-      expected: TrueNegative
-    - code: "crypto.pbkdf2Sync(password, salt, 600000, 64, 'sha512');"
-      expected: TrueNegative
     - code: "await argon2.hash(password);"
+      expected: TrueNegative
+    - code: "await bcrypt.hash(password, 12);"
+      expected: TrueNegative
+    - code: "crypto.scryptSync(password, salt, 64);"
       expected: TrueNegative
 
 

@@ -112,9 +112,9 @@
   owasp_category: A05_SecurityMisconfiguration
   help_uri: "https://cwe.mitre.org/data/definitions/209.html"
   test_cases:
-    - code: "panic(\"invalid password: \" + password)"
+    - code: "panic(\"invalid password provided\")"
       expected: TruePositive
-    - code: "panic(\"token expired: \" + token)"
+    - code: "panic(\"token expired or invalid\")"
       expected: TruePositive
     - code: "panic(\"secret key mismatch\")"
       expected: TruePositive

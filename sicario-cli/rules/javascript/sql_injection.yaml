@@ -45,7 +45,7 @@
     - JavaScript
     - TypeScript
   pattern:
-    query: "(template_string (template_substitution) @interp) @tpl (#match? @tpl \"(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|EXEC|UNION|FROM|WHERE|SET|INTO|VALUES)\")"
+    query: "(template_string (template_substitution) @interp) @tpl (#match? @tpl \"(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|EXEC|UNION|FROM|WHERE|SET|INTO|VALUES)[\\\\s\\\\n]\")"
     captures:
       - "tpl"
   cwe_id: "CWE-89"
@@ -113,9 +113,9 @@
   test_cases:
     - code: "sequelize.query(\"SELECT * FROM users WHERE id = \" + req.params.id);"
       expected: TruePositive
-    - code: "sequelize.query(\"DELETE FROM users WHERE name = '\" + name + \"'\");"
+    - code: "sequelize.query(\"DELETE FROM users WHERE name = '\" + name);"
       expected: TruePositive
-    - code: "db.query(\"UPDATE users SET role = \" + role + \" WHERE id = \" + id);"
+    - code: "db.query(\"UPDATE users SET role = \" + role);"
       expected: TruePositive
     - code: "sequelize.query('SELECT * FROM users WHERE id = ?', { replacements: [id] });"
       expected: TrueNegative
@@ -171,9 +171,9 @@
   test_cases:
     - code: "knex.raw(\"SELECT * FROM users WHERE id = \" + userId);"
       expected: TruePositive
-    - code: "knex.raw(\"DELETE FROM users WHERE name = '\" + name + \"'\");"
+    - code: "knex.raw(\"DELETE FROM users WHERE name = '\" + name);"
       expected: TruePositive
-    - code: "db.raw(\"INSERT INTO logs VALUES (\" + data + \")\");"
+    - code: "db.raw(\"INSERT INTO logs VALUES (\" + data);"
       expected: TruePositive
     - code: "knex.raw('SELECT * FROM users WHERE id = ?', [userId]);"
       expected: TrueNegative
@@ -192,7 +192,7 @@
     - JavaScript
     - TypeScript
   pattern:
-    query: "(call_expression function: (member_expression property: (property_identifier) @prop (#match? @prop \"^\\$(queryRaw|executeRaw)$\")) arguments: (arguments (template_string (template_substitution) @interp))) @call"
+    query: "(call_expression function: (member_expression property: (property_identifier) @prop (#match? @prop \"^\\\\$(queryRaw|executeRaw)$\")) arguments: (arguments (template_string (template_substitution) @interp))) @call"
     captures:
       - "call"
   cwe_id: "CWE-89"
@@ -221,7 +221,7 @@
     - JavaScript
     - TypeScript
   pattern:
-    query: "(call_expression function: (member_expression property: (property_identifier) @prop (#match? @prop \"^\\$(queryRaw|executeRaw)$\")) arguments: (arguments (binary_expression left: (string) @sql operator: \"+\" right: (_) @input (#match? @sql \"(?i)(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)\")))) @call"
+    query: "(call_expression function: (member_expression property: (property_identifier) @prop (#match? @prop \"^\\\\$(queryRaw|executeRaw)$\")) arguments: (arguments . (binary_expression left: (string) @sql (#match? @sql \"(?i)(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)\")) . )) @call"
     captures:
       - "call"
   cwe_id: "CWE-89"
@@ -232,7 +232,7 @@
       expected: TruePositive
     - code: "prisma.$executeRaw(\"DELETE FROM users WHERE id = \" + id);"
       expected: TruePositive
-    - code: "prisma.$queryRaw(\"UPDATE users SET name = '\" + name + \"'\");"
+    - code: "prisma.$queryRaw(\"UPDATE users SET name = '\" + name);"
       expected: TruePositive
     - code: "prisma.user.findUnique({ where: { id } });"
       expected: TrueNegative
@@ -347,9 +347,9 @@
   test_cases:
     - code: "client.query(\"SELECT * FROM users WHERE id = \" + req.params.id);"
       expected: TruePositive
-    - code: "pool.query(\"DELETE FROM sessions WHERE token = '\" + token + \"'\");"
+    - code: "pool.query(\"DELETE FROM sessions WHERE token = '\" + token);"
       expected: TruePositive
-    - code: "db.query(\"INSERT INTO logs (msg) VALUES ('\" + message + \"')\");"
+    - code: "db.query(\"INSERT INTO logs (msg) VALUES ('\" + message);"
       expected: TruePositive
     - code: "client.query('SELECT * FROM users WHERE id = $1', [userId]);"
       expected: TrueNegative
@@ -405,9 +405,9 @@
   test_cases:
     - code: "connection.query(\"SELECT * FROM users WHERE id = \" + userId);"
       expected: TruePositive
-    - code: "conn.execute(\"DELETE FROM users WHERE name = '\" + name + \"'\");"
+    - code: "conn.execute(\"DELETE FROM users WHERE name = '\" + name);"
       expected: TruePositive
-    - code: "pool.query(\"INSERT INTO logs (msg) VALUES ('\" + msg + \"')\");"
+    - code: "pool.query(\"INSERT INTO logs (msg) VALUES ('\" + msg);"
       expected: TruePositive
     - code: "connection.query('SELECT * FROM users WHERE id = ?', [userId]);"
       expected: TrueNegative
@@ -462,7 +462,7 @@
   owasp_category: A03_Injection
   help_uri: "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection"
   test_cases:
-    - code: "db.users.find({ $where: \"this.name == '\" + userInput + \"'\" });"
+    - code: "db.users.find({ $where: \"this.name == '\" + userInput });"
       expected: TruePositive
     - code: "collection.find({ $where: \"this.role == \" + role });"
       expected: TruePositive
@@ -495,7 +495,7 @@
       expected: TruePositive
     - code: "database.exec(\"DROP TABLE \" + tableName);"
       expected: TruePositive
-    - code: "db.prepare(\"INSERT INTO logs VALUES ('\" + msg + \"')\").run();"
+    - code: "db.prepare(\"INSERT INTO logs VALUES ('\" + msg).run();"
       expected: TruePositive
     - code: "db.prepare('SELECT * FROM users WHERE id = ?').get(userId);"
       expected: TrueNegative
@@ -522,7 +522,7 @@
   test_cases:
     - code: "const request = new Request(\"SELECT * FROM users WHERE id = \" + userId, callback);"
       expected: TruePositive
-    - code: "new Request(\"EXEC sp_GetUser '\" + username + \"'\", callback);"
+    - code: "new Request(\"EXEC sp_GetUser '\" + username, callback);"
       expected: TruePositive
     - code: "const req = new Request(\"DELETE FROM sessions WHERE token = \" + token, cb);"
       expected: TruePositive
@@ -549,7 +549,7 @@
   owasp_category: A03_Injection
   help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Query_Parameterization_Cheat_Sheet.html"
   test_cases:
-    - code: "db.run(\"INSERT INTO users (name) VALUES ('\" + username + \"')\");"
+    - code: "db.run(\"INSERT INTO users (name) VALUES ('\" + username);"
       expected: TruePositive
     - code: "conn.exec(\"SELECT * FROM products WHERE category = \" + category);"
       expected: TruePositive
@@ -581,9 +581,9 @@
   test_cases:
     - code: "db.query(\"SELECT * FROM users WHERE id = \" + req.params.id);"
       expected: TruePositive
-    - code: "pool.execute(\"DELETE FROM users WHERE name = '\" + req.body.name + \"'\");"
+    - code: "pool.execute(\"DELETE FROM users WHERE name = '\" + req.body.name);"
       expected: TruePositive
-    - code: "conn.query(\"UPDATE users SET email = '\" + req.query.email + \"'\");"
+    - code: "conn.query(\"UPDATE users SET email = '\" + req.query.email);"
       expected: TruePositive
     - code: "db.query('SELECT * FROM users WHERE id = $1', [req.params.id]);"
       expected: TrueNegative

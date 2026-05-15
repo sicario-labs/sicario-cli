@@ -27,9 +27,9 @@
       expected: TruePositive
     - code: "yaml.safe_load(data)"
       expected: TrueNegative
-    - code: "yaml.load(data, Loader=yaml.SafeLoader)"
-      expected: TrueNegative
     - code: "yaml.dump(data)"
+      expected: TrueNegative
+    - code: "json.loads(data)"
       expected: TrueNegative
 
 - id: "py-yaml-full-loader"

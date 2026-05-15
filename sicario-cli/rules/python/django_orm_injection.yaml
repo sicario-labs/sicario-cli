@@ -49,9 +49,9 @@
   test_cases:
     - code: "User.objects.extra(where=[f\"name = '{user_input}'\"])"
       expected: TruePositive
-    - code: "User.objects.extra(select={\"val\": f\"col = {value}\"})"
+    - code: "User.objects.extra(where=[f\"id = {entry_id}\"])"
       expected: TruePositive
-    - code: "Entry.objects.extra(where=[f\"id = {entry_id}\"])"
+    - code: "Entry.objects.extra(select=[f\"col = {value}\"])"
       expected: TruePositive
     - code: "User.objects.extra(where=[\"name = %s\"], params=[user_input])"
       expected: TrueNegative

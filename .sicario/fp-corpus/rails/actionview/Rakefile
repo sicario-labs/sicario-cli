@@ -1,0 +1,67 @@
+# frozen_string_literal: true
+
+require "rake/testtask"
+require "fileutils"
+require "open3"
+require "base64"
+
+desc "Default Task"
+task default: :test
+
+ENV["RAILS_MINITEST_PLUGIN"] = "true"
+
+# Run the unit tests
+
+desc "Run all unit tests"
+task test: ["test:template", "test:integration:action_pack", "test:integration:active_record"]
+
+namespace :test do
+  task :railties do
+    ["action_view/railtie"].all? do |railtie|
+      sh(Gem.ruby, "-r", railtie, "-e", "'OK'")
+    end || raise("Failures")
+  end
+
+  Rake::TestTask.new(:template) do |t|
+    t.libs << "test"
+    t.test_files = FileList["test/template/**/*_test.rb"]
+    t.warning = true
+    if ENV["CI"]
+      t.verbose = true
+      t.options = "--profile --defer-output"
+    end
+    t.ruby_opts = ["--dev"] if defined?(JRUBY_VERSION)
+  end
+
+  namespace :integration do
+    # Active Record Integration Tests
+    Rake::TestTask.new(:active_record) do |t|
+      t.libs << "test"
+      t.test_files = FileList["test/activerecord/*_test.rb"]
+      t.warning = true
+      if ENV["CI"]
+        t.verbose = true
+        t.options = "--profile --defer-output"
+      end
+      t.ruby_opts = ["--dev"] if defined?(JRUBY_VERSION)
+    end
+
+    # Action Pack Integration Tests
+    Rake::TestTask.new(:action_pack) do |t|
+      t.libs << "test"
+      t.test_files = FileList["test/actionpack/**/*_test.rb"]
+      t.warning = true
+      if ENV["CI"]
+        t.verbose = true
+        t.options = "--profile --defer-output"
+      end
+      t.ruby_opts = ["--dev"] if defined?(JRUBY_VERSION)
+    end
+  end
+end
+
+task :lines do
+  load File.expand_path("../tools/line_statistics", __dir__)
+  files = FileList["lib/**/*.rb"]
+  CodeTools::LineStatistics.new(files).print_loc
+end

@@ -18,7 +18,7 @@
   languages:
     - Java
   pattern:
-    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#match? @method \"^(info|warn|error|fatal)$\") arguments: (argument_list (binary_expression left: (string_literal) @msg (#match? @msg \"(?i)(password|passwd|secret|token|apiKey|api_key|credential|ssn|credit.?card)\")))) @call"
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#match? @method \"^(info|warn|error|fatal)$\") arguments: (argument_list (binary_expression) @expr (#match? @expr \"(?i)(password|passwd|secret|token|api.?key|credential|ssn|credit.?card)\"))) @call"
     captures:
       - "call"
   cwe_id: "CWE-532"
@@ -46,7 +46,7 @@
   languages:
     - Java
   pattern:
-    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"debug\") arguments: (argument_list (binary_expression left: (string_literal) @msg (#match? @msg \"(?i)(password|passwd|secret|token|apiKey|api_key|credential|ssn|credit.?card)\")))) @call"
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#eq? @method \"debug\") arguments: (argument_list (binary_expression) @expr (#match? @expr \"(?i)(password|passwd|secret|token|api.?key|credential|ssn|credit.?card)\"))) @call"
     captures:
       - "call"
   cwe_id: "CWE-532"
@@ -74,7 +74,7 @@
   languages:
     - Java
   pattern:
-    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#match? @method \"^(info|debug|warn|error|trace)$\") arguments: (argument_list (string_literal) @msg (#match? @msg \"(?i)(password|passwd|secret|token|apiKey|api_key|credential).*\\\\{\\\\}\") (identifier) @arg)) @call"
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#match? @method \"^(info|debug|warn|error|trace)$\") arguments: (argument_list (string_literal) @msg (#match? @msg \"(?i)(password|passwd|secret|token|api.?key|credential).*\\\\{\\\\}\") (identifier) @arg)) @call"
     captures:
       - "call"
   cwe_id: "CWE-532"
@@ -107,7 +107,7 @@
   languages:
     - Java
   pattern:
-    query: "(method_invocation object: (field_access object: (identifier) @sys (#eq? @sys \"System\") field: (identifier) @field (#eq? @field \"out\")) name: (identifier) @method (#match? @method \"^(println|print|printf)$\") arguments: (argument_list (binary_expression left: (string_literal) @msg (#match? @msg \"(?i)(password|passwd|secret|token|apiKey|api_key|credential|ssn|credit.?card)\")))) @call"
+    query: "(method_invocation object: (field_access object: (identifier) @sys (#eq? @sys \"System\") field: (identifier) @field (#eq? @field \"out\")) name: (identifier) @method (#match? @method \"^(println|print|printf)$\") arguments: (argument_list (binary_expression) @expr (#match? @expr \"(?i)(password|passwd|secret|token|api.?key|credential|ssn|credit.?card)\"))) @call"
     captures:
       - "call"
   cwe_id: "CWE-532"
@@ -135,7 +135,7 @@
   languages:
     - Java
   pattern:
-    query: "(method_invocation object: (field_access object: (identifier) @sys (#eq? @sys \"System\") field: (identifier) @field (#eq? @field \"err\")) name: (identifier) @method (#match? @method \"^(println|print|printf)$\") arguments: (argument_list (binary_expression left: (string_literal) @msg (#match? @msg \"(?i)(password|passwd|secret|token|apiKey|api_key|credential|ssn|credit.?card)\")))) @call"
+    query: "(method_invocation object: (field_access object: (identifier) @sys (#eq? @sys \"System\") field: (identifier) @field (#eq? @field \"err\")) name: (identifier) @method (#match? @method \"^(println|print|printf)$\") arguments: (argument_list (binary_expression) @expr (#match? @expr \"(?i)(password|passwd|secret|token|api.?key|credential|ssn|credit.?card)\"))) @call"
     captures:
       - "call"
   cwe_id: "CWE-532"
@@ -195,7 +195,7 @@
   languages:
     - Java
   pattern:
-    query: "(method_invocation object: (identifier) @obj (#match? @obj \"^(LOG|LOGGER|log4jLogger)$\") name: (identifier) @method (#match? @method \"^(info|debug|warn|error|fatal|trace)$\") arguments: (argument_list (binary_expression left: (string_literal) @msg (#match? @msg \"(?i)(password|passwd|secret|token|apiKey|api_key|credential)\")))) @call"
+    query: "(method_invocation object: (identifier) @obj (#match? @obj \"^(LOG|LOGGER|log4jLogger)$\") name: (identifier) @method (#match? @method \"^(info|debug|warn|error|fatal|trace)$\") arguments: (argument_list (binary_expression) @expr (#match? @expr \"(?i)(password|passwd|secret|token|api.?key|credential)\"))) @call"
     captures:
       - "call"
   cwe_id: "CWE-532"
@@ -223,7 +223,7 @@
   languages:
     - Java
   pattern:
-    query: "(method_invocation object: (identifier) @obj (#match? @obj \"^(LOG|LOGGER|log4jLogger)$\") name: (identifier) @method (#match? @method \"^(info|debug|warn|error|fatal|trace)$\") arguments: (argument_list (string_literal) @msg (#match? @msg \"(?i)(password|passwd|secret|token|apiKey|api_key|credential).*\\\\{\\\\}\") (identifier) @arg)) @call"
+    query: "(method_invocation object: (identifier) @obj (#match? @obj \"^(LOG|LOGGER|log4jLogger)$\") name: (identifier) @method (#match? @method \"^(info|debug|warn|error|fatal|trace)$\") arguments: (argument_list (string_literal) @msg (#match? @msg \"(?i)(password|passwd|secret|token|api.?key|credential).*\\\\{\\\\}\") (identifier) @arg)) @call"
     captures:
       - "call"
   cwe_id: "CWE-532"
@@ -283,7 +283,7 @@
   languages:
     - Java
   pattern:
-    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#match? @method \"^(info|debug|warn|error|fatal)$\") arguments: (argument_list (binary_expression left: (string_literal) @msg (#match? @msg \"(?i)(password|passwd|secret|token|apiKey|api_key|credential)\") right: (method_invocation name: (identifier) @fn (#eq? @fn \"getMessage\"))))) @call"
+    query: "(method_invocation object: (identifier) @obj name: (identifier) @method (#match? @method \"^(info|debug|warn|error|fatal)$\") arguments: (argument_list (binary_expression) @expr (#match? @expr \"(?i)(password|passwd|secret|token|api.?key|credential)\") (#match? @expr \"getMessage\"))) @call"
     captures:
       - "call"
   cwe_id: "CWE-532"

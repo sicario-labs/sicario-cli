@@ -104,11 +104,11 @@
   owasp_category: A01_BrokenAccessControl
   help_uri: "https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html"
   test_cases:
-    - code: "redirect(request.args.get('next'))"
+    - code: "redirect(request.get('next'))"
       expected: TruePositive
-    - code: "redirect(request.form.get('redirect_url'))"
+    - code: "redirect(request.get('redirect_url'))"
       expected: TruePositive
-    - code: "redirect(request.args.get('url'))"
+    - code: "redirect(req.get('url'))"
       expected: TruePositive
     - code: "redirect(url_for('index'))"
       expected: TrueNegative

@@ -1,0 +1,655 @@
+# frozen_string_literal: true
+
+require "cases/helper"
+require "models/person"
+
+module ActiveRecord
+  module ConnectionAdapters
+    class ConnectionSwappingNestedTest < ActiveRecord::TestCase
+      self.use_transactional_tests = false
+
+      fixtures :people
+
+      def teardown
+        clean_up_connection_handler
+      end
+
+      class PrimaryBase < ActiveRecord::Base
+        self.abstract_class = true
+      end
+
+      class PrimaryModel < PrimaryBase
+      end
+
+      class SecondaryBase < ActiveRecord::Base
+        self.abstract_class = true
+      end
+
+      class SecondaryModel < SecondaryBase
+      end
+
+      class TertiaryBase < ActiveRecord::Base
+        self.abstract_class = true
+      end
+
+      class TertiaryModel < TertiaryBase
+      end
+
+      class NonConnectionAbstractClass < SecondaryBase
+        self.abstract_class = true
+      end
+
+      class ModelInheritingFromNonConnectionAbstractClass < NonConnectionAbstractClass
+      end
+
+      unless in_memory_db?
+        def test_roles_can_be_swapped_granularly
+          previous_env, ENV["RAILS_ENV"] = ENV["RAILS_ENV"], "default_env"
+
+          config = {
+            "default_env" => {
+              "primary" => { "adapter" => "sqlite3", "database" => "test/db/primary.sqlite3" },
+              "primary_replica" => { "adapter" => "sqlite3", "database" => "test/db/primary.sqlite3", "replica" => true },
+              "secondary" => { "adapter" => "sqlite3", "database" => "test/db/secondary.sqlite3" },
+              "secondary_replica" => { "adapter" => "sqlite3", "database" => "test/db/secondary_replica.sqlite3", "replica" => true }
+            }
+          }
+
+          @prev_configs, ActiveRecord::Base.configurations = ActiveRecord::Base.configurations, config
+
+          PrimaryBase.connects_to database: { writing: :primary, reading: :primary_replica }
+          SecondaryBase.connects_to database: { writing: :secondary, reading: :secondary_replica }
+
+          # Switch everything to writing
+          ActiveRecord::Base.connected_to(role: :writing) do
+            assert_equal "primary", PrimaryBase.connection_pool.db_config.name
+            assert_equal "secondary", SecondaryBase.connection_pool.db_config.name
+
+            # Switch only primary to reading
+            PrimaryBase.connected_to(role: :reading) do
+              assert_equal "primary_replica", PrimaryBase.connection_pool.db_config.name
+              assert_equal "secondary", SecondaryBase.connection_pool.db_config.name
+
+              # Switch global to reading
+              ActiveRecord::Base.connected_to(role: :reading) do
+                assert_equal "primary_replica", PrimaryBase.connection_pool.db_config.name
+                assert_equal "secondary_replica", SecondaryBase.connection_pool.db_config.name
+
+                # Switch only secondary to writing
+                SecondaryBase.connected_to(role: :writing) do
+                  assert_equal :writing, ModelInheritingFromNonConnectionAbstractClass.current_role
+                  assert_equal "primary_replica", PrimaryBase.connection_pool.db_config.name
+                  assert_equal "secondary", SecondaryBase.connection_pool.db_config.name
+                end
+
+                # Switch only secondary to reading
+                SecondaryBase.connected_to(role: :reading) do
+                  assert_equal :reading, ModelInheritingFromNonConnectionAbstractClass.current_role
+                  assert_equal "primary_replica", PrimaryBase.connection_pool.db_config.name
+                  assert_equal "secondary_replica", SecondaryBase.connection_pool.db_config.name
+                end
+
+                # Ensure restored to global reading
+                assert_equal "primary_replica", PrimaryBase.connection_pool.db_config.name
+                assert_equal "secondary_replica", SecondaryBase.connection_pool.db_config.name
+              end
+
+              # Switch everything to writing
+              ActiveRecord::Base.connected_to(role: :writing) do
+                assert_equal "primary", PrimaryBase.connection_pool.db_config.name
+                assert_equal "secondary", SecondaryBase.connection_pool.db_config.name
+              end
+
+              # Ensure restored to primary reading
+              assert_equal "primary_replica", PrimaryBase.connection_pool.db_config.name
+              assert_equal "secondary", SecondaryBase.connection_pool.db_config.name
+            end
+
+            # Ensure restored to global writing
+            assert_equal "primary", PrimaryBase.connection_pool.db_config.name
+            assert_equal "secondary", SecondaryBase.connection_pool.db_config.name
+          end
+        ensure
+          ActiveRecord::Base.configurations = @prev_configs
+          ActiveRecord::Base.establish_connection(:arunit)
+          ENV["RAILS_ENV"] = previous_env
+        end
+
+        def test_shards_can_be_swapped_granularly
+          previous_env, ENV["RAILS_ENV"] = ENV["RAILS_ENV"], "default_env"
+
+          config = {
+            "default_env" => {
+              "primary" => { "adapter" => "sqlite3", "database" => "test/db/primary.sqlite3" },
+              "primary_replica" => { "adapter" => "sqlite3", "database" => "test/db/primary.sqlite3", "replica" => true },
+              "primary_shard_one" => { "adapter" => "sqlite3", "database" => "test/db/primary_shard_one.sqlite3" },
+              "primary_shard_one_replica" => { "adapter" => "sqlite3", "database" => "test/db/primary_shard_one.sqlite3", "replica" => true },
+              "primary_shard_two" => { "adapter" => "sqlite3", "database" => "test/db/primary_shard_two.sqlite3" },
+              "primary_shard_two_replica" => { "adapter" => "sqlite3", "database" => "test/db/primary_shard_two.sqlite3", "replica" => true },
+              "secondary" => { "adapter" => "sqlite3", "database" => "test/db/secondary.sqlite3" },
+              "secondary_replica" => { "adapter" => "sqlite3", "database" => "test/db/secondary.sqlite3", "replica" => true },
+              "secondary_shard_one" => { "adapter" => "sqlite3", "database" => "test/db/secondary_shard_one.sqlite3" },
+              "secondary_shard_one_replica" => { "adapter" => "sqlite3", "database" => "test/db/secondary_shard_one.sqlite3", "replica" => true },
+              "secondary_shard_two" => { "adapter" => "sqlite3", "database" => "test/db/secondary_shard_two.sqlite3" },
+              "secondary_shard_two_replica" => { "adapter" => "sqlite3", "database" => "test/db/secondary_shard_two.sqlite3", "replica" => true }
+            }
+          }
+
+          @prev_configs, ActiveRecord::Base.configurations = ActiveRecord::Base.configurations, config
+
+          PrimaryBase.connects_to(shards: {
+            default: { writing: :primary, reading: :primary_replica },
+            shard_one: { writing: :primary_shard_one, reading: :primary_shard_one_replica }
+          })
+
+          SecondaryBase.connects_to(shards: {
+            default: { writing: :secondary, reading: :secondary_replica },
+            shard_one: { writing: :secondary_shard_one, reading: :secondary_shard_one_replica },
+            shard_two: { writing: :secondary_shard_two, reading: :secondary_shard_two_replica }
+          })
+
+          global_role = :writing
+
+          # Switch everything to default
+          ActiveRecord::Base.connected_to(role: global_role, shard: :default) do
+            assert_equal "primary", PrimaryBase.connection_pool.db_config.name
+            assert_equal "secondary", SecondaryBase.connection_pool.db_config.name
+
+            # Switch only primary to shard_one
+            PrimaryBase.connected_to(shard: :shard_one) do
+              assert_equal "primary_shard_one", PrimaryBase.connection_pool.db_config.name
+              assert_equal "secondary", SecondaryBase.connection_pool.db_config.name
+
+              # Switch global to shard_one
+              ActiveRecord::Base.connected_to(shard: :shard_one) do
+                assert_equal "primary_shard_one", PrimaryBase.connection_pool.db_config.name
+                assert_equal "secondary_shard_one", SecondaryBase.connection_pool.db_config.name
+
+                # Switch only secondary to shard_two
+                SecondaryBase.connected_to(shard: :shard_two) do
+                  assert_equal "primary_shard_one", PrimaryBase.connection_pool.db_config.name
+                  assert_equal "secondary_shard_two", SecondaryBase.connection_pool.db_config.name
+                end
+
+                # Ensure restored to global shard_one
+                assert_equal "primary_shard_one", PrimaryBase.connection_pool.db_config.name
+                assert_equal "secondary_shard_one", SecondaryBase.connection_pool.db_config.name
+
+                # When shard not specified, leave things as-is
+                ActiveRecord::Base.connected_to(role: global_role) do
+                  assert_equal "primary_shard_one", PrimaryBase.connection_pool.db_config.name
+                  assert_equal "secondary_shard_one", SecondaryBase.connection_pool.db_config.name
+                end
+              end
+
+              # Switch everything to default
+              ActiveRecord::Base.connected_to(shard: :default) do
+                assert_equal "primary", PrimaryBase.connection_pool.db_config.name
+                assert_equal "secondary", SecondaryBase.connection_pool.db_config.name
+              end
+
+              # Ensure restored to primary shard_one
+              assert_equal "primary_shard_one", PrimaryBase.connection_pool.db_config.name
+              assert_equal "secondary", SecondaryBase.connection_pool.db_config.name
+            end
+
+            # Ensure restored to global default
+            assert_equal "primary", PrimaryBase.connection_pool.db_config.name
+            assert_equal "secondary", SecondaryBase.connection_pool.db_config.name
+          end
+        ensure
+          ActiveRecord::Base.configurations = @prev_configs
+          ActiveRecord::Base.establish_connection(:arunit)
+          ENV["RAILS_ENV"] = previous_env
+        end
+
+        def test_shard_swapping_prohibition_exception_recovery
+          previous_env, ENV["RAILS_ENV"] = ENV["RAILS_ENV"], "default_env"
+
+          config = {
+            "default_env" => {
+              "primary" => { "adapter" => "sqlite3", "database" => "test/db/primary.sqlite3" },
+              "primary_shard_one" => { "adapter" => "sqlite3", "database" => "test/db/primary_shard_one.sqlite3" },
+              "primary_shard_two" => { "adapter" => "sqlite3", "database" => "test/db/primary_shard_two.sqlite3" },
+            }
+          }
+
+          @prev_configs, ActiveRecord::Base.configurations = ActiveRecord::Base.configurations, config
+
+          PrimaryBase.connects_to(shards: {
+            default: { writing: :primary },
+            shard_one: { writing: :primary_shard_one },
+            shard_two: { writing: :primary_shard_two }
+          })
+
+          global_role = :writing
+
+          # Switch everything to default
+          ActiveRecord::Base.connected_to(role: global_role, shard: :default) do
+            assert_equal "primary", PrimaryBase.connection_pool.db_config.name
+
+            # Switch only primary to shard_one
+            PrimaryBase.connected_to(shard: :shard_one) do
+              assert_equal "primary_shard_one", PrimaryBase.connection_pool.db_config.name
+
+              PrimaryBase.prohibit_shard_swapping do
+                assert_raises(ShardSwapProhibitedError) do
+                  PrimaryBase.connected_to(shard: :shard_two) { }
+                end
+
+                assert_equal "primary_shard_one", PrimaryBase.connection_pool.db_config.name
+
+                # Prohibition can be lifted
+                PrimaryBase.prohibit_shard_swapping(false) do
+                  PrimaryBase.connected_to(shard: :shard_two) do
+                    assert_equal "primary_shard_two", PrimaryBase.connection_pool.db_config.name
+                  end
+                end
+              end
+
+              PrimaryBase.prohibit_shard_swapping do
+                assert_raises(ShardSwapProhibitedError) do
+                  ActiveRecord::Base.connected_to_many([PrimaryBase], shard: :shard_two, role: :writing) { }
+                end
+
+                assert_equal "primary_shard_one", PrimaryBase.connection_pool.db_config.name
+
+                # Prohibition can be lifted
+                PrimaryBase.prohibit_shard_swapping(false) do
+                  ActiveRecord::Base.connected_to_many([PrimaryBase], shard: :shard_two, role: :writing) do
+                    assert_equal "primary_shard_two", PrimaryBase.connection_pool.db_config.name
+                  end
+                end
+              end
+            end
+          end
+        ensure
+          ActiveRecord::Base.configurations = @prev_configs
+          ActiveRecord::Base.establish_connection(:arunit)
+          ENV["RAILS_ENV"] = previous_env
+        end
+
+        def test_granular_prohibition_of_shard_swapping
+          previous_env, ENV["RAILS_ENV"] = ENV["RAILS_ENV"], "default_env"
+
+          config = {
+            "default_env" => {
+              "primary" => { "adapter" => "sqlite3", "database" => "test/db/primary.sqlite3" },
+              "primary_shard_one" => { "adapter" => "sqlite3", "database" => "test/db/primary_shard_one.sqlite3" },
+              "primary_shard_two" => { "adapter" => "sqlite3", "database" => "test/db/primary_shard_two.sqlite3" },
+              "secondary" => { "adapter" => "sqlite3", "database" => "test/db/secondary.sqlite3" },
+              "secondary_shard_one" => { "adapter" => "sqlite3", "database" => "test/db/secondary_shard_one.sqlite3" },
+              "secondary_shard_two" => { "adapter" => "sqlite3", "database" => "test/db/secondary_shard_two.sqlite3" },
+            }
+          }
+
+          @prev_configs, ActiveRecord::Base.configurations = ActiveRecord::Base.configurations, config
+
+          PrimaryBase.connects_to(shards: {
+            default: { writing: :primary },
+            shard_one: { writing: :primary_shard_one },
+            shard_two: { writing: :primary_shard_two }
+          })
+
+          SecondaryBase.connects_to(shards: {
+            default: { writing: :secondary },
+            shard_one: { writing: :secondary_shard_one },
+            shard_two: { writing: :secondary_shard_two }
+          })
+
+          global_role = :writing
+
+          # Switch everything to default
+          ActiveRecord::Base.connected_to(role: global_role, shard: :default) do
+            assert_equal "primary", PrimaryBase.connection_pool.db_config.name
+            assert_equal "secondary", SecondaryBase.connection_pool.db_config.name
+
+            # Switch only primary to shard_one
+            PrimaryBase.connected_to(shard: :shard_one) do
+              assert_equal "primary_shard_one", PrimaryBase.connection_pool.db_config.name
+              assert_equal "secondary", SecondaryBase.connection_pool.db_config.name
+
+              # No prohibition on changing PrimaryBase again
+              PrimaryBase.connected_to(shard: :shard_two) do
+                assert_equal "primary_shard_two", PrimaryBase.connection_pool.db_config.name
+                assert_equal "secondary", SecondaryBase.connection_pool.db_config.name
+              end
+
+              ActiveRecord::Base.connected_to_many([PrimaryBase], shard: :shard_two, role: :writing) do
+                assert_equal "primary_shard_two", PrimaryBase.connection_pool.db_config.name
+                assert_equal "secondary", SecondaryBase.connection_pool.db_config.name
+              end
+
+              # Prohibit shard swapping on PrimaryBase
+              PrimaryBase.prohibit_shard_swapping do
+                assert_raises(ShardSwapProhibitedError) do
+                  PrimaryBase.connected_to(shard: :shard_two) { }
+                end
+
+                assert_raises(ShardSwapProhibitedError) do
+                  ActiveRecord::Base.connected_to_many([PrimaryBase], shard: :shard_two, role: :writing) { }
+                end
+
+                # Shard swapping on SecondaryBase has not been prohibited
+                SecondaryBase.connected_to(shard: :shard_one) do
+                  assert_equal "primary_shard_one", PrimaryBase.connection_pool.db_config.name
+                  assert_equal "secondary_shard_one", SecondaryBase.connection_pool.db_config.name
+
+                  SecondaryBase.prohibit_shard_swapping do
+                    assert_raises(ShardSwapProhibitedError) do
+                      SecondaryBase.connected_to(shard: :shard_two) { }
+                    end
+
+                    assert_raises(ShardSwapProhibitedError) do
+                      ActiveRecord::Base.connected_to_many([SecondaryBase], shard: :shard_two, role: :writing) { }
+                    end
+                  end
+
+                  SecondaryBase.connected_to(shard: :shard_two) do
+                    assert_equal "primary_shard_one", PrimaryBase.connection_pool.db_config.name
+                    assert_equal "secondary_shard_two", SecondaryBase.connection_pool.db_config.name
+                  end
+
+                  ActiveRecord::Base.connected_to_many([SecondaryBase], shard: :shard_two, role: :writing) do
+                    assert_equal "primary_shard_one", PrimaryBase.connection_pool.db_config.name
+                    assert_equal "secondary_shard_two", SecondaryBase.connection_pool.db_config.name
+                  end
+                end
+              end
+            end
+          end
+        ensure
+          ActiveRecord::Base.configurations = @prev_configs
+          ActiveRecord::Base.establish_connection(:arunit)
+          ENV["RAILS_ENV"] = previous_env
+        end
+
+        def test_roles_and_shards_can_be_swapped_granularly
+          previous_env, ENV["RAILS_ENV"] = ENV["RAILS_ENV"], "default_env"
+
+          config = {
+            "default_env" => {
+              "primary" => { "adapter" => "sqlite3", "database" => "test/db/primary.sqlite3" },
+              "primary_replica" => { "adapter" => "sqlite3", "database" => "test/db/primary.sqlite3", "replica" => true },
+              "primary_shard_one" => { "adapter" => "sqlite3", "database" => "test/db/primary_shard_one.sqlite3" },
+              "primary_shard_one_replica" => { "adapter" => "sqlite3", "database" => "test/db/primary_shard_one.sqlite3", "replica" => true },
+              "primary_shard_two" => { "adapter" => "sqlite3", "database" => "test/db/primary_shard_two.sqlite3" },
+              "primary_shard_two_replica" => { "adapter" => "sqlite3", "database" => "test/db/primary_shard_two.sqlite3", "replica" => true },
+              "secondary" => { "adapter" => "sqlite3", "database" => "test/db/secondary.sqlite3" },
+              "secondary_replica" => { "adapter" => "sqlite3", "database" => "test/db/secondary.sqlite3", "replica" => true },
+              "secondary_shard_one" => { "adapter" => "sqlite3", "database" => "test/db/secondary_shard_one.sqlite3" },
+              "secondary_shard_one_replica" => { "adapter" => "sqlite3", "database" => "test/db/secondary_shard_one.sqlite3", "replica" => true },
+              "secondary_shard_two" => { "adapter" => "sqlite3", "database" => "test/db/secondary_shard_two.sqlite3" },
+              "secondary_shard_two_replica" => { "adapter" => "sqlite3", "database" => "test/db/secondary_shard_two.sqlite3", "replica" => true }
+            }
+          }
+
+          @prev_configs, ActiveRecord::Base.configurations = ActiveRecord::Base.configurations, config
+
+          PrimaryBase.connects_to(shards: {
+            default: { writing: :primary, reading: :primary_replica },
+            shard_one: { writing: :primary_shard_one, reading: :primary_shard_one_replica }
+          })
+
+          SecondaryBase.connects_to(shards: {
+            default: { writing: :secondary, reading: :secondary_replica },
+            shard_one: { writing: :secondary_shard_one, reading: :secondary_shard_one_replica },
+            shard_two: { writing: :secondary_shard_two, reading: :secondary_shard_two_replica }
+          })
+
+          # Switch everything to writing, default shard
+          ActiveRecord::Base.connected_to(role: :writing, shard: :default) do
+            assert_equal "primary", PrimaryBase.connection_pool.db_config.name
+            assert_equal "secondary", SecondaryBase.connection_pool.db_config.name
+
+            # Switch only primary to reading, shard_one
+            PrimaryBase.connected_to(role: :reading, shard: :shard_one) do
+              assert_equal "primary_shard_one_replica", PrimaryBase.connection_pool.db_config.name
+              assert_equal "secondary", SecondaryBase.connection_pool.db_config.name
+
+              # Switch global to reading, shard_one
+              ActiveRecord::Base.connected_to(role: :reading, shard: :shard_one) do
+                assert_equal "primary_shard_one_replica", PrimaryBase.connection_pool.db_config.name
+                assert_equal "secondary_shard_one_replica", SecondaryBase.connection_pool.db_config.name
+
+                # Switch only secondary to writing shard_two
+                SecondaryBase.connected_to(role: :writing, shard: :shard_two) do
+                  assert_equal "primary_shard_one_replica", PrimaryBase.connection_pool.db_config.name
+                  assert_equal "secondary_shard_two", SecondaryBase.connection_pool.db_config.name
+                end
+
+                # Ensure restored to global reading, shard_one
+                assert_equal "primary_shard_one_replica", PrimaryBase.connection_pool.db_config.name
+                assert_equal "secondary_shard_one_replica", SecondaryBase.connection_pool.db_config.name
+
+                # When shard not specified, leave shard alone
+                ActiveRecord::Base.connected_to(role: :writing) do
+                  assert_equal "primary_shard_one", PrimaryBase.connection_pool.db_config.name
+                  assert_equal "secondary_shard_one", SecondaryBase.connection_pool.db_config.name
+                end
+              end
+
+              # Switch everything to writing, shard default
+              ActiveRecord::Base.connected_to(role: :writing, shard: :default) do
+                assert_equal "primary", PrimaryBase.connection_pool.db_config.name
+                assert_equal "secondary", SecondaryBase.connection_pool.db_config.name
+              end
+
+              # Ensure restored to primary reading shard_one, secondary writing default
+              assert_equal "primary_shard_one_replica", PrimaryBase.connection_pool.db_config.name
+              assert_equal "secondary", SecondaryBase.connection_pool.db_config.name
+            end
+
+            # Ensure restored to global writing, default shard
+            assert_equal "primary", PrimaryBase.connection_pool.db_config.name
+            assert_equal "secondary", SecondaryBase.connection_pool.db_config.name
+          end
+        ensure
+          ActiveRecord::Base.configurations = @prev_configs
+          ActiveRecord::Base.establish_connection(:arunit)
+          ENV["RAILS_ENV"] = previous_env
+        end
+
+        def test_connected_to_many
+          previous_env, ENV["RAILS_ENV"] = ENV["RAILS_ENV"], "default_env"
+
+          config = {
+            "default_env" => {
+              "primary" => { "adapter" => "sqlite3", "database" => "test/db/primary.sqlite3" },
+              "primary_replica" => { "adapter" => "sqlite3", "database" => "test/db/primary.sqlite3", "replica" => true },
+              "primary_shard_one" => { "adapter" => "sqlite3", "database" => "test/db/primary_shard_one.sqlite3" },
+              "primary_shard_one_replica" => { "adapter" => "sqlite3", "database" => "test/db/primary_shard_one.sqlite3", "replica" => true },
+              "primary_shard_two" => { "adapter" => "sqlite3", "database" => "test/db/primary_shard_two.sqlite3" },
+              "primary_shard_two_replica" => { "adapter" => "sqlite3", "database" => "test/db/primary_shard_two.sqlite3", "replica" => true },
+              "secondary" => { "adapter" => "sqlite3", "database" => "test/db/secondary.sqlite3" },
+              "secondary_replica" => { "adapter" => "sqlite3", "database" => "test/db/secondary.sqlite3", "replica" => true },
+              "secondary_shard_one" => { "adapter" => "sqlite3", "database" => "test/db/secondary_shard_one.sqlite3" },
+              "secondary_shard_one_replica" => { "adapter" => "sqlite3", "database" => "test/db/secondary_shard_one.sqlite3", "replica" => true },
+              "secondary_shard_two" => { "adapter" => "sqlite3", "database" => "test/db/secondary_shard_two.sqlite3" },
+              "secondary_shard_two_replica" => { "adapter" => "sqlite3", "database" => "test/db/secondary_shard_two.sqlite3", "replica" => true },
+              "tertiary" => { "adapter" => "sqlite3", "database" => "test/db/tertiary.sqlite3" },
+              "tertiary_replica" => { "adapter" => "sqlite3", "database" => "test/db/tertiary.sqlite3", "replica" => true },
+              "tertiary_shard_one" => { "adapter" => "sqlite3", "database" => "test/db/tertiary_shard_one.sqlite3" },
+              "tertiary_shard_one_replica" => { "adapter" => "sqlite3", "database" => "test/db/tertiary_shard_one.sqlite3", "replica" => true },
+              "tertiary_shard_two" => { "adapter" => "sqlite3", "database" => "test/db/tertiary_shard_two.sqlite3" },
+              "tertiary_shard_two_replica" => { "adapter" => "sqlite3", "database" => "test/db/tertiary_shard_two.sqlite3", "replica" => true }
+            }
+          }
+
+          @prev_configs, ActiveRecord::Base.configurations = ActiveRecord::Base.configurations, config
+
+          PrimaryBase.connects_to(shards: {
+            default: { writing: :primary, reading: :primary_replica },
+            shard_one: { writing: :primary_shard_one, reading: :primary_shard_one_replica }
+          })
+
+          SecondaryBase.connects_to(shards: {
+            default: { writing: :secondary, reading: :secondary_replica },
+            shard_one: { writing: :secondary_shard_one, reading: :secondary_shard_one_replica },
+            shard_two: { writing: :secondary_shard_two, reading: :secondary_shard_two_replica }
+          })
+
+          TertiaryBase.connects_to(shards: {
+            default: { writing: :tertiary, reading: :tertiary_replica },
+            shard_one: { writing: :tertiary_shard_one, reading: :tertiary_shard_one_replica },
+            shard_two: { writing: :tertiary_shard_two, reading: :tertiary_shard_two_replica }
+          })
+
+          # Switch everything to writing, default shard
+          ActiveRecord::Base.connected_to(role: :writing, shard: :default) do
+            assert_equal "primary", PrimaryBase.connection_pool.db_config.name
+            assert_equal "secondary", SecondaryBase.connection_pool.db_config.name
+            assert_equal "tertiary", TertiaryBase.connection_pool.db_config.name
+
+            # Switch two to reading
+            ActiveRecord::Base.connected_to_many([SecondaryBase, TertiaryBase], role: :reading) do
+              assert_equal "primary", PrimaryBase.connection_pool.db_config.name
+              assert_equal "secondary_replica", SecondaryBase.connection_pool.db_config.name
+              assert_equal "tertiary_replica", TertiaryBase.connection_pool.db_config.name
+
+              # Switch one back
+              ActiveRecord::Base.connected_to_many([TertiaryBase], role: :writing) do
+                assert_equal "primary", PrimaryBase.connection_pool.db_config.name
+                assert_equal "secondary_replica", SecondaryBase.connection_pool.db_config.name
+                assert_equal "tertiary", TertiaryBase.connection_pool.db_config.name
+              end
+            end
+
+            # Switched back
+            assert_equal "primary", PrimaryBase.connection_pool.db_config.name
+            assert_equal "secondary", SecondaryBase.connection_pool.db_config.name
+            assert_equal "tertiary", TertiaryBase.connection_pool.db_config.name
+          end
+        ensure
+          ActiveRecord::Base.configurations = @prev_configs
+          ActiveRecord::Base.establish_connection(:arunit)
+          ENV["RAILS_ENV"] = previous_env
+        end
+
+        def test_prevent_writes_can_be_changed_granularly
+          previous_env, ENV["RAILS_ENV"] = ENV["RAILS_ENV"], "default_env"
+
+          # replica: true is purposefully left out so we can test the pools behavior
+          config = {
+            "default_env" => {
+              "primary" => { "adapter" => "sqlite3", "database" => "test/db/primary.sqlite3" },
+              "primary_replica" => { "adapter" => "sqlite3", "database" => "test/db/primary.sqlite3" },
+              "secondary" => { "adapter" => "sqlite3", "database" => "test/db/secondary.sqlite3" },
+              "secondary_replica" => { "adapter" => "sqlite3", "database" => "test/db/secondary_replica.sqlite3" }
+            }
+          }
+
+          @prev_configs, ActiveRecord::Base.configurations = ActiveRecord::Base.configurations, config
+
+          PrimaryBase.connects_to database: { writing: :primary, reading: :primary_replica }
+          SecondaryBase.connects_to database: { writing: :secondary, reading: :secondary_replica }
+
+          # Switch everything to writing
+          ActiveRecord::Base.connected_to(role: :writing) do
+            assert_not_predicate ActiveRecord::Base.lease_connection, :preventing_writes?
+            assert_not_predicate PrimaryBase.lease_connection, :preventing_writes?
+            assert_not_predicate SecondaryBase.lease_connection, :preventing_writes?
+
+            # Switch only primary to reading
+            PrimaryBase.connected_to(role: :reading) do
+              assert_predicate PrimaryBase.lease_connection, :preventing_writes?
+              assert_not_predicate SecondaryBase.lease_connection, :preventing_writes?
+
+              # Switch global to reading
+              ActiveRecord::Base.connected_to(role: :reading) do
+                assert_predicate PrimaryBase.lease_connection, :preventing_writes?
+                assert_predicate SecondaryBase.lease_connection, :preventing_writes?
+
+                # Switch only secondary to writing
+                SecondaryBase.connected_to(role: :writing) do
+                  assert_predicate PrimaryBase.lease_connection, :preventing_writes?
+                  assert_not_predicate SecondaryBase.lease_connection, :preventing_writes?
+                end
+
+                # Ensure restored to global reading
+                assert_predicate PrimaryBase.lease_connection, :preventing_writes?
+                assert_predicate SecondaryBase.lease_connection, :preventing_writes?
+              end
+
+              # Switch everything to writing
+              ActiveRecord::Base.connected_to(role: :writing) do
+                assert_not_predicate PrimaryBase.lease_connection, :preventing_writes?
+                assert_not_predicate SecondaryBase.lease_connection, :preventing_writes?
+              end
+
+              assert_predicate PrimaryBase.lease_connection, :preventing_writes?
+              assert_not_predicate SecondaryBase.lease_connection, :preventing_writes?
+            end
+
+            # Ensure restored to global writing
+            assert_not_predicate PrimaryBase.lease_connection, :preventing_writes?
+            assert_not_predicate SecondaryBase.lease_connection, :preventing_writes?
+          end
+        ensure
+          ActiveRecord::Base.configurations = @prev_configs
+          ActiveRecord::Base.establish_connection(:arunit)
+          ENV["RAILS_ENV"] = previous_env
+        end
+
+        class ApplicationRecord < ActiveRecord::Base
+          self.abstract_class = true
+        end
+
+        def test_application_record_prevent_writes_can_be_changed
+          Object.const_set(:ApplicationRecord, ApplicationRecord)
+
+          ApplicationRecord.connects_to(database: { writing: :arunit, reading: :arunit })
+
+          # Switch everything to writing
+          ActiveRecord::Base.connected_to(role: :writing) do
+            assert_not_predicate ActiveRecord::Base.lease_connection, :preventing_writes?
+            assert_not_predicate ApplicationRecord.lease_connection, :preventing_writes?
+
+            ApplicationRecord.connected_to(role: :reading) do
+              assert_predicate ApplicationRecord.lease_connection, :preventing_writes?
+            end
+
+            # reading is fine bc it's looking up by AppRec but writing is not fine
+            # bc its looking up by ARB in the stack
+            ApplicationRecord.connected_to(role: :writing, prevent_writes: true) do
+              assert_predicate ApplicationRecord.lease_connection, :preventing_writes?
+            end
+          end
+        ensure
+          ApplicationRecord.remove_connection
+          ActiveRecord.application_record_class = nil
+          Object.send(:remove_const, :ApplicationRecord)
+          ActiveRecord::Base.establish_connection :arunit
+        end
+
+        def test_prevent_writes_handles_class_reloading
+          # Regression test for https://github.com/rails/rails/issues/54343
+          Object.const_set(:ReloadedRecord, Class.new(ActiveRecord::Base) { self.abstract_class = true })
+          ReloadedRecord.connects_to(database: { writing: :arunit, reading: :arunit })
+
+          ActiveRecord::Base.connected_to(role: :reading, prevent_writes: true) do
+            ReloadedRecord.connected_to(role: :writing, prevent_writes: false) do
+              assert_not_predicate ReloadedRecord.lease_connection, :preventing_writes?
+            end
+          end
+
+          # emulate a reload in development mode
+          Object.send(:remove_const, :ReloadedRecord)
+          Object.const_set(:ReloadedRecord, Class.new(ActiveRecord::Base) { self.abstract_class = true })
+          ReloadedRecord.connects_to(database: { writing: :arunit, reading: :arunit })
+
+          ActiveRecord::Base.connected_to(role: :reading, prevent_writes: true) do
+            ReloadedRecord.connected_to(role: :writing, prevent_writes: false) do
+              assert_not_predicate ReloadedRecord.lease_connection, :preventing_writes?
+            end
+          end
+        ensure
+          ReloadedRecord.remove_connection
+          ActiveRecord.application_record_class = nil
+          Object.send(:remove_const, :ReloadedRecord)
+          ActiveRecord::Base.establish_connection :arunit
+        end
+      end
+    end
+  end
+end

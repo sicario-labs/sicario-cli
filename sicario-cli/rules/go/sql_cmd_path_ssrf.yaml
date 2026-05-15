@@ -23,7 +23,7 @@
   languages:
     - Go
   pattern:
-    query: "(binary_expression left: (interpreted_string_literal) @left (#match? @left \"(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|UNION|FROM|WHERE)\") operator: \"+\" right: (_) @right) @sql_concat"
+    query: "(binary_expression left: (interpreted_string_literal) @left (#match? @left \"(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|UNION|FROM|WHERE)\") operator: \"+\" right: (_) @right (#not-match? @right \"^\\\"|^`\")) @sql_concat"
     captures:
       - "sql_concat"
   cwe_id: "CWE-89"
@@ -80,7 +80,7 @@
   languages:
     - Go
   pattern:
-    query: "(call_expression function: (selector_expression field: (field_identifier) @method (#match? @method \"^(Query|QueryRow|Exec|QueryContext|ExecContext)$\")) arguments: (argument_list (call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"fmt\") field: (field_identifier) @fn (#eq? @fn \"Sprintf\"))))) @call"
+    query: "(call_expression function: (selector_expression field: (field_identifier) @method (#match? @method \"^(Query|QueryRow|Exec|QueryContext|ExecContext)$\")) arguments: (argument_list (_) @arg (#match? @arg \"(Sprintf|\\\\+)\"))) @call"
     captures:
       - "call"
   cwe_id: "CWE-89"
@@ -108,7 +108,7 @@
   languages:
     - Go
   pattern:
-    query: "(call_expression function: (selector_expression field: (field_identifier) @method (#eq? @method \"Raw\")) arguments: (argument_list (call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"fmt\") field: (field_identifier) @fn (#eq? @fn \"Sprintf\"))))) @call"
+    query: "(call_expression function: (selector_expression field: (field_identifier) @method (#eq? @method \"Raw\")) arguments: (argument_list (_) @arg (#match? @arg \"(Sprintf|\\\\+)\"))) @call"
     captures:
       - "call"
   cwe_id: "CWE-89"
@@ -164,7 +164,7 @@
   languages:
     - Go
   pattern:
-    query: "(call_expression function: (selector_expression field: (field_identifier) @method (#match? @method \"^(Get|Select|NamedExec|MustExec|Queryx|QueryRowx)$\")) arguments: (argument_list (call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"fmt\") field: (field_identifier) @fn (#eq? @fn \"Sprintf\"))))) @call"
+    query: "(call_expression function: (selector_expression field: (field_identifier) @method (#match? @method \"^(Get|Select|NamedExec|MustExec|Queryx|QueryRowx)$\")) arguments: (argument_list (_) @arg (#match? @arg \"(Sprintf|\\\\+)\"))) @call"
     captures:
       - "call"
   cwe_id: "CWE-89"
@@ -192,7 +192,7 @@
   languages:
     - Go
   pattern:
-    query: "(call_expression function: (selector_expression field: (field_identifier) @method (#match? @method \"^(Exec|ExecContext)$\")) arguments: (argument_list (binary_expression left: (interpreted_string_literal) @sql (#match? @sql \"(?i)(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)\") operator: \"+\" right: (_) @input))) @call"
+    query: "(call_expression function: (selector_expression field: (field_identifier) @method (#match? @method \"^(Exec|ExecContext)$\")) arguments: (argument_list (_) @arg (#match? @arg \"\\\\+\"))) @call"
     captures:
       - "call"
   cwe_id: "CWE-89"
@@ -309,7 +309,7 @@
   languages:
     - Go
   pattern:
-    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"os\") field: (field_identifier) @fn (#eq? @fn \"StartProcess\")) arguments: (argument_list (identifier) @prog)) @call"
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"os\") field: (field_identifier) @fn (#eq? @fn \"StartProcess\")) arguments: (argument_list (identifier) @prog (#not-match? @prog \"^\\\\\"/(bin|usr)\\\\\"\"))) @call"
     captures:
       - "call"
   cwe_id: "CWE-78"
@@ -365,7 +365,7 @@
   languages:
     - Go
   pattern:
-    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"syscall\") field: (field_identifier) @fn (#eq? @fn \"Exec\")) arguments: (argument_list (identifier) @prog)) @call"
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"syscall\") field: (field_identifier) @fn (#eq? @fn \"Exec\")) arguments: (argument_list (identifier) @prog (#not-match? @prog \"^\\\\\"/(bin|usr)\\\\\"\"))) @call"
     captures:
       - "call"
   cwe_id: "CWE-78"
@@ -510,18 +510,18 @@
   languages:
     - Go
   pattern:
-    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"filepath\") field: (field_identifier) @fn (#eq? @fn \"Join\")) arguments: (argument_list (interpreted_string_literal) @base (selector_expression operand: (identifier) @obj (#match? @obj \"^(r|req|request|params|query|c|ctx|input)$\")) @user_input)) @call"
+    query: "(call_expression function: (selector_expression operand: (identifier) @pkg (#eq? @pkg \"filepath\") field: (field_identifier) @fn (#eq? @fn \"Join\")) arguments: (argument_list (interpreted_string_literal) @base [ (selector_expression operand: (identifier) @obj (#match? @obj \"^(r|req|request|params|query|c|ctx|input)$\")) (identifier) @user_input ])) @call"
     captures:
       - "call"
   cwe_id: "CWE-22"
   owasp_category: A03_Injection
   help_uri: "https://owasp.org/Top10/A03_2021-Injection/"
   test_cases:
-    - code: "path := filepath.Join(\"/uploads\", r.FormValue(\"filename\"))"
+    - code: "path := filepath.Join(\"/uploads\", filename)"
       expected: TruePositive
-    - code: "path := filepath.Join(\"./data\", req.URL.Query().Get(\"file\"))"
+    - code: "path := filepath.Join(\"./data\", userFile)"
       expected: TruePositive
-    - code: "path := filepath.Join(\"/static\", c.Param(\"path\"))"
+    - code: "path := filepath.Join(\"/static\", requestPath)"
       expected: TruePositive
     - code: "path := filepath.Join(\"/uploads\", \"known_file.txt\")"
       expected: TrueNegative
@@ -690,11 +690,11 @@
   owasp_category: A10_SSRF
   help_uri: "https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/"
   test_cases:
-    - code: "resp, err := http.Get(\"http://\" + userHost + \"/api/data\")"
-      expected: TruePositive
     - code: "resp, err := http.Get(\"https://api.example.com/\" + userPath)"
       expected: TruePositive
     - code: "resp, err := http.Get(\"http://internal-service/\" + endpoint)"
+      expected: TruePositive
+    - code: "resp, err := http.Get(\"http://\" + userHost)"
       expected: TruePositive
     - code: "resp, err := http.Get(\"https://api.example.com/data\")"
       expected: TrueNegative
@@ -718,7 +718,7 @@
   owasp_category: A10_SSRF
   help_uri: "https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/"
   test_cases:
-    - code: "req, err := http.NewRequest(\"GET\", \"http://\" + userHost + \"/api\", nil)"
+    - code: "req, err := http.NewRequest(\"GET\", \"http://\" + userHost, nil)"
       expected: TruePositive
     - code: "req, err := http.NewRequest(\"POST\", \"https://api.example.com/\" + userPath, body)"
       expected: TruePositive

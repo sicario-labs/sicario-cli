@@ -1,0 +1,99 @@
+connections:
+  mysql2:
+    arunit:
+      username: rails
+      encoding: utf8mb4
+      collation: utf8mb4_unicode_ci
+    <% if ENV['MYSQL_PREPARED_STATEMENTS'] %>
+      prepared_statements: true
+    <% else %>
+      prepared_statements: false
+    <% end %>
+    <% if ENV['MYSQL_HOST'] %>
+      host: <%= ENV['MYSQL_HOST'] %>
+    <% end %>
+    <% if ENV['MYSQL_PORT'] %>
+      port: <%= ENV['MYSQL_PORT'] %>
+    <% end %>
+    <% if ENV['MYSQL_SOCK'] %>
+      socket: "<%= ENV['MYSQL_SOCK'] %>"
+    <% end %>
+      variables:
+        time_zone: '+00:00'
+    arunit2:
+      username: rails
+      encoding: utf8mb4
+      collation: utf8mb4_general_ci
+    <% if ENV['MYSQL_PREPARED_STATEMENTS'] %>
+      prepared_statements: true
+    <% else %>
+      prepared_statements: false
+    <% end %>
+    <% if ENV['MYSQL_HOST'] %>
+      host: <%= ENV['MYSQL_HOST'] %>
+    <% end %>
+    <% if ENV['MYSQL_PORT'] %>
+      port: <%= ENV['MYSQL_PORT'] %>
+    <% end %>
+    <% if ENV['MYSQL_SOCK'] %>
+      socket: "<%= ENV['MYSQL_SOCK'] %>"
+    <% end %>
+
+  trilogy:
+    arunit:
+      username: rails
+      encoding: utf8mb4
+      collation: utf8mb4_unicode_ci
+      prepared_statements: false
+    <% if ENV['MYSQL_HOST'] %>
+      host: <%= ENV['MYSQL_HOST'] %>
+    <% end %>
+    <% if ENV['MYSQL_PORT'] %>
+      port: <%= ENV['MYSQL_PORT'] %>
+    <% end %>
+    <% if ENV['MYSQL_SOCK'] %>
+      socket: "<%= ENV['MYSQL_SOCK'] %>"
+    <% end %>
+      variables:
+        time_zone: '+00:00'
+    arunit2:
+      username: rails
+      encoding: utf8mb4
+      collation: utf8mb4_general_ci
+      prepared_statements: false
+    <% if ENV['MYSQL_HOST'] %>
+      host: <%= ENV['MYSQL_HOST'] %>
+    <% end %>
+    <% if ENV['MYSQL_PORT'] %>
+      port: <%= ENV['MYSQL_PORT'] %>
+    <% end %>
+    <% if ENV['MYSQL_SOCK'] %>
+      socket: "<%= ENV['MYSQL_SOCK'] %>"
+    <% end %>
+
+  postgresql:
+    arunit:
+      min_messages: warning
+    arunit_without_prepared_statements:
+      min_messages: warning
+      prepared_statements: false
+    arunit2:
+      min_messages: warning
+
+  sqlite3:
+    arunit:
+      database: <%= FIXTURES_ROOT %>/fixture_database.sqlite3
+      timeout:  5000
+      strict:   true
+    arunit2:
+      database: <%= FIXTURES_ROOT %>/fixture_database_2.sqlite3
+      timeout:  5000
+      strict:   true
+
+  sqlite3_mem:
+    arunit:
+      adapter: sqlite3
+      database: ':memory:'
+    arunit2:
+      adapter: sqlite3
+      database: ':memory:'

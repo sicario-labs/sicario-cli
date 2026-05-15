@@ -49,7 +49,7 @@
   languages:
     - Java
   pattern:
-    query: "(method_invocation name: (identifier) @method (#eq? @method \"csrf\") arguments: (argument_list (lambda_expression body: (method_invocation name: (identifier) @dis (#eq? @dis \"disable\"))))) @call"
+    query: "(method_invocation name: (identifier) @method (#eq? @method \"csrf\") arguments: (argument_list [ (lambda_expression body: (method_invocation name: (identifier) @dis (#eq? @dis \"disable\"))) (method_reference name: (identifier) @dis (#eq? @dis \"disable\")) ])) @call"
     captures:
       - "call"
   cwe_id: "CWE-352"

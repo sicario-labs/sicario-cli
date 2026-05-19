@@ -15,6 +15,7 @@ use tracing::{info, warn};
 use crate::engine::{SastEngine, Vulnerability};
 use crate::mcp::protocol::{JsonRpcError, JsonRpcRequest};
 use crate::mcp::security_guard::ShellExecutionGuard;
+use std::collections::HashMap;
 
 // ── Request / Response types ─────────────────────────────────────────────────
 
@@ -105,7 +106,11 @@ pub struct TelemetryAuditResponse {
 /// Dispatch a Kiro tool call and return the serialised JSON-RPC response.
 ///
 /// This is the entry point for all three Kiro Power tools.
-pub fn dispatch_kiro_tool(raw: &str, engine: &Arc<Mutex<SastEngine>>) -> Option<String> {
+pub fn dispatch_kiro_tool(
+    raw: &str,
+    engine: &Arc<Mutex<SastEngine>>,
+    findings_cache: &Arc<Mutex<HashMap<String, Vulnerability>>>,
+) -> Option<String> {
     // Parse the raw JSON-RPC request
     let rpc: JsonRpcRequest = match serde_json::from_str(raw) {
         Ok(r) => r,
@@ -115,8 +120,17 @@ pub fn dispatch_kiro_tool(raw: &str, engine: &Arc<Mutex<SastEngine>>) -> Option<
     let id = rpc.id.clone();
 
     match rpc.method.as_str() {
-        "analyze_ast_security" => Some(handle_analyze_ast_security(rpc.params, id, engine)),
-        "request_remediation_patch" => Some(handle_request_remediation_patch(rpc.params, id)),
+        "analyze_ast_security" => Some(handle_analyze_ast_security(
+            rpc.params,
+            id,
+            engine,
+            findings_cache,
+        )),
+        "request_remediation_patch" => Some(handle_request_remediation_patch(
+            rpc.params,
+            id,
+            findings_cache,
+        )),
         "log_telemetry_audit" => Some(handle_log_telemetry_audit(rpc.params, id)),
         _ => None, // Not a Kiro tool, let the main dispatcher handle it
     }
@@ -132,6 +146,7 @@ fn handle_analyze_ast_security(
     params: serde_json::Value,
     id: Option<serde_json::Value>,
     engine: &Arc<Mutex<SastEngine>>,
+    findings_cache: &Arc<Mutex<HashMap<String, Vulnerability>>>,
 ) -> String {
     // Parse parameters
     let p: AnalyzeAstParams = match serde_json::from_value(params) {
@@ -188,6 +203,13 @@ fn handle_analyze_ast_security(
         }
     };
 
+    // Populate findings cache for remediation patches
+    if let Ok(mut cache) = findings_cache.lock() {
+        for v in &vulns {
+            cache.insert(v.id.to_string(), v.clone());
+        }
+    }
+
     // Map to metadata (zero-exfiltration: truncate snippets to 100 chars)
     let vulnerability_metas: Vec<VulnerabilityMeta> = vulns
         .iter()
@@ -226,6 +248,7 @@ fn handle_analyze_ast_security(
 fn handle_request_remediation_patch(
     params: serde_json::Value,
     id: Option<serde_json::Value>,
+    findings_cache: &Arc<Mutex<HashMap<String, Vulnerability>>>,
 ) -> String {
     // Parse parameters
     let p: RemediationPatchParams = match serde_json::from_value(params) {
@@ -272,15 +295,57 @@ fn handle_request_remediation_patch(
         }
     };
 
-    // Generate a deterministic patch stub.
-    // The full remediation engine integration is wired via `sicario fix --id=<vuln_id>`.
-    // This tool returns the patch metadata so the AI can present it to the developer.
-    let patch = generate_patch_stub(&p.vulnerability_id, &p.file_path, &source);
+    // Retrieve vulnerability from cache
+    let vuln = {
+        let cache = match findings_cache.lock() {
+            Ok(c) => c,
+            Err(_) => {
+                return json_rpc_error(id, JsonRpcError::internal_error("Cache lock poisoned"));
+            }
+        };
+        match cache.get(&p.vulnerability_id) {
+            Some(v) => v.clone(),
+            None => {
+                return json_rpc_error(
+                    id,
+                    JsonRpcError::invalid_params(format!(
+                        "Vulnerability ID '{}' not found in cache. Run analyze_ast_security first.",
+                        p.vulnerability_id
+                    )),
+                );
+            }
+        }
+    };
+
+    // Initialize remediation engine
+    use crate::remediation::remediation_engine::RemediationEngine;
+    let project_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let remediator = match RemediationEngine::new(&project_root) {
+        Ok(r) => r,
+        Err(e) => {
+            return json_rpc_error(
+                id,
+                JsonRpcError::internal_error(format!("Failed to init remediation engine: {}", e)),
+            );
+        }
+    };
+
+    // Generate the real patch
+    let patch_result = remediator.generate_patch(&vuln);
+    let patch_text = match patch_result {
+        Ok(p) => p.diff,
+        Err(e) => {
+            // Fallback to stub if engine fails
+            generate_patch_stub(&p.vulnerability_id, &p.file_path, &source)
+                + "\n# Error: "
+                + &e.to_string()
+        }
+    };
 
     let response = RemediationPatchResponse {
         vulnerability_id: p.vulnerability_id.clone(),
         file_path: p.file_path.clone(),
-        patch,
+        patch: patch_text,
         status: "queued",
         message: format!(
             "Patch queued for developer review. Run `sicario fix --id={}` to apply interactively.",
@@ -690,6 +755,9 @@ impl StdioMcpRunner {
             }
         };
 
+        // Initialise findings cache
+        let findings_cache = Arc::new(Mutex::new(HashMap::new()));
+
         eprintln!(
             "sicario mcp: stdio server ready (project: {})",
             project_root.display()
@@ -718,19 +786,19 @@ impl StdioMcpRunner {
             let response_str = if let Some(resp) = handle_mcp_lifecycle(&line) {
                 if let Some(synthetic) = resp.strip_prefix("\x00TOOLS_CALL\x00") {
                     // tools/call re-dispatch: route the synthetic request through kiro tools
-                    if let Some(r) = dispatch_kiro_tool(synthetic, &engine) {
+                    if let Some(r) = dispatch_kiro_tool(synthetic, &engine, &findings_cache) {
                         r
                     } else {
-                        dispatch_request(synthetic, &engine, &memory)
+                        dispatch_request(synthetic, &engine, &memory, &findings_cache)
                     }
                 } else {
                     resp
                 }
-            } else if let Some(resp) = dispatch_kiro_tool(&line, &engine) {
+            } else if let Some(resp) = dispatch_kiro_tool(&line, &engine, &findings_cache) {
                 // Try Kiro Power tools first; fall through to standard MCP dispatcher
                 resp
             } else {
-                dispatch_request(&line, &engine, &memory)
+                dispatch_request(&line, &engine, &memory, &findings_cache)
             };
 
             if response_str.is_empty() {
@@ -766,14 +834,21 @@ impl StdioMcpRunner {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
     use tempfile::TempDir;
+
+    fn run_kiro_tool(raw: &str, engine: &Arc<Mutex<SastEngine>>) -> Option<String> {
+        let findings_cache = Arc::new(Mutex::new(HashMap::new()));
+        dispatch_kiro_tool(raw, engine, &findings_cache)
+    }
 
     #[test]
     fn test_analyze_ast_security_path_traversal() {
         let dir = TempDir::new().unwrap();
         let engine = Arc::new(Mutex::new(SastEngine::new(dir.path()).unwrap()));
         let raw = r#"{"jsonrpc":"2.0","method":"analyze_ast_security","params":{"file_path":"../../etc/shadow"},"id":1}"#;
-        let result = dispatch_kiro_tool(raw, &engine).unwrap();
+        let result = run_kiro_tool(raw, &engine).unwrap();
         let v: serde_json::Value = serde_json::from_str(&result).unwrap();
         assert!(v["error"].is_object());
         assert_eq!(v["error"]["code"], JsonRpcError::INVALID_PARAMS);
@@ -788,7 +863,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let engine = Arc::new(Mutex::new(SastEngine::new(dir.path()).unwrap()));
         let raw = r#"{"jsonrpc":"2.0","method":"analyze_ast_security","params":{"file_path":"/nonexistent/file.js"},"id":2}"#;
-        let result = dispatch_kiro_tool(raw, &engine).unwrap();
+        let result = run_kiro_tool(raw, &engine).unwrap();
         let v: serde_json::Value = serde_json::from_str(&result).unwrap();
         assert!(v["error"].is_object());
         assert_eq!(v["error"]["code"], JsonRpcError::INVALID_PARAMS);
@@ -804,7 +879,7 @@ mod tests {
             r#"{{"jsonrpc":"2.0","method":"analyze_ast_security","params":{{"file_path":"{}"}},"id":3}}"#,
             file.to_string_lossy().replace('\\', "/")
         );
-        let result = dispatch_kiro_tool(&raw, &engine).unwrap();
+        let result = run_kiro_tool(&raw, &engine).unwrap();
         let v: serde_json::Value = serde_json::from_str(&result).unwrap();
         assert_eq!(v["jsonrpc"], "2.0");
         assert!(v["result"]["vulnerabilities"].is_array());
@@ -816,7 +891,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let engine = Arc::new(Mutex::new(SastEngine::new(dir.path()).unwrap()));
         let raw = r#"{"jsonrpc":"2.0","method":"request_remediation_patch","params":{"vulnerability_id":"abc","file_path":"../../etc/passwd"},"id":4}"#;
-        let result = dispatch_kiro_tool(raw, &engine).unwrap();
+        let result = run_kiro_tool(raw, &engine).unwrap();
         let v: serde_json::Value = serde_json::from_str(&result).unwrap();
         assert!(v["error"].is_object());
         assert_eq!(v["error"]["code"], JsonRpcError::INVALID_PARAMS);
@@ -828,15 +903,33 @@ mod tests {
         let file = dir.path().join("vuln.py");
         std::fs::write(&file, "cursor.execute(query)").unwrap();
         let engine = Arc::new(Mutex::new(SastEngine::new(dir.path()).unwrap()));
+
+        let vuln_id = uuid::Uuid::new_v4();
+        let vuln = Vulnerability::new(
+            "sql-injection".to_string(),
+            file.clone(),
+            1,
+            1,
+            "cursor.execute(query)".to_string(),
+            crate::engine::vulnerability::Severity::High,
+        );
+
+        let findings_cache = Arc::new(Mutex::new(HashMap::new()));
+        findings_cache
+            .lock()
+            .unwrap()
+            .insert(vuln_id.to_string(), vuln);
+
         let raw = format!(
-            r#"{{"jsonrpc":"2.0","method":"request_remediation_patch","params":{{"vulnerability_id":"vuln-123","file_path":"{}"}},"id":5}}"#,
+            r#"{{"jsonrpc":"2.0","method":"request_remediation_patch","params":{{"vulnerability_id":"{}","file_path":"{}"}},"id":5}}"#,
+            vuln_id,
             file.to_string_lossy().replace('\\', "/")
         );
-        let result = dispatch_kiro_tool(&raw, &engine).unwrap();
+        let result = dispatch_kiro_tool(&raw, &engine, &findings_cache).unwrap();
         let v: serde_json::Value = serde_json::from_str(&result).unwrap();
         assert_eq!(v["jsonrpc"], "2.0");
         assert_eq!(v["result"]["status"], "queued");
-        assert!(v["result"]["patch"].as_str().unwrap().contains("vuln-123"));
+        assert!(v["result"]["patch"].as_str().unwrap().contains("vuln.py"));
     }
 
     #[test]
@@ -844,7 +937,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let engine = Arc::new(Mutex::new(SastEngine::new(dir.path()).unwrap()));
         let raw = r#"{"jsonrpc":"2.0","method":"log_telemetry_audit","params":{"project_id":"","scan_results":[]},"id":6}"#;
-        let result = dispatch_kiro_tool(raw, &engine).unwrap();
+        let result = run_kiro_tool(raw, &engine).unwrap();
         let v: serde_json::Value = serde_json::from_str(&result).unwrap();
         assert!(v["error"].is_object());
         assert_eq!(v["error"]["code"], JsonRpcError::INVALID_PARAMS);
@@ -855,7 +948,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let engine = Arc::new(Mutex::new(SastEngine::new(dir.path()).unwrap()));
         let raw = r#"{"jsonrpc":"2.0","method":"log_telemetry_audit","params":{"project_id":"proj_abc","scan_results":[{"rule_id":"sql-injection","severity":"High","file_path":"src/db.py","line":42}]},"id":7}"#;
-        let result = dispatch_kiro_tool(raw, &engine).unwrap();
+        let result = run_kiro_tool(raw, &engine).unwrap();
         let v: serde_json::Value = serde_json::from_str(&result).unwrap();
         assert_eq!(v["jsonrpc"], "2.0");
         assert_eq!(v["result"]["findings_count"], 1);
@@ -872,7 +965,7 @@ mod tests {
         let engine = Arc::new(Mutex::new(SastEngine::new(dir.path()).unwrap()));
         let raw = r#"{"jsonrpc":"2.0","method":"scan_file","params":{"path":"test.js"},"id":8}"#;
         // scan_file is handled by the main dispatcher, not kiro_tools
-        let result = dispatch_kiro_tool(raw, &engine);
+        let result = run_kiro_tool(raw, &engine);
         assert!(result.is_none());
     }
 }

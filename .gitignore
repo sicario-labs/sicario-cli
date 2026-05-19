@@ -42,3 +42,8 @@ sicario-power/
 # Private keys — never commit
 *.pem
 *.key
+
+# Loose build artifacts at repo root
+fix.exe
+auto_fix.exe
+*.rcgu.o

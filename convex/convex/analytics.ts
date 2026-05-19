@@ -560,3 +560,60 @@ export const backlogActivity = query({
     return Object.values(buckets);
   },
 });
+
+// ── getSidebarCounts query for Sidebar badges ──
+export const getSidebarCounts = query({
+  args: { orgId: v.string() },
+  handler: async (ctx, args) => {
+    const findings = await ctx.db
+      .query("findings")
+      .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId))
+      .collect();
+
+    const prs = await ctx.db
+      .query("prChecks")
+      .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId))
+      .collect();
+
+    let openCode = 0;
+    let openSecrets = 0;
+    let reachableDependencies = 0;
+
+    const openStates = new Set(["Open", "Reviewing", "ToFix"]);
+
+    for (const f of findings) {
+      if (!openStates.has(f.triageState)) continue;
+
+      let scanType = "sast";
+      if (f.ruleId.startsWith("sca/") || f.filePath.startsWith("<")) {
+        scanType = "sca";
+      } else if (
+        f.ruleId.startsWith("secrets/") ||
+        f.ruleId.includes("secret") ||
+        f.ruleId.includes("token") ||
+        f.ruleId.includes("key")
+      ) {
+        scanType = "secrets";
+      }
+
+      if (scanType === "sca") {
+        if (f.reachable) {
+          reachableDependencies++;
+        }
+      } else if (scanType === "secrets") {
+        openSecrets++;
+      } else {
+        openCode++;
+      }
+    }
+
+    const failedPrChecks = prs.filter((p) => p.status === "failed").length;
+
+    return {
+      openCode,
+      openSecrets,
+      reachableDependencies,
+      failedPrChecks,
+    };
+  },
+});

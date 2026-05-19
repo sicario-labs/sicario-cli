@@ -92,7 +92,6 @@ pub trait DataStore: Send + Sync {
     async fn list_findings_for_export(&self, filter: &ExportFilter) -> Vec<StoredFinding>;
 }
 
-
 // ── Convex Store (production) ─────────────────────────────────────────────────
 
 /// Production data store backed by Convex HTTP API.
@@ -122,9 +121,14 @@ impl ConvexStore {
     }
 
     /// Call a Convex mutation via the HTTP API.
-    async fn call_mutation(&self, name: &str, args: serde_json::Value) -> Result<serde_json::Value, reqwest::Error> {
+    async fn call_mutation(
+        &self,
+        name: &str,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, reqwest::Error> {
         let url = format!("{}/api/mutation", self.convex_url.trim_end_matches('/'));
-        let resp = self.http
+        let resp = self
+            .http
             .post(&url)
             .json(&serde_json::json!({
                 "path": name,
@@ -138,9 +142,14 @@ impl ConvexStore {
     }
 
     /// Call a Convex query via the HTTP API.
-    async fn call_query(&self, name: &str, args: serde_json::Value) -> Result<serde_json::Value, reqwest::Error> {
+    async fn call_query(
+        &self,
+        name: &str,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, reqwest::Error> {
         let url = format!("{}/api/query", self.convex_url.trim_end_matches('/'));
-        let resp = self.http
+        let resp = self
+            .http
             .post(&url)
             .json(&serde_json::json!({
                 "path": name,
@@ -175,7 +184,10 @@ impl DataStore for ConvexStore {
 
     async fn get_scan(&self, id: Uuid) -> Option<Scan> {
         // Try Convex, fall back to cache
-        if let Ok(resp) = self.call_query("scans:get", serde_json::json!({"id": id.to_string()})).await {
+        if let Ok(resp) = self
+            .call_query("scans:get", serde_json::json!({"id": id.to_string()}))
+            .await
+        {
             if let Some(value) = resp.get("value") {
                 if let Ok(scan) = serde_json::from_value::<Scan>(value.clone()) {
                     return Some(scan);
@@ -193,7 +205,8 @@ impl DataStore for ConvexStore {
 
     async fn get_critical_findings_for_scan(&self, scan_id: Uuid) -> Vec<StoredFinding> {
         let cache = self.cache.read().await;
-        cache.get_critical_findings_for_scan(scan_id)
+        cache
+            .get_critical_findings_for_scan(scan_id)
             .into_iter()
             .cloned()
             .collect()
@@ -211,12 +224,17 @@ impl DataStore for ConvexStore {
 
     async fn triage_finding(&self, id: Uuid, req: &TriageFindingRequest) -> Option<StoredFinding> {
         // Write to Convex
-        let _ = self.call_mutation("findings:triage", serde_json::json!({
-            "id": id.to_string(),
-            "triageState": req.triage_state.as_ref().map(|t| t.to_string()),
-            "triageNote": req.triage_note,
-            "assignedTo": req.assigned_to,
-        })).await;
+        let _ = self
+            .call_mutation(
+                "findings:triage",
+                serde_json::json!({
+                    "id": id.to_string(),
+                    "triageState": req.triage_state.as_ref().map(|t| t.to_string()),
+                    "triageNote": req.triage_note,
+                    "assignedTo": req.assigned_to,
+                }),
+            )
+            .await;
 
         // Update local cache
         let mut cache = self.cache.write().await;
@@ -239,11 +257,16 @@ impl DataStore for ConvexStore {
 
     async fn bulk_triage(&self, req: &BulkTriageRequest) -> usize {
         let ids: Vec<String> = req.finding_ids.iter().map(|id| id.to_string()).collect();
-        let _ = self.call_mutation("findings:bulkTriage", serde_json::json!({
-            "ids": ids,
-            "triageState": req.triage_state.to_string(),
-            "triageNote": req.triage_note,
-        })).await;
+        let _ = self
+            .call_mutation(
+                "findings:bulkTriage",
+                serde_json::json!({
+                    "ids": ids,
+                    "triageState": req.triage_state.to_string(),
+                    "triageNote": req.triage_note,
+                }),
+            )
+            .await;
 
         let mut cache = self.cache.write().await;
         let now = Utc::now();
@@ -292,7 +315,12 @@ impl DataStore for ConvexStore {
             team_id: req.team_id,
             created_at: Utc::now(),
         };
-        let _ = self.call_mutation("projects:create", serde_json::to_value(&project).unwrap_or_default()).await;
+        let _ = self
+            .call_mutation(
+                "projects:create",
+                serde_json::to_value(&project).unwrap_or_default(),
+            )
+            .await;
         let mut cache = self.cache.write().await;
         cache.projects.insert(project.id, project.clone());
         project
@@ -306,12 +334,25 @@ impl DataStore for ConvexStore {
     async fn update_project(&self, id: Uuid, req: &UpdateProjectRequest) -> Option<Project> {
         let mut cache = self.cache.write().await;
         if let Some(p) = cache.projects.get_mut(&id) {
-            if let Some(ref name) = req.name { p.name = name.clone(); }
-            if let Some(ref url) = req.repository_url { p.repository_url = url.clone(); }
-            if let Some(ref desc) = req.description { p.description = desc.clone(); }
-            if let Some(tid) = req.team_id { p.team_id = Some(tid); }
+            if let Some(ref name) = req.name {
+                p.name = name.clone();
+            }
+            if let Some(ref url) = req.repository_url {
+                p.repository_url = url.clone();
+            }
+            if let Some(ref desc) = req.description {
+                p.description = desc.clone();
+            }
+            if let Some(tid) = req.team_id {
+                p.team_id = Some(tid);
+            }
             let updated = p.clone();
-            let _ = self.call_mutation("projects:update", serde_json::to_value(&updated).unwrap_or_default()).await;
+            let _ = self
+                .call_mutation(
+                    "projects:update",
+                    serde_json::to_value(&updated).unwrap_or_default(),
+                )
+                .await;
             Some(updated)
         } else {
             None
@@ -332,7 +373,12 @@ impl DataStore for ConvexStore {
             org_id: req.org_id,
             created_at: Utc::now(),
         };
-        let _ = self.call_mutation("teams:create", serde_json::to_value(&team).unwrap_or_default()).await;
+        let _ = self
+            .call_mutation(
+                "teams:create",
+                serde_json::to_value(&team).unwrap_or_default(),
+            )
+            .await;
         let mut cache = self.cache.write().await;
         cache.teams.insert(team.id, team.clone());
         team
@@ -354,7 +400,12 @@ impl DataStore for ConvexStore {
             enabled: true,
             created_at: Utc::now(),
         };
-        let _ = self.call_mutation("webhooks:create", serde_json::to_value(&webhook).unwrap_or_default()).await;
+        let _ = self
+            .call_mutation(
+                "webhooks:create",
+                serde_json::to_value(&webhook).unwrap_or_default(),
+            )
+            .await;
         let mut cache = self.cache.write().await;
         cache.webhooks.insert(webhook.id, webhook.clone());
         webhook
@@ -363,13 +414,28 @@ impl DataStore for ConvexStore {
     async fn update_webhook(&self, id: Uuid, req: &UpdateWebhookRequest) -> Option<WebhookConfig> {
         let mut cache = self.cache.write().await;
         if let Some(w) = cache.webhooks.get_mut(&id) {
-            if let Some(ref url) = req.url { w.url = url.clone(); }
-            if let Some(ref events) = req.events { w.events = events.clone(); }
-            if let Some(dt) = req.delivery_type { w.delivery_type = dt; }
-            if let Some(ref secret) = req.secret { w.secret = Some(secret.clone()); }
-            if let Some(enabled) = req.enabled { w.enabled = enabled; }
+            if let Some(ref url) = req.url {
+                w.url = url.clone();
+            }
+            if let Some(ref events) = req.events {
+                w.events = events.clone();
+            }
+            if let Some(dt) = req.delivery_type {
+                w.delivery_type = dt;
+            }
+            if let Some(ref secret) = req.secret {
+                w.secret = Some(secret.clone());
+            }
+            if let Some(enabled) = req.enabled {
+                w.enabled = enabled;
+            }
             let updated = w.clone();
-            let _ = self.call_mutation("webhooks:update", serde_json::to_value(&updated).unwrap_or_default()).await;
+            let _ = self
+                .call_mutation(
+                    "webhooks:update",
+                    serde_json::to_value(&updated).unwrap_or_default(),
+                )
+                .await;
             Some(updated)
         } else {
             None
@@ -377,14 +443,18 @@ impl DataStore for ConvexStore {
     }
 
     async fn delete_webhook(&self, id: Uuid) -> bool {
-        let _ = self.call_mutation("webhooks:delete", serde_json::json!({"id": id.to_string()})).await;
+        let _ = self
+            .call_mutation("webhooks:delete", serde_json::json!({"id": id.to_string()}))
+            .await;
         let mut cache = self.cache.write().await;
         cache.webhooks.remove(&id).is_some()
     }
 
     async fn get_enabled_webhooks_for_event(&self, event: &WebhookEventType) -> Vec<WebhookConfig> {
         let cache = self.cache.read().await;
-        cache.webhooks.values()
+        cache
+            .webhooks
+            .values()
             .filter(|w| w.enabled && w.events.contains(event))
             .cloned()
             .collect()
@@ -397,16 +467,20 @@ impl DataStore for ConvexStore {
 
     async fn list_findings_for_export(&self, filter: &ExportFilter) -> Vec<StoredFinding> {
         let cache = self.cache.read().await;
-        cache.findings.values()
+        cache
+            .findings
+            .values()
             .filter(|f| {
-                filter.severity.as_ref().map_or(true, |s| &f.severity == s)
-                    && filter.triage_state.as_ref().map_or(true, |t| &f.triage_state == t)
+                filter.severity.as_ref().is_none_or(|s| &f.severity == s)
+                    && filter
+                        .triage_state
+                        .as_ref()
+                        .is_none_or(|t| &f.triage_state == t)
             })
             .cloned()
             .collect()
     }
 }
-
 
 // ── In-Memory Store (tests) ───────────────────────────────────────────────────
 
@@ -531,10 +605,18 @@ impl DataStore for InMemoryStore {
     async fn update_project(&self, id: Uuid, req: &UpdateProjectRequest) -> Option<Project> {
         let mut db = self.db.write().await;
         if let Some(p) = db.projects.get_mut(&id) {
-            if let Some(ref name) = req.name { p.name = name.clone(); }
-            if let Some(ref url) = req.repository_url { p.repository_url = url.clone(); }
-            if let Some(ref desc) = req.description { p.description = desc.clone(); }
-            if let Some(tid) = req.team_id { p.team_id = Some(tid); }
+            if let Some(ref name) = req.name {
+                p.name = name.clone();
+            }
+            if let Some(ref url) = req.repository_url {
+                p.repository_url = url.clone();
+            }
+            if let Some(ref desc) = req.description {
+                p.description = desc.clone();
+            }
+            if let Some(tid) = req.team_id {
+                p.team_id = Some(tid);
+            }
             Some(p.clone())
         } else {
             None
@@ -584,11 +666,21 @@ impl DataStore for InMemoryStore {
     async fn update_webhook(&self, id: Uuid, req: &UpdateWebhookRequest) -> Option<WebhookConfig> {
         let mut db = self.db.write().await;
         if let Some(w) = db.webhooks.get_mut(&id) {
-            if let Some(ref url) = req.url { w.url = url.clone(); }
-            if let Some(ref events) = req.events { w.events = events.clone(); }
-            if let Some(dt) = req.delivery_type { w.delivery_type = dt; }
-            if let Some(ref secret) = req.secret { w.secret = Some(secret.clone()); }
-            if let Some(enabled) = req.enabled { w.enabled = enabled; }
+            if let Some(ref url) = req.url {
+                w.url = url.clone();
+            }
+            if let Some(ref events) = req.events {
+                w.events = events.clone();
+            }
+            if let Some(dt) = req.delivery_type {
+                w.delivery_type = dt;
+            }
+            if let Some(ref secret) = req.secret {
+                w.secret = Some(secret.clone());
+            }
+            if let Some(enabled) = req.enabled {
+                w.enabled = enabled;
+            }
             Some(w.clone())
         } else {
             None
@@ -602,7 +694,8 @@ impl DataStore for InMemoryStore {
 
     async fn get_enabled_webhooks_for_event(&self, event: &WebhookEventType) -> Vec<WebhookConfig> {
         let db = self.db.read().await;
-        db.webhooks.values()
+        db.webhooks
+            .values()
             .filter(|w| w.enabled && w.events.contains(event))
             .cloned()
             .collect()
@@ -615,10 +708,14 @@ impl DataStore for InMemoryStore {
 
     async fn list_findings_for_export(&self, filter: &ExportFilter) -> Vec<StoredFinding> {
         let db = self.db.read().await;
-        db.findings.values()
+        db.findings
+            .values()
             .filter(|f| {
-                filter.severity.as_ref().map_or(true, |s| &f.severity == s)
-                    && filter.triage_state.as_ref().map_or(true, |t| &f.triage_state == t)
+                filter.severity.as_ref().is_none_or(|s| &f.severity == s)
+                    && filter
+                        .triage_state
+                        .as_ref()
+                        .is_none_or(|t| &f.triage_state == t)
             })
             .cloned()
             .collect()
@@ -640,6 +737,7 @@ pub struct WebhookDelivery {
 
 #[derive(Debug, Default)]
 pub struct InMemoryDb {
+    #[allow(dead_code)]
     pub organizations: HashMap<Uuid, Organization>,
     pub teams: HashMap<Uuid, Team>,
     pub projects: HashMap<Uuid, Project>,
@@ -650,6 +748,7 @@ pub struct InMemoryDb {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Organization {
     pub id: Uuid,
     pub name: String,
@@ -669,6 +768,7 @@ pub struct ScanRecord {
     pub language_breakdown: HashMap<String, usize>,
     pub tags: Vec<String>,
     pub project_id: Option<Uuid>,
+    #[allow(dead_code)]
     pub created_at: chrono::DateTime<Utc>,
 }
 
@@ -725,12 +825,19 @@ impl InMemoryDb {
         let record = self.scans.get(&scan_id)?;
         let (findings_count, critical_count, high_count) = self.count_findings_for_scan(scan_id);
         Some(Scan {
-            id: record.id, repository: record.repository.clone(),
-            branch: record.branch.clone(), commit_sha: record.commit_sha.clone(),
-            timestamp: record.timestamp, duration_ms: record.duration_ms,
-            rules_loaded: record.rules_loaded, files_scanned: record.files_scanned,
-            language_breakdown: record.language_breakdown.clone(), tags: record.tags.clone(),
-            findings_count, critical_count, high_count,
+            id: record.id,
+            repository: record.repository.clone(),
+            branch: record.branch.clone(),
+            commit_sha: record.commit_sha.clone(),
+            timestamp: record.timestamp,
+            duration_ms: record.duration_ms,
+            rules_loaded: record.rules_loaded,
+            files_scanned: record.files_scanned,
+            language_breakdown: record.language_breakdown.clone(),
+            tags: record.tags.clone(),
+            findings_count,
+            critical_count,
+            high_count,
         })
     }
 
@@ -739,50 +846,83 @@ impl InMemoryDb {
         for f in self.findings.values() {
             if f.scan_id == scan_id {
                 total += 1;
-                if f.severity == "Critical" { critical += 1; }
-                if f.severity == "High" { high += 1; }
+                if f.severity == "Critical" {
+                    critical += 1;
+                }
+                if f.severity == "High" {
+                    high += 1;
+                }
             }
         }
         (total, critical, high)
     }
 
     pub fn list_scans(&self, filter: &ScansFilter) -> (Vec<Scan>, i64) {
-        let mut scans: Vec<_> = self.scans.values()
+        let mut scans: Vec<_> = self
+            .scans
+            .values()
             .filter(|s| {
-                filter.repository.as_ref().map_or(true, |r| &s.repository == r)
-                    && filter.branch.as_ref().map_or(true, |b| &s.branch == b)
+                filter
+                    .repository
+                    .as_ref()
+                    .is_none_or(|r| &s.repository == r)
+                    && filter.branch.as_ref().is_none_or(|b| &s.branch == b)
             })
             .collect();
         scans.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
         let total = scans.len() as i64;
         let offset = ((filter.page - 1) * filter.per_page) as usize;
-        let items: Vec<Scan> = scans.into_iter()
-            .skip(offset).take(filter.per_page as usize)
+        let items: Vec<Scan> = scans
+            .into_iter()
+            .skip(offset)
+            .take(filter.per_page as usize)
             .filter_map(|r| self.get_scan(r.id))
             .collect();
         (items, total)
     }
 
     pub fn list_findings(&self, filter: &FindingsFilter) -> (Vec<StoredFinding>, i64) {
-        let mut findings: Vec<_> = self.findings.values()
+        // Build a scan_id → project_id lookup so we can filter findings by project
+        let scan_project: std::collections::HashMap<Uuid, Option<Uuid>> = self
+            .scans
+            .iter()
+            .map(|(id, r)| (*id, r.project_id))
+            .collect();
+
+        let mut findings: Vec<_> = self
+            .findings
+            .values()
             .filter(|f| {
-                filter.severity.as_ref().map_or(true, |s| &f.severity == s)
-                    && filter.triage_state.as_ref().map_or(true, |t| &f.triage_state == t)
-                    && filter.confidence_min.map_or(true, |c| f.confidence_score >= c)
-                    && filter.scan_id.map_or(true, |s| f.scan_id == s)
+                filter.severity.as_ref().is_none_or(|s| &f.severity == s)
+                    && filter
+                        .triage_state
+                        .as_ref()
+                        .is_none_or(|t| &f.triage_state == t)
+                    && filter
+                        .confidence_min
+                        .is_none_or(|c| f.confidence_score >= c)
+                    && filter.scan_id.is_none_or(|s| f.scan_id == s)
+                    && filter.project_id.is_none_or(|pid| {
+                        scan_project.get(&f.scan_id).and_then(|p| *p) == Some(pid)
+                    })
             })
-            .cloned().collect();
+            .cloned()
+            .collect();
         findings.sort_by(|a, b| b.created_at.cmp(&a.created_at));
         let total = findings.len() as i64;
         let offset = ((filter.page - 1) * filter.per_page) as usize;
-        let items: Vec<StoredFinding> = findings.into_iter()
-            .skip(offset).take(filter.per_page as usize).collect();
+        let items: Vec<StoredFinding> = findings
+            .into_iter()
+            .skip(offset)
+            .take(filter.per_page as usize)
+            .collect();
         (items, total)
     }
 
     pub fn analytics_overview(&self) -> AnalyticsOverview {
         let (mut total, mut open, mut fixed, mut ignored) = (0i64, 0i64, 0i64, 0i64);
-        let (mut critical, mut high, mut medium, mut low, mut info) = (0i64, 0i64, 0i64, 0i64, 0i64);
+        let (mut critical, mut high, mut medium, mut low, mut info) =
+            (0i64, 0i64, 0i64, 0i64, 0i64);
         for f in self.findings.values() {
             total += 1;
             match f.triage_state.as_str() {
@@ -792,40 +932,62 @@ impl InMemoryDb {
                 _ => open += 1,
             }
             match f.severity.as_str() {
-                "Critical" => critical += 1, "High" => high += 1,
-                "Medium" => medium += 1, "Low" => low += 1, "Info" => info += 1, _ => {}
+                "Critical" => critical += 1,
+                "High" => high += 1,
+                "Medium" => medium += 1,
+                "Low" => low += 1,
+                "Info" => info += 1,
+                _ => {}
             }
         }
         let total_scans = self.scans.len() as i64;
         let avg_duration = if total_scans > 0 {
             self.scans.values().map(|s| s.duration_ms).sum::<i64>() / total_scans
-        } else { 0 };
+        } else {
+            0
+        };
         AnalyticsOverview {
-            total_findings: total, open_findings: open, fixed_findings: fixed,
-            ignored_findings: ignored, critical_count: critical, high_count: high,
-            medium_count: medium, low_count: low, info_count: info,
-            total_scans, avg_scan_duration_ms: avg_duration,
+            total_findings: total,
+            open_findings: open,
+            fixed_findings: fixed,
+            ignored_findings: ignored,
+            critical_count: critical,
+            high_count: high,
+            medium_count: medium,
+            low_count: low,
+            info_count: info,
+            total_scans,
+            avg_scan_duration_ms: avg_duration,
         }
     }
 
     pub fn analytics_trends(&self) -> Vec<TrendDataPoint> {
-        let mut by_day: std::collections::BTreeMap<String, (i64, i64, i64)> = std::collections::BTreeMap::new();
+        let mut by_day: std::collections::BTreeMap<String, (i64, i64, i64)> =
+            std::collections::BTreeMap::new();
         for f in self.findings.values() {
             let day = f.created_at.format("%Y-%m-%d").to_string();
             let entry = by_day.entry(day).or_insert((0, 0, 0));
             match f.triage_state.as_str() {
                 "Open" | "Reviewing" | "ToFix" => entry.0 += 1,
-                "Fixed" => entry.2 += 1, _ => {}
+                "Fixed" => entry.2 += 1,
+                _ => {}
             }
             entry.1 += 1;
         }
-        by_day.into_iter().filter_map(|(day, (open, new, fixed))| {
-            let ts = chrono::NaiveDate::parse_from_str(&day, "%Y-%m-%d").ok()?.and_hms_opt(0, 0, 0)?;
-            Some(TrendDataPoint {
-                timestamp: chrono::DateTime::<Utc>::from_naive_utc_and_offset(ts, Utc),
-                open_findings: open, new_findings: new, fixed_findings: fixed,
+        by_day
+            .into_iter()
+            .filter_map(|(day, (open, new, fixed))| {
+                let ts = chrono::NaiveDate::parse_from_str(&day, "%Y-%m-%d")
+                    .ok()?
+                    .and_hms_opt(0, 0, 0)?;
+                Some(TrendDataPoint {
+                    timestamp: chrono::DateTime::<Utc>::from_naive_utc_and_offset(ts, Utc),
+                    open_findings: open,
+                    new_findings: new,
+                    fixed_findings: fixed,
+                })
             })
-        }).collect()
+            .collect()
     }
 
     pub fn analytics_mttr(&self) -> MttrMetrics {
@@ -835,19 +997,31 @@ impl InMemoryDb {
         for f in self.findings.values() {
             if f.triage_state == "Fixed" {
                 let hours = (f.updated_at - f.created_at).num_seconds() as f64 / 3600.0;
-                total_hours += hours; count += 1;
+                total_hours += hours;
+                count += 1;
                 let entry = by_severity.entry(f.severity.clone()).or_insert((0.0, 0));
-                entry.0 += hours; entry.1 += 1;
+                entry.0 += hours;
+                entry.1 += 1;
             }
         }
-        let overall = if count > 0 { total_hours / count as f64 } else { 0.0 };
-        let by_sev = by_severity.into_iter()
-            .map(|(k, (h, c))| (k, if c > 0 { h / c as f64 } else { 0.0 })).collect();
-        MttrMetrics { overall_mttr_hours: overall, by_severity: by_sev }
+        let overall = if count > 0 {
+            total_hours / count as f64
+        } else {
+            0.0
+        };
+        let by_sev = by_severity
+            .into_iter()
+            .map(|(k, (h, c))| (k, if c > 0 { h / c as f64 } else { 0.0 }))
+            .collect();
+        MttrMetrics {
+            overall_mttr_hours: overall,
+            by_severity: by_sev,
+        }
     }
 
     pub fn get_critical_findings_for_scan(&self, scan_id: Uuid) -> Vec<&StoredFinding> {
-        self.findings.values()
+        self.findings
+            .values()
             .filter(|f| f.scan_id == scan_id && f.severity == "Critical")
             .collect()
     }

@@ -116,16 +116,31 @@ function Install-Binary {
   Write-Step "Downloading $ASSET_NAME ..."
   Write-Info  "From: $downloadUrl"
 
-  try {
-    Invoke-WebRequest `
-      -Uri $downloadUrl `
-      -OutFile $tmpZip `
-      -UseBasicParsing `
-      -ErrorAction Stop
-  }
-  catch {
-    Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue
-    Fail "Download failed: $_`nVerify the release exists at https://github.com/$GITHUB_REPO/releases/tag/$version"
+  # Retry with exponential backoff (ISSUE-002): up to 3 attempts, doubling delay
+  $maxRetries = 3
+  $retryDelay = 2
+  $downloaded = $false
+  for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
+    try {
+      Invoke-WebRequest `
+        -Uri $downloadUrl `
+        -OutFile $tmpZip `
+        -UseBasicParsing `
+        -ErrorAction Stop
+      $downloaded = $true
+      break
+    }
+    catch {
+      if ($attempt -lt $maxRetries) {
+        Write-Warn "Download attempt $attempt of $maxRetries failed. Retrying in ${retryDelay}s ..."
+        Start-Sleep -Seconds $retryDelay
+        $retryDelay *= 2
+      }
+      else {
+        Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue
+        Fail "Download failed after $maxRetries attempts: $_`nVerify the release exists at https://github.com/$GITHUB_REPO/releases/tag/$version"
+      }
+    }
   }
 
   if (-not (Test-Path $tmpZip) -or (Get-Item $tmpZip).Length -eq 0) {
@@ -235,11 +250,33 @@ function Confirm-Install {
     return
   }
 
+  # Try multiple methods to get the version (ISSUE-010):
+  # 1. Clap built-in --version flag
+  # 2. Custom `version` subcommand
+  # 3. File product version (Windows .exe metadata)
+  # 4. Fall back to the release tag
+  $installedVersion = "unknown"
   try {
-    $installedVersion = & $dest --version 2>&1
+    $v1 = & $dest --version 2>&1
+    if ($v1 -and $v1 -match '[\d\.]+') { $installedVersion = $v1.Trim() }
+  } catch {}
+  if ($installedVersion -eq "unknown") {
+    try {
+      $v2 = & $dest version 2>&1
+      if ($v2 -and $v2 -match 'v?[\d\.]+') {
+        $line = ($v2 | Select-Object -First 1)
+        if ($line -match 'v?([\d\.]+)') { $installedVersion = "v$($matches[1])" }
+      }
+    } catch {}
   }
-  catch {
-    $installedVersion = "unknown"
+  if ($installedVersion -eq "unknown") {
+    try {
+      $fileVer = (Get-Item $dest).VersionInfo.ProductVersion
+      if ($fileVer) { $installedVersion = $fileVer }
+    } catch {}
+  }
+  if ($installedVersion -eq "unknown" -and $version) {
+    $installedVersion = $version
   }
 
   Write-Host ""

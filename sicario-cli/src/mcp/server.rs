@@ -18,6 +18,7 @@ use crate::mcp::protocol::{
     McpResponse, McpResponsePayload, MutationProposal, ReachabilityResult,
 };
 use crate::mcp::security_guard::ShellExecutionGuard;
+use std::collections::HashMap;
 
 /// The MCP server.
 ///
@@ -27,6 +28,7 @@ use crate::mcp::security_guard::ShellExecutionGuard;
 pub struct McpServer {
     engine: Arc<Mutex<SastEngine>>,
     memory: Arc<AssistantMemory>,
+    findings_cache: Arc<Mutex<HashMap<String, Vulnerability>>>,
     port: u16,
 }
 
@@ -45,6 +47,7 @@ impl McpServer {
         Ok(Self {
             engine: Arc::new(Mutex::new(engine)),
             memory: Arc::new(memory),
+            findings_cache: Arc::new(Mutex::new(HashMap::new())),
             port,
         })
     }
@@ -54,6 +57,7 @@ impl McpServer {
         Self {
             engine: Arc::new(Mutex::new(engine)),
             memory: Arc::new(memory),
+            findings_cache: Arc::new(Mutex::new(HashMap::new())),
             port,
         }
     }
@@ -74,8 +78,9 @@ impl McpServer {
                 Ok(stream) => {
                     let engine = Arc::clone(&self.engine);
                     let memory = Arc::clone(&self.memory);
+                    let findings_cache = Arc::clone(&self.findings_cache);
                     thread::spawn(move || {
-                        if let Err(e) = handle_connection(stream, engine, memory) {
+                        if let Err(e) = handle_connection(stream, engine, memory, findings_cache) {
                             warn!("MCP connection error: {}", e);
                         }
                     });
@@ -109,8 +114,9 @@ impl McpServer {
                     Ok(stream) => {
                         let eng = Arc::clone(&engine);
                         let mem = Arc::clone(&memory);
+                        let cache = Arc::clone(&self.findings_cache);
                         thread::spawn(move || {
-                            if let Err(e) = handle_connection(stream, eng, mem) {
+                            if let Err(e) = handle_connection(stream, eng, mem, cache) {
                                 warn!("MCP connection error: {}", e);
                             }
                         });
@@ -146,6 +152,7 @@ fn handle_connection(
     stream: TcpStream,
     engine: Arc<Mutex<SastEngine>>,
     memory: Arc<AssistantMemory>,
+    findings_cache: Arc<Mutex<HashMap<String, Vulnerability>>>,
 ) -> Result<()> {
     let peer = stream
         .peer_addr()
@@ -168,7 +175,7 @@ fn handle_connection(
 
         debug!("MCP: received from {}: {}", peer, line);
 
-        let response_str = dispatch(&line, &engine, &memory);
+        let response_str = dispatch(&line, &engine, &memory, &findings_cache);
 
         debug!("MCP: sending to {}: {}", peer, response_str);
 
@@ -190,11 +197,17 @@ pub fn dispatch_request(
     raw: &str,
     engine: &Arc<Mutex<SastEngine>>,
     memory: &Arc<AssistantMemory>,
+    findings_cache: &Arc<Mutex<HashMap<String, Vulnerability>>>,
 ) -> String {
-    dispatch(raw, engine, memory)
+    dispatch(raw, engine, memory, findings_cache)
 }
 
-fn dispatch(raw: &str, engine: &Arc<Mutex<SastEngine>>, memory: &Arc<AssistantMemory>) -> String {
+fn dispatch(
+    raw: &str,
+    engine: &Arc<Mutex<SastEngine>>,
+    memory: &Arc<AssistantMemory>,
+    findings_cache: &Arc<Mutex<HashMap<String, Vulnerability>>>,
+) -> String {
     // Parse the request
     let request = match parse_request(raw) {
         Ok(r) => r,
@@ -209,11 +222,12 @@ fn dispatch(raw: &str, engine: &Arc<Mutex<SastEngine>>, memory: &Arc<AssistantMe
     let (tx, rx) = std::sync::mpsc::channel::<String>();
     let engine_clone = Arc::clone(engine);
     let memory_clone = Arc::clone(memory);
+    let cache_clone = Arc::clone(findings_cache);
     let method = request.method.clone();
     let req_id = id.clone();
 
     rayon::spawn(move || {
-        let result = handle_method(method, &engine_clone, &memory_clone, req_id);
+        let result = handle_method(method, &engine_clone, &memory_clone, &cache_clone, req_id);
         let _ = tx.send(result);
     });
 
@@ -227,12 +241,13 @@ fn handle_method(
     method: McpMethod,
     engine: &Arc<Mutex<SastEngine>>,
     memory: &Arc<AssistantMemory>,
+    findings_cache: &Arc<Mutex<HashMap<String, Vulnerability>>>,
     id: Option<serde_json::Value>,
 ) -> String {
     match method {
-        McpMethod::ScanFile { path } => handle_scan_file(path, engine, memory, id),
+        McpMethod::ScanFile { path } => handle_scan_file(path, engine, memory, findings_cache, id),
         McpMethod::ScanCode { code, language } => {
-            handle_scan_code(code, language, engine, memory, id)
+            handle_scan_code(code, language, engine, memory, findings_cache, id)
         }
         McpMethod::GetRules => handle_get_rules(engine, id),
         McpMethod::GetAstNode {
@@ -255,6 +270,7 @@ fn handle_scan_file(
     path: String,
     engine: &Arc<Mutex<SastEngine>>,
     memory: &Arc<AssistantMemory>,
+    findings_cache: &Arc<Mutex<HashMap<String, Vulnerability>>>,
     id: Option<serde_json::Value>,
 ) -> String {
     let file_path = PathBuf::from(&path);
@@ -270,6 +286,14 @@ fn handle_scan_file(
         Ok(vulns) => {
             // Filter out previously approved patterns via Assistant Memory
             let filtered = filter_approved(vulns, memory);
+
+            // Populate findings cache for remediation patches
+            if let Ok(mut cache) = findings_cache.lock() {
+                for v in &filtered {
+                    cache.insert(v.id.to_string(), v.clone());
+                }
+            }
+
             let response = McpResponse {
                 id,
                 payload: McpResponsePayload::Vulnerabilities(filtered),
@@ -286,6 +310,7 @@ fn handle_scan_code(
     language: String,
     engine: &Arc<Mutex<SastEngine>>,
     memory: &Arc<AssistantMemory>,
+    findings_cache: &Arc<Mutex<HashMap<String, Vulnerability>>>,
     id: Option<serde_json::Value>,
 ) -> String {
     // Determine file extension from language
@@ -324,6 +349,14 @@ fn handle_scan_code(
                 v.file_path = PathBuf::from(format!("<code>.{}", ext));
             }
             let filtered = filter_approved(vulns, memory);
+
+            // Populate findings cache for remediation patches
+            if let Ok(mut cache) = findings_cache.lock() {
+                for v in &filtered {
+                    cache.insert(v.id.to_string(), v.clone());
+                }
+            }
+
             let response = McpResponse {
                 id,
                 payload: McpResponsePayload::Vulnerabilities(filtered),
@@ -668,7 +701,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let server = make_server(dir.path());
         let raw = r#"{"jsonrpc":"2.0","method":"get_rules","params":{},"id":1}"#;
-        let resp = dispatch(raw, &server.engine, &server.memory);
+        let resp = dispatch(raw, &server.engine, &server.memory, &server.findings_cache);
         let v: serde_json::Value = serde_json::from_str(&resp).unwrap();
         assert_eq!(v["jsonrpc"], "2.0");
         assert!(v["result"].is_array());
@@ -680,7 +713,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let server = make_server(dir.path());
         let raw = r#"{"jsonrpc":"2.0","method":"nonexistent","params":{},"id":2}"#;
-        let resp = dispatch(raw, &server.engine, &server.memory);
+        let resp = dispatch(raw, &server.engine, &server.memory, &server.findings_cache);
         let v: serde_json::Value = serde_json::from_str(&resp).unwrap();
         assert!(v["error"].is_object());
         assert_eq!(v["error"]["code"], JsonRpcError::METHOD_NOT_FOUND);
@@ -691,7 +724,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let server = make_server(dir.path());
         let raw = r#"{"jsonrpc":"2.0","method":"scan_code","params":{"code":"const x = 1;","language":"javascript"},"id":3}"#;
-        let resp = dispatch(raw, &server.engine, &server.memory);
+        let resp = dispatch(raw, &server.engine, &server.memory, &server.findings_cache);
         let v: serde_json::Value = serde_json::from_str(&resp).unwrap();
         // No rules loaded, so result should be an empty array
         assert_eq!(v["jsonrpc"], "2.0");
@@ -703,7 +736,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let server = make_server(dir.path());
         let raw = r#"{"jsonrpc":"2.0","method":"scan_file","params":{},"id":4}"#;
-        let resp = dispatch(raw, &server.engine, &server.memory);
+        let resp = dispatch(raw, &server.engine, &server.memory, &server.findings_cache);
         let v: serde_json::Value = serde_json::from_str(&resp).unwrap();
         assert!(v["error"].is_object());
         assert_eq!(v["error"]["code"], JsonRpcError::INVALID_PARAMS);

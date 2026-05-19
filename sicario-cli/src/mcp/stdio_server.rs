@@ -11,13 +11,14 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tracing::{debug, error, info, warn};
 
-use crate::engine::SastEngine;
+use crate::engine::{SastEngine, Vulnerability};
 use crate::mcp::assistant_memory::AssistantMemory;
 use crate::mcp::protocol::{
     parse_request, serialize_error, serialize_response, JsonRpcError, McpMethod, McpResponse,
     McpResponsePayload,
 };
 use crate::mcp::security_guard::ShellExecutionGuard;
+use std::collections::HashMap;
 
 /// stdio-based MCP server for Kiro Power integration.
 ///
@@ -26,6 +27,7 @@ use crate::mcp::security_guard::ShellExecutionGuard;
 pub struct StdioMcpServer {
     engine: Arc<Mutex<SastEngine>>,
     memory: Arc<AssistantMemory>,
+    findings_cache: Arc<Mutex<HashMap<String, Vulnerability>>>,
 }
 
 impl StdioMcpServer {
@@ -39,6 +41,7 @@ impl StdioMcpServer {
         Ok(Self {
             engine: Arc::new(Mutex::new(engine)),
             memory: Arc::new(memory),
+            findings_cache: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
@@ -195,6 +198,14 @@ impl StdioMcpServer {
             Ok(vulns) => {
                 // Filter out previously approved patterns via Assistant Memory
                 let filtered = self.filter_approved(vulns);
+
+                // Populate findings cache for remediation patches
+                if let Ok(mut cache) = self.findings_cache.lock() {
+                    for v in &filtered {
+                        cache.insert(v.id.to_string(), v.clone());
+                    }
+                }
+
                 let response = McpResponse {
                     id,
                     payload: McpResponsePayload::Vulnerabilities(filtered),
@@ -248,6 +259,14 @@ impl StdioMcpServer {
                     v.file_path = PathBuf::from(format!("<code>.{}", ext));
                 }
                 let filtered = self.filter_approved(vulns);
+
+                // Populate findings cache for remediation patches
+                if let Ok(mut cache) = self.findings_cache.lock() {
+                    for v in &filtered {
+                        cache.insert(v.id.to_string(), v.clone());
+                    }
+                }
+
                 let response = McpResponse {
                     id,
                     payload: McpResponsePayload::Vulnerabilities(filtered),

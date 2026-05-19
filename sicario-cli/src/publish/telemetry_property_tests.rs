@@ -54,6 +54,7 @@ mod tests {
                 cwe_id: None,
                 owasp_category: None,
                 fingerprint: None,
+                confidence_score: None,
             })
     }
 

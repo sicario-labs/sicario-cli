@@ -10,8 +10,8 @@ use tower::util::ServiceExt;
 use uuid::Uuid;
 
 use crate::auth::Claims;
-use crate::db::AppState;
 use crate::build_router;
+use crate::db::AppState;
 
 const TEST_SECRET: &str = "test-secret";
 
@@ -26,8 +26,12 @@ fn make_jwt() -> String {
         exp: (Utc::now().timestamp() + 3600) as usize,
         iat: Utc::now().timestamp() as usize,
     };
-    encode(&Header::default(), &claims, &EncodingKey::from_secret(TEST_SECRET.as_bytes()))
-        .unwrap()
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(TEST_SECRET.as_bytes()),
+    )
+    .unwrap()
 }
 
 fn scan_report_json() -> Value {
@@ -102,7 +106,9 @@ async fn test_create_and_list_scans() {
                 .method("POST")
                 .header("Authorization", format!("Bearer {token}"))
                 .header("Content-Type", "application/json")
-                .body(Body::from(serde_json::to_string(&scan_report_json()).unwrap()))
+                .body(Body::from(
+                    serde_json::to_string(&scan_report_json()).unwrap(),
+                ))
                 .unwrap(),
         )
         .await
@@ -144,7 +150,9 @@ async fn test_findings_crud_and_triage() {
             .method("POST")
             .header("Authorization", format!("Bearer {token}"))
             .header("Content-Type", "application/json")
-            .body(Body::from(serde_json::to_string(&scan_report_json()).unwrap()))
+            .body(Body::from(
+                serde_json::to_string(&scan_report_json()).unwrap(),
+            ))
             .unwrap(),
     )
     .await
@@ -177,7 +185,9 @@ async fn test_findings_crud_and_triage() {
                 .method("PATCH")
                 .header("Authorization", format!("Bearer {token}"))
                 .header("Content-Type", "application/json")
-                .body(Body::from(json!({"triage_state": "Fixed", "triage_note": "Patched"}).to_string()))
+                .body(Body::from(
+                    json!({"triage_state": "Fixed", "triage_note": "Patched"}).to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -200,7 +210,9 @@ async fn test_bulk_triage() {
             .method("POST")
             .header("Authorization", format!("Bearer {token}"))
             .header("Content-Type", "application/json")
-            .body(Body::from(serde_json::to_string(&scan_report_json()).unwrap()))
+            .body(Body::from(
+                serde_json::to_string(&scan_report_json()).unwrap(),
+            ))
             .unwrap(),
     )
     .await
@@ -231,11 +243,14 @@ async fn test_bulk_triage() {
                 .method("POST")
                 .header("Authorization", format!("Bearer {token}"))
                 .header("Content-Type", "application/json")
-                .body(Body::from(json!({
-                    "finding_ids": [finding_id],
-                    "triage_state": "Ignored",
-                    "triage_note": "False positive"
-                }).to_string()))
+                .body(Body::from(
+                    json!({
+                        "finding_ids": [finding_id],
+                        "triage_state": "Ignored",
+                        "triage_note": "False positive"
+                    })
+                    .to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -258,7 +273,9 @@ async fn test_analytics_overview() {
             .method("POST")
             .header("Authorization", format!("Bearer {token}"))
             .header("Content-Type", "application/json")
-            .body(Body::from(serde_json::to_string(&scan_report_json()).unwrap()))
+            .body(Body::from(
+                serde_json::to_string(&scan_report_json()).unwrap(),
+            ))
             .unwrap(),
     )
     .await
@@ -353,11 +370,14 @@ async fn test_webhooks_crud() {
                 .method("POST")
                 .header("Authorization", format!("Bearer {token}"))
                 .header("Content-Type", "application/json")
-                .body(Body::from(json!({
-                    "url": "https://hooks.slack.com/test",
-                    "events": ["critical_finding"],
-                    "delivery_type": "slack"
-                }).to_string()))
+                .body(Body::from(
+                    json!({
+                        "url": "https://hooks.slack.com/test",
+                        "events": ["critical_finding"],
+                        "delivery_type": "slack"
+                    })
+                    .to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -410,7 +430,9 @@ async fn test_csv_export() {
             .method("POST")
             .header("Authorization", format!("Bearer {token}"))
             .header("Content-Type", "application/json")
-            .body(Body::from(serde_json::to_string(&scan_report_json()).unwrap()))
+            .body(Body::from(
+                serde_json::to_string(&scan_report_json()).unwrap(),
+            ))
             .unwrap(),
     )
     .await

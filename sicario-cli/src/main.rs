@@ -279,6 +279,11 @@ fn dispatch(cmd: Command) -> Result<ExitCode> {
             cmd_completions(args);
             Ok(ExitCode::Clean)
         }
+        Command::Auth { command: auth_cmd } => match auth_cmd {
+            cli::AuthCommand::Login(args) => cmd_cloud_login(args),
+            cli::AuthCommand::Logout => cmd_cloud_logout(),
+            cli::AuthCommand::Whoami => cmd_cloud_whoami(),
+        },
         Command::Login(args) => cmd_cloud_login(args),
         Command::Logout => cmd_cloud_logout(),
         Command::Publish(args) => cmd_cloud_publish(args.org),
@@ -2577,13 +2582,13 @@ fn submit_telemetry(
     }
 
     // ── Telemetry severity gate ───────────────────────────────────────────
-    // Default: only publish Medium and above to prevent Low/Info noise from
-    // flooding the dashboard (e.g. unwrap() in test code).
+    // Default: only publish Low and above to prevent Info noise from
+    // flooding the dashboard.
     // Override with --publish --publish-all to send everything.
     let telemetry_min_severity = if publish_all {
         engine::vulnerability::Severity::Info
     } else {
-        engine::vulnerability::Severity::Medium
+        engine::vulnerability::Severity::Low
     };
 
     let client_id =
@@ -2692,6 +2697,7 @@ fn submit_telemetry(
                 cwe_id: v.cwe_id.clone(),
                 owasp_category: v.owasp_category.map(|c| format!("{:?}", c)),
                 fingerprint: None,
+                confidence_score: Some(v.confidence_score),
             }
         })
         .collect();

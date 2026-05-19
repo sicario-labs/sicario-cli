@@ -119,6 +119,22 @@ Beyond ambient developer guardrails, Sicario provides cutting-edge utility for s
 
 ---
 
+## 🧠 Sicario Skills (AI Agent Orchestration)
+
+Sicario Skills are portable, deterministic security workflows designed for AI coding assistants (Cursor, Windsurf, Claude Code). Unlike raw tools, Skills guide AI agents through complex, multi-step security hardening tasks while maintaining local-first data integrity.
+
+* **Portable Workflows**: Distributed as markdown-based guidance and MCP Prompts that AI agents can discover and execute automatically.
+* **Deterministic Remediation**: Guides AI to use Sicario's local AST templates for fixes rather than guessing probabilistic patches.
+* **Ambient Hardening**: Skills like `supply-chain-sentinel` act as a background "security colleague" inside the IDE.
+
+| Skill | Purpose | Key Tools |
+| :--- | :--- | :--- |
+| **`remediate-vulnerability`** | Detect, analyze, and apply deterministic local patches. | `analyze_ast_security`, `request_remediation_patch` |
+| **`project-security-audit`** | Comprehensive project-wide risk assessment and roadmap. | `analyze_ast_security`, `log_telemetry_audit` |
+| **`supply-chain-sentinel`** | Real-time monitoring of malicious dependency behavior. | `get_rules`, `Poison-Pill Interceptor` |
+
+---
+
 ## 🏗️ Internal Architecture
 
 ```

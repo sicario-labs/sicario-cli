@@ -50,8 +50,9 @@ async-trait = "0.1"
 # CSV export
 csv = "1.3"
 
-# SHA-256
+# SHA-256 + HMAC (for proper webhook signing signatures)
 sha2 = { workspace = true }
+hmac = "0.12"
 
 [dev-dependencies]
 proptest = { workspace = true }

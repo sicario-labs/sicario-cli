@@ -292,6 +292,7 @@ pub struct PaginatedResponse<T> {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct PaginationParams {
     #[serde(default = "default_page")]
     pub page: i64,
@@ -299,8 +300,12 @@ pub struct PaginationParams {
     pub per_page: i64,
 }
 
-fn default_page() -> i64 { 1 }
-fn default_per_page() -> i64 { 20 }
+fn default_page() -> i64 {
+    1
+}
+fn default_per_page() -> i64 {
+    20
+}
 
 // ── Request bodies ────────────────────────────────────────────────────────────
 

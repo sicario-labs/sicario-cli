@@ -36,7 +36,10 @@ pub fn build_router(state: AppState) -> Router {
         // Findings
         .route("/findings", get(routes::list_findings))
         .route("/findings/bulk-triage", post(routes::bulk_triage))
-        .route("/findings/:id", get(routes::get_finding).patch(routes::triage_finding))
+        .route(
+            "/findings/:id",
+            get(routes::get_finding).patch(routes::triage_finding),
+        )
         // Analytics
         .route("/analytics/overview", get(routes::analytics_overview))
         .route("/analytics/trends", get(routes::analytics_trends))
@@ -44,19 +47,28 @@ pub fn build_router(state: AppState) -> Router {
         // Projects
         .route("/projects", get(routes::list_projects))
         .route("/projects", post(routes::create_project))
-        .route("/projects/:id", get(routes::get_project).patch(routes::update_project))
+        .route(
+            "/projects/:id",
+            get(routes::get_project).patch(routes::update_project),
+        )
         // Teams
         .route("/teams", get(routes::list_teams))
         .route("/teams", post(routes::create_team))
         // Webhooks
         .route("/webhooks", get(routes::list_webhooks))
         .route("/webhooks", post(routes::create_webhook))
-        .route("/webhooks/:id", patch(routes::update_webhook).delete(routes::delete_webhook))
+        .route(
+            "/webhooks/:id",
+            patch(routes::update_webhook).delete(routes::delete_webhook),
+        )
         // Export
         .route("/export/findings.csv", get(routes::export_findings_csv))
         .route("/export/schema", get(routes::export_schema))
         // JWT auth on all routes
-        .layer(middleware::from_fn_with_state(state.clone(), auth::jwt_auth_middleware))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::jwt_auth_middleware,
+        ))
         .with_state(state);
 
     Router::new()
@@ -74,16 +86,22 @@ pub fn build_router(state: AppState) -> Router {
 async fn main() {
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
-        .with(tracing_subscriber::EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| "sicario_cloud=info,tower_http=info".into()))
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "sicario_cloud=info,tower_http=info".into()),
+        )
         .init();
 
+    // JWT secret MUST be configured via environment variable for production security.
+    // No default is provided — the server will not start without it.
     let jwt_secret = std::env::var("SICARIO_JWT_SECRET")
-        .unwrap_or_else(|_| "sicario-dev-secret".to_string());
+        .expect("SICARIO_JWT_SECRET must be set. Generate a strong random secret and set it as an environment variable.");
 
-    // Convex deployment URL — defaults to the Sicario project deployment
+    // Convex deployment URL — defaults to the Sicario project deployment.
+    // Must match the frontend's Convex backend (flexible-terrier-680) so
+    // projects created on the web dashboard are visible to the API (DASH-001).
     let convex_url = std::env::var("SICARIO_CONVEX_URL")
-        .unwrap_or_else(|_| "https://doting-spaniel-863.convex.cloud".to_string());
+        .unwrap_or_else(|_| "https://flexible-terrier-680.convex.cloud".to_string());
 
     let state = AppState::with_convex(jwt_secret, convex_url.clone());
 
@@ -93,12 +111,18 @@ async fn main() {
         .and_then(|p| p.parse().ok())
         .unwrap_or(3000);
 
-    let addr = SocketAddr::new(host.parse().expect("Invalid host"), port);
+    let addr: SocketAddr = format!("{host}:{port}").parse().unwrap_or_else(|_| {
+        panic!("Invalid SICARIO_CLOUD_HOST '{host}' or SICARIO_CLOUD_PORT '{port}'")
+    });
     tracing::info!("Sicario Cloud Platform listening on {addr}");
     tracing::info!("Convex backend: {convex_url}");
 
-    let listener = tokio::net::TcpListener::bind(addr).await.expect("Failed to bind");
-    axum::serve(listener, build_router(state)).await.expect("Server error");
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .unwrap_or_else(|e| panic!("Failed to bind to {addr}: {e}"));
+    axum::serve(listener, build_router(state))
+        .await
+        .unwrap_or_else(|e| panic!("Server error: {e}"));
 }
 
 #[cfg(test)]

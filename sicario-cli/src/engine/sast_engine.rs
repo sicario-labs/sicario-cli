@@ -123,6 +123,36 @@ impl SastEngine {
                 Some(OwaspCategory::A02_CryptographicFailures),
             ),
             (
+                "js/hardcoded-private-key",
+                "Hardcoded Private Key in String Literal",
+                "PEM-encoded private key discovered as a string literal, risking credential exposure",
+                Severity::Critical,
+                &[Language::JavaScript, Language::TypeScript],
+                "(string) @val (#match? @val \"(?i)-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----\")",
+                Some("CWE-798"),
+                Some(OwaspCategory::A02_CryptographicFailures),
+            ),
+            (
+                "js/hardcoded-connection-string",
+                "Hardcoded Database Connection String",
+                "Database URI containing inline credentials in a string literal",
+                Severity::High,
+                &[Language::JavaScript, Language::TypeScript],
+                "(string) @val (#match? @val \"(?i)(postgres|mysql|mongodb|redis)://[^:]+:[^@]+@\")",
+                Some("CWE-798"),
+                Some(OwaspCategory::A02_CryptographicFailures),
+            ),
+            (
+                "js/hardcoded-api-key-literal",
+                "Hardcoded API Key in String Literal",
+                "String literal that appears to contain an API key, bearer token, or access credential",
+                Severity::High,
+                &[Language::JavaScript, Language::TypeScript],
+                "(string) @val (#match? @val \"(?i)(sk_live_|pk_live_|ghp_|gho_|ghu_|ghs_|github_pat_|xoxb-|xapp-|xoxp-|AKIA[0-9A-Z]{16}|Bearer\\s+[A-Za-z0-9\\-_]{20,})\")",
+                Some("CWE-798"),
+                Some(OwaspCategory::A02_CryptographicFailures),
+            ),
+            (
                 "js/innerhtml-xss",
                 "Dangerous innerHTML Assignment",
                 "Setting innerHTML with user-controlled data leads to XSS",
@@ -212,6 +242,10 @@ impl SastEngine {
 
     /// Load security rules from YAML file
     pub fn load_rules(&mut self, yaml_path: &Path) -> Result<()> {
+        if yaml_path.is_dir() {
+            return self.load_rules_recursive(yaml_path);
+        }
+
         // Read YAML file
         let yaml_content = fs::read_to_string(yaml_path)
             .with_context(|| format!("Failed to read YAML file: {:?}", yaml_path))?;
@@ -273,6 +307,24 @@ impl SastEngine {
     pub fn load_rules_from_multiple(&mut self, yaml_paths: &[&Path]) -> Result<()> {
         for yaml_path in yaml_paths {
             self.load_rules(yaml_path)?;
+        }
+        Ok(())
+    }
+
+    /// Recursively load rules from a directory.
+    pub fn load_rules_recursive(&mut self, dir: &Path) -> Result<()> {
+        if dir.is_file() {
+            return self.load_rules(dir);
+        }
+
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                let _ = self.load_rules_recursive(&path);
+            } else if path.extension().and_then(|s| s.to_str()) == Some("yaml") {
+                let _ = self.load_rules(&path);
+            }
         }
         Ok(())
     }

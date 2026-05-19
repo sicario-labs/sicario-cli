@@ -60,6 +60,17 @@ pub struct SicarioCli {
     pub command: Option<Command>,
 }
 
+/// Authentication subcommands for ISSUE-009 compatibility.
+#[derive(Subcommand, Debug)]
+pub enum AuthCommand {
+    /// Log in to Sicario Cloud (alias for `sicario login`)
+    Login(LoginArgs),
+    /// Log out of Sicario Cloud (alias for `sicario logout`)
+    Logout,
+    /// Show current authenticated user (alias for `sicario whoami`)
+    Whoami,
+}
+
 #[derive(Subcommand, Debug)]
 pub enum Command {
     /// Run a security scan on a directory
@@ -82,6 +93,11 @@ pub enum Command {
     Suppressions(SuppressionsCommand),
     /// Generate shell completion scripts
     Completions(CompletionsArgs),
+    /// Manage authentication — login, logout, and whoami
+    Auth {
+        #[command(subcommand)]
+        command: AuthCommand,
+    },
     /// Log in to Sicario Cloud
     Login(LoginArgs),
     /// Log out of Sicario Cloud

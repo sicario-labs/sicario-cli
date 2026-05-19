@@ -38,6 +38,9 @@ pub struct TelemetryFinding {
     /// Optional finding fingerprint for deduplication
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fingerprint: Option<String>,
+    /// Optional confidence score (0.0–1.0)
+    #[serde(rename = "confidenceScore", skip_serializing_if = "Option::is_none")]
+    pub confidence_score: Option<f64>,
 }
 
 /// Payload sent by the CLI to `POST /api/v1/telemetry/scan`.
@@ -222,6 +225,7 @@ mod tests {
             cwe_id: Some("CWE-89".to_string()),
             owasp_category: Some("A03".to_string()),
             fingerprint: None,
+            confidence_score: Some(0.85),
         }
     }
 
@@ -286,6 +290,7 @@ mod tests {
             cwe_id: None,
             owasp_category: None,
             fingerprint: None,
+            confidence_score: None,
         };
         let json = serde_json::to_string(&finding).unwrap();
         assert!(!json.contains("cweId"), "cweId should be omitted when None");

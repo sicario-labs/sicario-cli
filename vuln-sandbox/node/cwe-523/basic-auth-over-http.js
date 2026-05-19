@@ -5,7 +5,8 @@ const axios = require('axios');
 
 const username = 'admin';
 const password = 'secret';
-const credentials = Buffer.from(`${username}:${password}`).toString('base64');
+// SICARIO FIX: Encode output to prevent XSS
+const safeOutput = userInput.replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
 
 // VULNERABLE: Authorization: Basic header sent over http:// — credentials transmitted in cleartext
 axios.get('http://api.example.com/protected', {

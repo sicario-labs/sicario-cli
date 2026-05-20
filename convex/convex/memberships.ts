@@ -8,11 +8,13 @@ import { requireRole, getUserMembership } from "./rbac";
 export const list = query({
   args: {
     orgId: v.string(),
-    userId: v.string(),
+    userId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    // Gracefully return empty if user has no membership (e.g. dev/demo mode)
-    const callerMembership = await getUserMembership(ctx, args.userId, args.orgId);
+    const userId = args.userId ?? (await ctx.auth.getUserIdentity())?.tokenIdentifier.split("|").pop();
+    if (!userId) return [];
+
+    const callerMembership = await getUserMembership(ctx, userId, args.orgId);
     if (!callerMembership) return [];
     if (callerMembership.role !== "admin") return [];
 

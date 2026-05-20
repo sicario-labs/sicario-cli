@@ -46,7 +46,7 @@ Sicario embeds highly optimized `tree-sitter` parsers directly into a single por
 ### 3. Deterministic Auto-Remediation
 Most modern AI agents attempt probabilistic code generation that breaks builds or hallucinates logic. Sicario utilizes a **Deterministic Template Registry** paired with abstract syntax tree rewrites (e.g., rewriting vulnerable string concatenations into safe parameterized SQL queries).
 * Features automatic line-level backups and instant single-command rollbacks (`sicario fix --revert <patch_id>`).
-* Includes an opt-in, highly secured local LLM interface (`--agent=local` targeting local Ollama instances) for complex structural refactoring.
+* Includes an opt-in local AI agent for complex structural refactoring that connects to **any OpenAI-compatible local LLM** — Ollama, llama.cpp, LM Studio, or a custom server — with a **zero-exfiltration guarantee** (no code or tokens ever leave your machine).
 
 ### 4. "Invisible UX" & Alert Fatigue Hardening
 Engineered for ultimate developer adoption, Sicario avoids blocking workflows with noise:
@@ -105,6 +105,48 @@ sicario hook auto-fix
 
 # 8. Launch the Fully Interactive Terminal User Interface (TUI)
 sicario tui
+
+# 9. Local AI Fix — Auto-Detect (Ollama on localhost:11434)
+sicario fix src/database.js --agent local
+
+# 10. Local AI Fix — Specific Model (any model served on localhost:11434)
+sicario fix src/database.js --agent local-qwen2.5-coder:7b
+
+# 11. Local AI Fix — Bring Your Own Server (any OpenAI-compatible endpoint)
+$env:SICARIO_LLM_ENDPOINT = "http://localhost:1234/v1/chat/completions"   # LM Studio, etc.
+$env:SICARIO_LLM_MODEL = "my-model"
+sicario fix src/database.js --agent cloud
+```
+
+---
+
+## 🤖 Local AI Fix — Provider-Agnostic Setup
+
+Sicario's AI fix agent works with **any local LLM** running an OpenAI-compatible API. No vendor lock-in — bring your own model, your own server, your own port.
+
+| Approach | Command | What it does |
+| :------- | :------ | :----------- |
+| **Auto-detect** | `--agent local` | Probes `127.0.0.1:11434/api/tags` (Ollama), picks best model |
+| **Explicit model** | `--agent local-qwen2.5-coder:7b` | Skips probe, uses your model name directly on port 11434 |
+| **Custom endpoint** | `--agent cloud` + env vars | Points any OpenAI-compatible server (LM Studio `:1234`, llama.cpp, etc.) |
+
+All three paths enforce **zero exfiltration** — no source code, token data, or IP ever leaves `127.0.0.1`. Ideal for air-gapped environments, offline workstations, or teams with strict data residency requirements.
+
+```bash
+# Examples
+
+# Already running Ollama? It's one flag.
+sicario fix src/api/auth.ts --agent local
+
+# Using LM Studio on port 1234? Set the endpoint.
+export SICARIO_LLM_ENDPOINT="http://127.0.0.1:1234/v1/chat/completions"
+export SICARIO_LLM_MODEL="local-model"
+sicario fix src/api/auth.ts --agent cloud
+
+# Persistent config via config file
+sicario config set llm_endpoint "http://127.0.0.1:8080/v1/chat/completions"
+sicario config set llm_model "qwen2.5-1.5b"
+sicario fix src/api/auth.ts --agent cloud
 ```
 
 ---

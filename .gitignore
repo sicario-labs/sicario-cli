@@ -26,6 +26,9 @@ ehthumbs.db
 .env.*
 !.env.example
 
+# Large binary artifacts
+models/
+
 # Node
 node_modules/
 

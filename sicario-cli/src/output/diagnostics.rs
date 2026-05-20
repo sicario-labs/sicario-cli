@@ -182,10 +182,9 @@ pub fn render_diagnostics(
                 ""
             };
             let fix_cmd = format!(
-                "sicario fix --rule {} --file {} --line {}",
+                "sicario fix --rule {} {}",
                 vuln.rule_id,
                 vuln.file_path.display(),
-                vuln.line
             );
 
             if color_enabled {

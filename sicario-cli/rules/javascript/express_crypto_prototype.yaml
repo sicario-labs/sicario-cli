@@ -357,7 +357,7 @@
     - JavaScript
     - TypeScript
   pattern:
-    query: "(subscript_expression object: (identifier) @obj index: (member_expression object: (identifier) @src property: (property_identifier) @prop (#match? @prop \"(key|k|prop|property|attr)\"))) @access"
+    query: "(subscript_expression object: (identifier) @obj index: (member_expression object: (identifier) @src property: (property_identifier) @prop (#match? @prop \"\\b(key|k|prop|property|attr)\\b\"))) @access"
     captures:
       - "access"
   cwe_id: "CWE-1321"

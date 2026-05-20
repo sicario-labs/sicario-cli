@@ -1,4 +1,4 @@
-﻿//! Input validation, file/resource, and deserialization patch templates.
+//! Input validation, file/resource, and deserialization patch templates.
 
 use super::helpers::*;
 use super::PatchTemplate;
@@ -172,7 +172,11 @@ impl PatchTemplate for PrototypePollutionMergeTemplate {
 
 // â”€â”€ 48. PrototypePollutionSetTemplate (CWE-1321) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-/// Prepends a key validation guard before `obj[req.body.key] = ...`.
+/// Prepends a key validation guard before dynamic property assignment.
+///
+/// Handles two patterns:
+/// 1. `obj[req.body.key] = value` — direct user-input property access
+/// 2. `target[source.key] = source[source.key]` — unsafe merge loop pattern
 pub struct PrototypePollutionSetTemplate;
 
 impl PatchTemplate for PrototypePollutionSetTemplate {
@@ -185,27 +189,50 @@ impl PatchTemplate for PrototypePollutionSetTemplate {
             Language::JavaScript | Language::TypeScript => {}
             _ => return None,
         }
-        // Dynamic property assignment from user input
-        if !line.contains("req.body.key")
-            && !line.contains("req.query.key")
-            && !line.contains("req.params.key")
-        {
-            return None;
-        }
         if !line.contains("] =") && !line.contains("]=") {
             return None;
         }
         let indent = get_indent(line);
-        let key_src = if line.contains("req.body.key") {
-            "req.body.key"
-        } else if line.contains("req.query.key") {
-            "req.query.key"
-        } else {
-            "req.params.key"
-        };
-        Some(format!(
-            "{indent}if (['__proto__', 'constructor', 'prototype'].includes({key_src})) throw new Error('Invalid key');\n{line}"
-        ))
+        // Pattern 1: direct user-input property access
+        if line.contains("req.body.key")
+            || line.contains("req.query.key")
+            || line.contains("req.params.key")
+        {
+            let key_src = if line.contains("req.body.key") {
+                "req.body.key"
+            } else if line.contains("req.query.key") {
+                "req.query.key"
+            } else {
+                "req.params.key"
+            };
+            return Some(format!(
+                "{indent}if (['__proto__', 'constructor', 'prototype'].includes({key_src})) throw new Error('Invalid key');\n{line}"
+            ));
+        }
+        // Pattern 2: unsafe merge loop — target[source.key] = source[source.key]
+        // Detect by looking for `].` inside brackets (member expression as index)
+        // e.g. `target[source.key]`, `obj[item.prop]`, `result[entry.property]`
+        if let Some(bracket_pos) = line.rfind(']') {
+            let before_bracket = &line[..bracket_pos];
+            if let Some(dot_pos) = before_bracket
+                .rfind(".key")
+                .or_else(|| before_bracket.rfind(".prop"))
+                .or_else(|| before_bracket.rfind(".property"))
+                .or_else(|| before_bracket.rfind(".attr"))
+            {
+                // Find the start of the member expression (e.g. "source" in "source.key")
+                let before_dot = &before_bracket[..dot_pos];
+                let member_start = before_dot
+                    .rfind(|c: char| !c.is_alphanumeric() && c != '_' && c != '.')
+                    .map(|p| p + 1)
+                    .unwrap_or(0);
+                let key_src = &before_bracket[member_start..]; // e.g. "source.key"
+                return Some(format!(
+                    "{indent}if (['__proto__', 'constructor', 'prototype'].includes({key_src})) continue;\n{line}"
+                ));
+            }
+        }
+        None
     }
 }
 

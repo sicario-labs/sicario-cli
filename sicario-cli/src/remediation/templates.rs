@@ -151,20 +151,12 @@ pub fn apply_template_fix_with_registry(
         }
     }
 
-    // Registry miss — fall back to classification-based templates
-    let vuln_type = classify_vulnerability(vuln);
-    match vuln_type {
-        VulnType::SqlInjection => apply_sql_injection_template(original, vuln),
-        VulnType::Xss => apply_xss_template(original, vuln),
-        VulnType::CommandInjection => apply_command_injection_template(original, vuln),
-        VulnType::PathTraversal => apply_path_traversal_template(original, vuln),
-        VulnType::Ssrf => apply_ssrf_template(original, vuln),
-        VulnType::InsecureDeserial => apply_insecure_deserialization_template(original, vuln),
-        VulnType::HardcodedCreds => apply_hardcoded_creds_template(original, vuln),
-        VulnType::OpenRedirect => apply_open_redirect_template(original, vuln),
-        VulnType::Xxe => apply_xxe_template(original, vuln),
-        VulnType::Unknown => apply_unknown_template(original, vuln),
-    }
+    // Registry miss — return original unchanged to prevent fix-loop.
+    // The legacy classification-based templates all inserted synthetic
+    // "SICARIO WARNING" comments that triggered the same rule on re-scan,
+    // causing an infinite cascade. The registry is the only path that
+    // produces meaningful, tested fixes.
+    original.to_string()
 }
 
 /// Map a file path to a `parser::Language` for use with the registry.
@@ -404,18 +396,13 @@ fn apply_command_injection_template(original: &str, vuln: &Vulnerability) -> Str
     replace_line(original, target_line, &replacement)
 }
 
-/// For unknown vulnerability types, insert a warning comment rather than
-/// returning the original unchanged (Requirement 11.10).
-fn apply_unknown_template(original: &str, vuln: &Vulnerability) -> String {
-    let desc = vuln.cwe_id.as_deref().unwrap_or(&vuln.rule_id);
-    apply_comment_warning(
-        original,
-        vuln,
-        &format!(
-            "Security issue detected ({}) — manual review required",
-            desc
-        ),
-    )
+/// For unknown vulnerability types, return the original unchanged content.
+///
+/// The fix engine counts this as "skipped (no template)" so the finding
+/// remains in the scan output for manual review — no fix-loop since the
+/// file content never changes.
+fn apply_unknown_template(original: &str, _vuln: &Vulnerability) -> String {
+    original.to_string()
 }
 
 // ── New template fix implementations (CWE-22, 918, 502, 798, 601, 611) ───────

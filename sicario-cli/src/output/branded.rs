@@ -346,7 +346,7 @@ pub fn print_scan_summary(
     }
 
     let steps = [
-        "1. Fix critical issues instantly: Run sicario fix --rule <ID> --file <PATH>",
+        "1. Fix critical issues instantly: Run sicario fix --rule <ID> <PATH>",
         "2. Interactively triage in your browser: Run sicario dashboard",
         "3. Suppress false positives inline: Add // sicario-ignore: <rule-id> above the line",
     ];

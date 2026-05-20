@@ -12,6 +12,7 @@ pub struct ExclusionManager {
     gitignore_patterns: GlobSet,
     sicarioignore_patterns: GlobSet,
     default_excludes: GlobSet,
+    extra_excludes: GlobSet,
 }
 
 impl ExclusionManager {
@@ -21,6 +22,7 @@ impl ExclusionManager {
             gitignore_patterns: GlobSet::empty(),
             sicarioignore_patterns: GlobSet::empty(),
             default_excludes: Self::build_default_excludes()?,
+            extra_excludes: GlobSet::empty(),
         };
 
         // Load .gitignore if it exists
@@ -46,6 +48,7 @@ impl ExclusionManager {
             gitignore_patterns: GlobSet::empty(),
             sicarioignore_patterns: GlobSet::empty(),
             default_excludes: GlobSet::empty(),
+            extra_excludes: GlobSet::empty(),
         }
     }
 
@@ -61,6 +64,7 @@ impl ExclusionManager {
             gitignore_patterns: GlobSet::empty(),
             sicarioignore_patterns: GlobSet::empty(),
             default_excludes: Self::build_default_excludes().unwrap_or_else(|_| GlobSet::empty()),
+            extra_excludes: GlobSet::empty(),
         }
     }
 
@@ -212,6 +216,7 @@ impl ExclusionManager {
         self.default_excludes.is_match(normalized_path)
             || self.gitignore_patterns.is_match(normalized_path)
             || self.sicarioignore_patterns.is_match(normalized_path)
+            || self.extra_excludes.is_match(normalized_path)
     }
 
     /// Disable .gitignore pattern matching (Task 52.7: --no-git-ignore flag).
@@ -222,7 +227,8 @@ impl ExclusionManager {
     }
 
     /// Add extra exclude glob patterns (Task 60.2: --exclude flag).
-    /// Patterns are added on top of existing exclusions.
+    /// Patterns are added on top of existing exclusions without overwriting
+    /// `.sicarioignore` patterns.
     pub fn add_exclude_patterns(&mut self, patterns: &[String]) -> Result<()> {
         let mut builder = GlobSetBuilder::new();
         for pattern in patterns {
@@ -230,8 +236,7 @@ impl ExclusionManager {
                 builder.add(glob);
             }
         }
-        let extra = builder.build()?;
-        self.sicarioignore_patterns = extra;
+        self.extra_excludes = builder.build()?;
         Ok(())
     }
 }

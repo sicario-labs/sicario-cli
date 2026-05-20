@@ -1,0 +1,9 @@
+[
+  {
+    "patch_id": "1af4393d-c0ef-486b-8542-2cd8b127001c",
+    "applied_at": "2026-05-19T05:48:18.240567300+00:00",
+    "file_path": "C:\\Sicario-OS\\vuln-sandbox\\node\\cwe-523\\basic-auth-over-http.js",
+    "backup_path": "C:\\Sicario-OS\\vuln-sandbox\\.sicario\\backups\\20260519_054818_237503000\\basic-auth-over-http.js",
+    "resolution_type": "fixed"
+  }
+]

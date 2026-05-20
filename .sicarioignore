@@ -18,6 +18,7 @@ mock-auth-server.py
 # Convex backend — server-side TypeScript with Convex-specific patterns
 # that generate false positives against frontend-oriented JS/TS rules
 convex/convex/
+convex/_generated/
 sicario-frontend/convex/
 
 # Frontend marketing/demo pages — contain syntax-highlighted code snippets

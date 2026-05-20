@@ -610,6 +610,10 @@ impl Default for TemplateRegistry {
             "js-prototype-pollution-set",
             Box::new(PrototypePollutionSetTemplate),
         );
+        r.register_rule(
+            "js-prototype-unsafe-merge",
+            Box::new(PrototypePollutionSetTemplate),
+        );
 
         r.register_cwe("1333", Box::new(InputRegexDosTemplate));
         r.register_rule("js-redos", Box::new(InputRegexDosTemplate));
@@ -695,6 +699,13 @@ impl Default for TemplateRegistry {
         // Register CWE-89 multi-line alias so lookup_multi("...", Some("CWE-89")) works
         r.register_multi_cwe("89", Box::new(SqlAstRewriteTemplate));
 
+        // js-sql-template-literal — YAML rule ID for backtick SQL template literals
+        r.register_multi(
+            "js-sql-template-literal",
+            None,
+            Box::new(SqlAstRewriteTemplate),
+        );
+
         // Single-line fallback for non-JS/TS SQL concat (Python, Go, generic)
         r.register_rule("py-sql-string-concat", Box::new(SqlStringConcatTemplate));
         r.register_rule("go-sql-string-concat", Box::new(SqlStringConcatTemplate));
@@ -708,6 +719,10 @@ impl Default for TemplateRegistry {
         );
         r.register_rule(
             "node-sql-template-literal",
+            Box::new(SqlTemplateStringTemplate),
+        );
+        r.register_rule(
+            "js-sql-template-literal",
             Box::new(SqlTemplateStringTemplate),
         );
 

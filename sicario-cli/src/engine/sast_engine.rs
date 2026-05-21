@@ -104,10 +104,10 @@ impl SastEngine {
                 Severity::High,
                 &[Language::JavaScript, Language::TypeScript],
                 // Matches variable declarations: const secret = "...", let jwtSecret = "..."
-                // Also matches object property assignments: { secret_key: "...", jwt: "..." }
-                // Pattern covers: password, passwd, secret, secret_key, api_key, apikey,
-                //                 token, jwt, auth_token, private_key, access_key
-                "(variable_declarator name: (identifier) @name (#match? @name \"(?i)(password|passwd|secret|secret_key|api_key|apikey|token|jwt|auth_token|private_key|access_key)\") value: (string) @val) @decl",
+                // Also catches camelCase variants: accessKeyId, secretAccessKey, authToken
+                // Pattern covers: password, passwd, secret*, api_key*, token, jwt,
+                //                 auth*, private_key*, access_key*, credential, sid
+                "(variable_declarator name: (identifier) @name (#match? @name \"(?i)(password|passwd|secret[\\s_-]?key|secret[\\s_-]?access[\\s_-]?key|api[\\s_-]?key|auth[\\s_-]?token|private[\\s_-]?key|access[\\s_-]?key[\\s_-]?id|token|jwt|auth_token|access_key|credential|credentials|sid)\") value: (string) @val) @decl",
                 Some("CWE-798"),
                 Some(OwaspCategory::A02_CryptographicFailures),
             ),
@@ -117,8 +117,21 @@ impl SastEngine {
                 "Object property with a sensitive name assigned a hardcoded string literal",
                 Severity::High,
                 &[Language::JavaScript, Language::TypeScript],
-                // Catches: { secret: "hardcoded_secret_key_1234" }, { jwt: "..." }, etc.
-                "(pair key: [(property_identifier) (string)] @key (#match? @key \"(?i)(password|passwd|secret|secret_key|api_key|apikey|token|jwt|auth_token|private_key|access_key)\") value: (string) @val) @pair",
+                // Catches: { secret: "hardcoded_secret_key_1234" }, { jwt: "..." },
+                // { accessKeyId: "AKIA..." }, { secretAccessKey: "..." }
+                "(pair key: [(property_identifier) (string)] @key (#match? @key \"(?i)(password|passwd|secret[\\s_-]?key|secret[\\s_-]?access[\\s_-]?key|api[\\s_-]?key|auth[\\s_-]?token|private[\\s_-]?key|access[\\s_-]?key[\\s_-]?id|token|jwt|auth_token|access_key|credential|credentials|sid)\") value: (string) @val) @pair",
+                Some("CWE-798"),
+                Some(OwaspCategory::A02_CryptographicFailures),
+            ),
+            (
+                "js/hardcoded-secret-assignment",
+                "Hardcoded Secret in Assignment Expression",
+                "Variable or member assigned a sensitive string literal without declaration (e.g. missing const/let/var)",
+                Severity::High,
+                &[Language::JavaScript, Language::TypeScript],
+                // Catches: password = "hardcoded", obj.secretKey = "..." (bare assignment, not declaration)
+                // Uses (_) wildcard for left side to catch both bare identifiers and member expressions
+                "(assignment_expression left: (_) @name (#match? @name \"(?i)(password|passwd|secret[\\s_-]?key|secret[\\s_-]?access[\\s_-]?key|api[\\s_-]?key|auth[\\s_-]?token|private[\\s_-]?key|access[\\s_-]?key[\\s_-]?id|token|jwt|auth_token|access_key|credential|credentials|sid)\") right: (string) @val) @assign",
                 Some("CWE-798"),
                 Some(OwaspCategory::A02_CryptographicFailures),
             ),
@@ -189,7 +202,7 @@ impl SastEngine {
                 "Password or secret assigned as a string literal",
                 Severity::High,
                 &[Language::Python],
-                "(assignment left: (identifier) @name (#match? @name \"(?i)(password|passwd|secret|secret_key|api_key|apikey|token|jwt|auth_token|private_key|access_key)\") right: (string) @val) @assign",
+                "(assignment left: (identifier) @name (#match? @name \"(?i)(password|passwd|secret[\\s_-]?key|secret[\\s_-]?access[\\s_-]?key|api[\\s_-]?key|auth[\\s_-]?token|private[\\s_-]?key|access[\\s_-]?key[\\s_-]?id|token|jwt|auth_token|access_key|credential|credentials|sid)\") right: (string) @val) @assign",
                 Some("CWE-798"),
                 Some(OwaspCategory::A02_CryptographicFailures),
             ),

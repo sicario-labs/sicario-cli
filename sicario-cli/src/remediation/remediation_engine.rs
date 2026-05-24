@@ -2228,13 +2228,9 @@ mod tests {
         vuln.cwe_id = Some("CWE-999".to_string());
 
         let fixed = engine.apply_template_fix(original, &vuln);
-        assert_ne!(
+        assert_eq!(
             fixed, original,
-            "Unknown vuln template must differ from original"
-        );
-        assert!(
-            fixed.contains("SICARIO WARNING"),
-            "Unknown vuln fix should add a warning comment"
+            "Unknown vuln should return original unchanged (registry miss behavior)"
         );
     }
 

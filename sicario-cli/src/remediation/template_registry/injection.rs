@@ -1,4 +1,4 @@
-﻿//! Injection vulnerability patch templates.
+//! Injection vulnerability patch templates.
 
 use super::helpers::*;
 use super::PatchTemplate;
@@ -165,7 +165,48 @@ impl PatchTemplate for InjectPythonSubprocessShellTemplate {
     }
 }
 
-// â”€â”€ 36. InjectSstiTemplate (CWE-94) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ 36. OsSystemInjectionTemplate (CWE-78) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+/// Replaces `os.system(user_input)` with `subprocess.run()` + allowlist.
+///
+/// Catches Python command-injection via `os.system(...)` and `os.popen(...)`
+/// when the argument contains string concatenation or user-controlled variables.
+pub struct OsSystemInjectionTemplate;
+
+impl PatchTemplate for OsSystemInjectionTemplate {
+    fn name(&self) -> &'static str {
+        "OsSystemInjection"
+    }
+
+    fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
+        if lang != Language::Python {
+            return None;
+        }
+        let lower = line.to_lowercase();
+        if !lower.contains("os.system(") && !lower.contains("os.popen(") {
+            return None;
+        }
+        // Must reference user input directly
+        if !line.contains(" + ") && !line.contains("f\"") && !line.contains("f'") {
+            return None;
+        }
+        let indent = get_indent(line);
+        let fix = format!(
+            "{indent}# SICARIO FIX: Use subprocess with allowlist-validated args (no shell)\n\
+             {indent}import subprocess, shlex\n\
+             {indent}ALLOWED_COMMANDS = {{\"ls\", \"cat\", \"echo\"}}\n\
+             {indent}cmd = shlex.split(user_input)\n\
+             {indent}if cmd and cmd[0] in ALLOWED_COMMANDS:\n\
+             {indent}    subprocess.run(cmd, shell=False, check=True)"
+        );
+        if fix == line {
+            return None;
+        }
+        Some(fix)
+    }
+}
+
+// â”€â”€ 37. InjectSstiTemplate (CWE-94) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /// Wraps `render_template_string(user_input)` with `escape()`.
 pub struct InjectSstiTemplate;

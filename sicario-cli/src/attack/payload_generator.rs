@@ -9,49 +9,7 @@
 use crate::attack::route_extractor::{ExtractedRoute, HttpMethod, ParamLocation, RouteParameter};
 use crate::engine::vulnerability::Vulnerability;
 use crate::poc::generator::SsrfProbeListener;
-
-// ── Safety helpers ────────────────────────────────────────────────────────────
-
-/// Keywords that must never appear in a generated SQL payload.
-const DESTRUCTIVE_SQL_KEYWORDS: &[&str] =
-    &["DROP", "DELETE", "TRUNCATE", "UPDATE", "INSERT", "ALTER"];
-
-/// Returns `true` if the SQL payload contains any destructive keyword (case-insensitive).
-fn contains_destructive_sql(payload: &str) -> bool {
-    let upper = payload.to_uppercase();
-    DESTRUCTIVE_SQL_KEYWORDS.iter().any(|kw| upper.contains(kw))
-}
-
-/// Returns `true` if the URL is safe (resolves to `127.0.0.1`, `::1`, or `localhost`).
-fn is_localhost_url(url: &str) -> bool {
-    let without_scheme = if let Some(rest) = url.strip_prefix("http://") {
-        rest
-    } else if let Some(rest) = url.strip_prefix("https://") {
-        rest
-    } else {
-        url
-    };
-
-    let host = without_scheme.split('/').next().unwrap_or(without_scheme);
-
-    let host_no_port = if host.starts_with('[') {
-        host.trim_start_matches('[')
-            .split(']')
-            .next()
-            .unwrap_or(host)
-    } else if host.contains(':') {
-        let colon_count = host.chars().filter(|&c| c == ':').count();
-        if colon_count > 1 {
-            host
-        } else {
-            host.split(':').next().unwrap_or(host)
-        }
-    } else {
-        host
-    };
-
-    matches!(host_no_port, "127.0.0.1" | "::1" | "localhost")
-}
+use crate::shared_safety::{contains_destructive_sql, is_localhost_url};
 
 // ── AttackPayload ─────────────────────────────────────────────────────────────
 
@@ -379,35 +337,6 @@ mod tests {
     }
 
     #[test]
-    fn test_destructive_sql_keyword_rejected() {
-        // Manually test the safety check
-        assert!(contains_destructive_sql("DROP TABLE users"));
-        assert!(contains_destructive_sql("delete from users"));
-        assert!(contains_destructive_sql("TRUNCATE TABLE users"));
-        assert!(contains_destructive_sql("UPDATE users SET x=1"));
-        assert!(contains_destructive_sql("INSERT INTO users VALUES (1)"));
-        assert!(contains_destructive_sql("ALTER TABLE users ADD COLUMN x"));
-        assert!(!contains_destructive_sql("' OR SLEEP(5)--"));
-        assert!(!contains_destructive_sql("'; SELECT pg_sleep(5)--"));
-    }
-
-    #[test]
-    fn test_non_localhost_url_rejected() {
-        assert!(!is_localhost_url("http://example.com/path"));
-        assert!(!is_localhost_url("http://192.168.1.1/path"));
-        assert!(!is_localhost_url("http://10.0.0.1/path"));
-        assert!(!is_localhost_url("http://0.0.0.0/path"));
-    }
-
-    #[test]
-    fn test_localhost_url_accepted() {
-        assert!(is_localhost_url("http://127.0.0.1/path"));
-        assert!(is_localhost_url("http://127.0.0.1:3000/path"));
-        assert!(is_localhost_url("http://::1/path"));
-        assert!(is_localhost_url("http://localhost/path"));
-    }
-
-    #[test]
     fn test_ssrf_payload_targets_localhost() {
         let route = make_route_with_body_param("/api/fetch");
         let finding = make_vulnerability(
@@ -424,7 +353,7 @@ mod tests {
         for p in &attack_payloads {
             if p.cwe == 918 {
                 assert!(
-                    is_localhost_url(&p.payload),
+                    crate::shared_safety::is_localhost_url(&p.payload),
                     "SSRF payload must target localhost, got: {}",
                     p.payload
                 );

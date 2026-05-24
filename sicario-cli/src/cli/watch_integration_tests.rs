@@ -23,7 +23,7 @@ mod tests {
         let file_path = tmp.path().join("target.js");
         std::fs::write(
             &file_path,
-            "// Clean file — no vulnerabilities\nfunction greet(name) {\n  return 'Hello, ' + name;\n}\n",
+            "// Clean file — no vulnerabilities\nconst x = 1;\n",
         )
         .expect("Failed to write clean JS file");
         (tmp, file_path)

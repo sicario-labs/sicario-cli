@@ -179,13 +179,15 @@ fn collect_source_files(dir: &Path, files: &mut Vec<PathBuf>) {
 /// Matches patterns like:
 /// - `app.get('/path', handler)`
 /// - `router.post('/path', async (req, res) => { ... })`
+/// - `server.put('/path/:id', handler)` (http.createServer, Koa, Hono)
+/// - `api.delete('/path')`
 fn extract_express_routes(file_path: &Path, source: &str) -> Result<Vec<ExtractedRoute>> {
     let mut routes = Vec::new();
 
-    // Use regex-based extraction as a reliable fallback when tree-sitter
-    // queries are complex. This covers the most common Express patterns.
+    // Use regex-based extraction. This covers the most common patterns:
+    // Express, Koa-Router, Hono, and similar frameworks.
     let route_re = regex::Regex::new(
-        r#"(?:app|router)\.(get|post|put|delete|patch)\s*\(\s*['"`]([^'"`]+)['"`]"#,
+        r#"(?:app|router|server|route|api|client|kit)\.(get|post|put|delete|patch)\s*\(\s*['"`]([^'"`]+)['"`]"#,
     )?;
 
     for (line_idx, line) in source.lines().enumerate() {
@@ -228,6 +230,56 @@ fn extract_express_routes(file_path: &Path, source: &str) -> Result<Vec<Extracte
                 handler_function,
                 parameters,
             });
+        }
+    }
+
+    // Extract Express chained routes: app.route('/path').get(handler).post(handler)
+    let chained_re = regex::Regex::new(r#"app\.route\s*\(\s*['"`]([^'"`]+)['"`]\)\s*\."#)?;
+    let handler_methods_re = regex::Regex::new(r#"\s*\.(get|post|put|delete|patch)\s*\("#)?;
+
+    for (line_idx, line) in source.lines().enumerate() {
+        if chained_re.is_match(line) {
+            // Find the route path
+            if let Some(caps) = chained_re.captures(line) {
+                let path_str = caps.get(1).map(|m| m.as_str()).unwrap_or("/");
+                // Scan subsequent lines for .get(), .post(), etc.
+                let context_end = (line_idx + 20).min(source.lines().count());
+                let context: Vec<&str> = source
+                    .lines()
+                    .skip(line_idx)
+                    .take(context_end - line_idx)
+                    .collect();
+                let context_joined = context.join("\n");
+
+                for m in handler_methods_re.captures_iter(&context_joined) {
+                    let method_str = m.get(1).map(|m| m.as_str()).unwrap_or("get");
+                    let method = HttpMethod::from_str(method_str);
+
+                    let mut parameters = extract_path_params(path_str);
+                    // Scan handler body for params
+                    let handler_context: String = context
+                        .iter()
+                        .skip(1)
+                        .take(30)
+                        .copied()
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    let mut body_params = extract_express_params(&handler_context);
+                    let existing: std::collections::HashSet<String> =
+                        parameters.iter().map(|p| p.name.clone()).collect();
+                    body_params.retain(|p| !existing.contains(&p.name));
+                    parameters.extend(body_params);
+
+                    routes.push(ExtractedRoute {
+                        method,
+                        path: path_str.to_string(),
+                        handler_file: file_path.to_path_buf(),
+                        handler_line: line_idx + 1,
+                        handler_function: "anonymous".to_string(),
+                        parameters,
+                    });
+                }
+            }
         }
     }
 

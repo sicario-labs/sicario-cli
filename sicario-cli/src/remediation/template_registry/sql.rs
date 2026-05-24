@@ -14,21 +14,12 @@ impl PatchTemplate for SqlStringConcatTemplate {
 
     fn generate_patch(&self, line: &str, lang: Language) -> Option<String> {
         let lower = line.to_lowercase();
-        // Must be inside a query call
-        let is_query = lower.contains(".query(")
-            || lower.contains("cursor.execute(")
-            || lower.contains("db.exec(")
-            || lower.contains("db.query(")
-            || lower.contains(".execute(")
-            || lower.contains("db.raw(");
-        if !is_query {
-            return None;
-        }
         // Must have string concatenation or f-string
         if !line.contains(" + ")
             && !line.contains("f\"")
             && !line.contains("f'")
             && !line.contains('`')
+            && !line.contains('%')
         {
             return None;
         }
@@ -39,6 +30,21 @@ impl PatchTemplate for SqlStringConcatTemplate {
             && !line.contains("param")
             && !line.contains("body")
         {
+            return None;
+        }
+        // Must be a query call or an SQL assignment
+        let is_query_call = lower.contains(".query(")
+            || lower.contains("cursor.execute(")
+            || lower.contains("db.exec(")
+            || lower.contains("db.query(")
+            || lower.contains(".execute(")
+            || lower.contains("db.raw(");
+        let is_sql_assignment = lower.contains("select ")
+            || lower.contains("insert ")
+            || lower.contains("update ")
+            || lower.contains("delete ")
+            || lower.contains("from ");
+        if !is_query_call && !is_sql_assignment {
             return None;
         }
 

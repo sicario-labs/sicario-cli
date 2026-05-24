@@ -44,6 +44,7 @@ pub mod output;
 pub mod poc;
 pub mod publish;
 pub mod rule_harness;
+pub mod shared_safety;
 pub mod snippet;
 pub mod suppression_learner;
 pub mod telemetry;

@@ -353,13 +353,13 @@ impl GitExorcist {
                 continue;
             }
 
-            // Apply replacements: replace each detected secret value with
-            // `process.env.VAR_NAME` where VAR_NAME is derived from the
-            // secret type.
+            // Apply replacements: replace each detected secret value with a
+            // language-appropriate env-var access expression (e.g.
+            // `process.env.VAR_NAME` in JS, `os.environ["VAR_NAME"]` in Python).
             let mut new_content = content.clone();
             for secret in &detected {
                 let env_var = secret_type_to_env_var_name(&secret.secret_type, &secret.value);
-                let replacement = format!("process.env.{}", env_var);
+                let replacement = env_var_replacement_string(&env_var, file_path);
                 if new_content.contains(&secret.value) {
                     new_content = new_content.replace(&secret.value, &replacement);
                     replacements.push((secret.value.clone(), env_var));
@@ -665,6 +665,34 @@ fn secret_type_to_env_var_name(secret_type: &crate::scanner::SecretType, _value:
         SecretType::DatabaseUrl => "DATABASE_URL".to_string(),
         SecretType::PrivateKey => "PRIVATE_KEY".to_string(),
         SecretType::GenericApiKey => "API_KEY".to_string(),
+    }
+}
+
+/// Return the language-appropriate environment variable access expression for
+/// a given env-var name and file path.
+///
+/// Examples:
+/// - `"DB_PASSWORD"` in `config.js` → `process.env.DB_PASSWORD`
+/// - `"DB_PASSWORD"` in `config.py` → `os.environ["DB_PASSWORD"]`
+/// - `"DB_PASSWORD"` in `config.go` → `os.Getenv("DB_PASSWORD")`
+/// - `"DB_PASSWORD"` in `config.rs` → `std::env::var("DB_PASSWORD")`
+fn env_var_replacement_string(env_var: &str, file_path: &Path) -> String {
+    let ext = file_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase());
+    match ext.as_deref() {
+        Some("py") => format!("os.environ[\"{}\"]", env_var),
+        Some("go") => format!("os.Getenv(\"{}\")", env_var),
+        Some("rs") => format!("std::env::var(\"{}\")", env_var),
+        Some("rb") => format!("ENV[\"{}\"]", env_var),
+        Some("php") => format!("getenv('{}')", env_var),
+        Some("java") | Some("kt") => format!("System.getenv(\"{}\")", env_var),
+        Some("cs") => format!("Environment.GetEnvironmentVariable(\"{}\")", env_var),
+        Some("sh") | Some("bash") | Some("zsh") => format!("\"${{{}}}\"", env_var),
+        Some("ps1") => format!("$env:{}", env_var),
+        Some("swift") => format!("ProcessInfo.processInfo.environment[\"{}\"]", env_var),
+        _ => format!("process.env.{}", env_var),
     }
 }
 

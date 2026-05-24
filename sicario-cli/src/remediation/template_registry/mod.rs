@@ -285,6 +285,11 @@ impl Default for TemplateRegistry {
         r.register_rule("js-document-write", Box::new(DomDocumentWriteTemplate));
         r.register_rule("js-xss-document-write", Box::new(DomDocumentWriteTemplate));
 
+        // CWE-79 and generic "xss" rule alias
+        r.register_cwe("79", Box::new(DomInnerHtmlTemplate));
+        r.register_rule("xss", Box::new(DomInnerHtmlTemplate));
+        r.register_rule("xss-reflected", Box::new(DomInnerHtmlTemplate));
+
         // postMessage wildcard origin
         r.register_cwe("345", Box::new(DomPostMessageWildcardTemplate));
         r.register_rule(
@@ -545,6 +550,11 @@ impl Default for TemplateRegistry {
             Box::new(InjectPythonSubprocessShellTemplate),
         );
 
+        // CWE-78 and command-injection rule aliases
+        r.register_cwe("78", Box::new(OsSystemInjectionTemplate));
+        r.register_rule("command-injection", Box::new(OsSystemInjectionTemplate));
+        r.register_rule("command-injection-os", Box::new(OsSystemInjectionTemplate));
+
         r.register_rule("py-ssti-render-template", Box::new(InjectSstiTemplate));
         r.register_rule("flask-ssti", Box::new(InjectSstiTemplate));
 
@@ -707,6 +717,9 @@ impl Default for TemplateRegistry {
         );
 
         // Single-line fallback for non-JS/TS SQL concat (Python, Go, generic)
+        r.register_cwe("89", Box::new(SqlStringConcatTemplate));
+        r.register_rule("sql-injection", Box::new(SqlStringConcatTemplate));
+        r.register_rule("sql-injection-concat", Box::new(SqlStringConcatTemplate));
         r.register_rule("py-sql-string-concat", Box::new(SqlStringConcatTemplate));
         r.register_rule("go-sql-string-concat", Box::new(SqlStringConcatTemplate));
         r.register_rule("sql-string-concat", Box::new(SqlStringConcatTemplate));

@@ -40,6 +40,7 @@ mod output;
 mod poc;
 mod publish;
 mod rule_harness;
+mod shared_safety;
 mod snippet;
 mod suppression_learner;
 mod telemetry;
@@ -1237,6 +1238,7 @@ fn cmd_scan(args: cli::scan::ScanArgs) -> Result<ExitCode> {
                                 serde_json::json!({
                                     "vuln_location": p.vuln_location,
                                     "curl_command": p.curl_command,
+                                    "alternative_commands": p.alternative_commands,
                                     "interpretation": p.interpretation,
                                 })
                             })
@@ -1386,6 +1388,9 @@ Ensure you are running this against a safe, local environment. Proceed? [y/N] "
                             println!("\n── PoC Payload ──────────────────────────────────────");
                             println!("Location:       {}", payload.vuln_location);
                             println!("Command:\n{}", payload.curl_command);
+                            for alt in &payload.alternative_commands {
+                                println!("\nAlternative:\n{}", alt);
+                            }
                             println!("Interpretation: {}", payload.interpretation);
                             println!("─────────────────────────────────────────────────────");
                         }
@@ -1397,6 +1402,84 @@ Ensure you are running this against a safe, local environment. Proceed? [y/N] "
                             );
                         }
                     }
+                }
+            }
+
+            // ── --exec: execute PoC payloads via attack runner ─────────────
+            if args.exec {
+                use attack::route_extractor::RouteExtractor;
+                use attack::runner::LocalAttackRunner;
+
+                let target = &args.target;
+                let is_localhost = target.contains("localhost") || target.contains("127.0.0.1");
+                if !is_localhost {
+                    eprintln!(
+                        "sicario scan --exec: target must be localhost or 127.0.0.1, got: {}",
+                        target
+                    );
+                } else {
+                    eprintln!("\n── PoC Execution ───────────────────────────────────────");
+                    eprintln!("Target: {}", target);
+
+                    match RouteExtractor::extract(&dir) {
+                        Ok(routes) => {
+                            if routes.is_empty() {
+                                eprintln!("No routes discovered — cannot execute payloads.");
+                            } else {
+                                eprintln!(
+                                    "Discovered {} route(s), running attack payloads...",
+                                    routes.len()
+                                );
+                                match LocalAttackRunner::run(
+                                    target,
+                                    &routes,
+                                    &vulns,
+                                    args.attack_timeout,
+                                ) {
+                                    Ok(results) => {
+                                        let confirmed: Vec<_> =
+                                            results.iter().filter(|r| r.confirmed).collect();
+                                        if confirmed.is_empty() {
+                                            eprintln!(
+                                                "No vulnerabilities confirmed via live execution."
+                                            );
+                                        } else {
+                                            for r in &confirmed {
+                                                println!(
+                                                    "\n  ✓ {} {} — {} ({}ms vs baseline {}ms)",
+                                                    r.route.method,
+                                                    r.route.path,
+                                                    r.detection_method,
+                                                    r.response_time_ms,
+                                                    r.baseline_time_ms
+                                                );
+                                                if let Some(f) = &r.mapped_finding {
+                                                    println!(
+                                                        "    Finding: {} (CWE-{})",
+                                                        f.rule_id,
+                                                        f.cwe_id.as_deref().unwrap_or("unknown")
+                                                    );
+                                                }
+                                            }
+                                        }
+                                        println!(
+                                            "\n  Summary: {}/{} confirmed, {} total",
+                                            confirmed.len(),
+                                            results.len(),
+                                            results.len()
+                                        );
+                                    }
+                                    Err(e) => {
+                                        eprintln!("Attack execution failed: {}", e);
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("Route extraction failed: {}", e);
+                        }
+                    }
+                    eprintln!("─────────────────────────────────────────────────────────");
                 }
             }
         }

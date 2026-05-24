@@ -11,61 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::engine::vulnerability::Finding;
-
-// ── Destructive SQL keyword blocklist ────────────────────────────────────────
-
-/// Keywords that must never appear in a generated SQL payload.
-const DESTRUCTIVE_SQL_KEYWORDS: &[&str] =
-    &["DROP", "DELETE", "TRUNCATE", "UPDATE", "INSERT", "ALTER"];
-
-/// Returns `true` if the SQL payload contains any destructive keyword
-/// (case-insensitive).
-fn contains_destructive_sql(payload: &str) -> bool {
-    let upper = payload.to_uppercase();
-    DESTRUCTIVE_SQL_KEYWORDS.iter().any(|kw| upper.contains(kw))
-}
-
-/// Returns `true` if the URL is safe (resolves to `127.0.0.1` or `::1`).
-///
-/// We check the host portion of the URL string directly — no DNS resolution
-/// is performed so there is no TOCTOU window.
-fn is_localhost_url(url: &str) -> bool {
-    // Strip scheme
-    let without_scheme = if let Some(rest) = url.strip_prefix("http://") {
-        rest
-    } else if let Some(rest) = url.strip_prefix("https://") {
-        rest
-    } else {
-        url
-    };
-
-    // Extract host (before first '/' or end of string)
-    let host = without_scheme.split('/').next().unwrap_or(without_scheme);
-
-    // Strip port if present
-    let host_no_port = if host.starts_with('[') {
-        // IPv6 literal with brackets: [::1]:port or [::1]
-        host.trim_start_matches('[')
-            .split(']')
-            .next()
-            .unwrap_or(host)
-    } else if host.contains(':') {
-        // Could be IPv6 without brackets (e.g. ::1) or host:port
-        // If it has more than one colon, it's IPv6
-        let colon_count = host.chars().filter(|&c| c == ':').count();
-        if colon_count > 1 {
-            // IPv6 address without brackets — use the whole thing as host
-            host
-        } else {
-            // host:port — strip the port
-            host.split(':').next().unwrap_or(host)
-        }
-    } else {
-        host
-    };
-
-    matches!(host_no_port, "127.0.0.1" | "::1" | "localhost")
-}
+use crate::shared_safety::{contains_destructive_sql, is_localhost_url};
 
 // ── PocPayload ────────────────────────────────────────────────────────────────
 
@@ -76,6 +22,8 @@ pub struct PocPayload {
     pub vuln_location: String,
     /// The generated `curl` command that exercises the vulnerability.
     pub curl_command: String,
+    /// Alternative curl commands for the same vulnerability (different payloads).
+    pub alternative_commands: Vec<String>,
     /// Human-readable interpretation of what a successful response means.
     pub interpretation: String,
 }
@@ -209,10 +157,16 @@ impl PocGenerator {
         let sleep_expr = driver.sleep_expression();
 
         // Build a time-based blind injection payload
-        let payload = format!("' OR 1=1; SELECT {}-- -", sleep_expr);
+        let time_payload = format!("' OR 1=1; SELECT {}-- -", sleep_expr);
+
+        // Build a UNION-based payload to extract data
+        let union_payload = "' UNION SELECT 1,2,3,4,5-- -".to_string();
+
+        // Build a boolean-based payload
+        let bool_payload = "' OR '1'='1".to_string();
 
         // Safety check: reject if any destructive keyword slipped in
-        if contains_destructive_sql(&payload) {
+        if contains_destructive_sql(&time_payload) {
             eprintln!("PoC not available for this finding — insufficient AST context.");
             return None;
         }
@@ -235,13 +189,26 @@ impl PocGenerator {
             r#"curl -s -o /dev/null -w "%{{time_total}}" -X POST "{}" \
   -H "Content-Type: application/json" \
   -d '{{"id":"{}"}}'
-# If response time >= 5 seconds, the injection is confirmed."#,
-            url, payload
+# If response time >= 5 seconds, the time-based injection is confirmed."#,
+            url, time_payload
+        );
+
+        let alt1 = format!(
+            r#"curl -s "{}?id={}" \
+# If the response differs from a normal request, UNION injection is confirmed."#,
+            url, union_payload
+        );
+
+        let alt2 = format!(
+            r#"curl -s "{}?id={}" \
+# If the response is the same as a normal request, boolean injection is confirmed."#,
+            url, bool_payload
         );
 
         let interpretation = format!(
-            "If the server takes ~5 seconds to respond, the SQL injection is confirmed. \
-The payload uses {} to introduce a deliberate delay. \
+            "Use the primary command for time-based blind injection ({}). \
+If the server takes ~5 seconds, SQL injection is confirmed. \
+Try the alternative commands for UNION-based or boolean-based variants. \
 Run against a local development instance only.",
             sleep_expr
         );
@@ -249,6 +216,7 @@ Run against a local development instance only.",
         Some(PocPayload {
             vuln_location,
             curl_command,
+            alternative_commands: vec![alt1, alt2],
             interpretation,
         })
     }
@@ -306,6 +274,7 @@ message and shut down after 30 seconds.",
         Some(PocPayload {
             vuln_location,
             curl_command,
+            alternative_commands: vec![],
             interpretation,
         })
     }
@@ -316,7 +285,11 @@ message and shut down after 30 seconds.",
         let vuln_location = format!("{}:{}", finding.file_path.display(), finding.line);
 
         // Echo-based technique — safe, read-only, produces a unique marker
-        let payload = "; echo sicario-poc-$(date +%s)";
+        let echo_payload = "; echo sicario-poc-$(date +%s)";
+        // Sleep-based technique — confirms via response delay
+        let sleep_payload = "; sleep 4";
+        // ID-based technique — reads current user (read-only)
+        let id_payload = "; id";
 
         let param =
             extract_cmd_param_from_snippet(&finding.snippet).unwrap_or_else(|| "cmd".to_string());
@@ -336,18 +309,36 @@ message and shut down after 30 seconds.",
   -H "Content-Type: application/json" \
   -d '{{"{}":"ls{}"}}'
 # Look for "sicario-poc-<timestamp>" in the response body."#,
-            url, param, payload
+            url, param, echo_payload
+        );
+
+        let alt1 = format!(
+            r#"curl -s -o /dev/null -w "%{{time_total}}" -X POST "{}" \
+  -H "Content-Type: application/json" \
+  -d '{{"{}":"echo{}"}}'
+# If response time >= 4 seconds, command injection via sleep is confirmed."#,
+            url, param, sleep_payload
+        );
+
+        let alt2 = format!(
+            r#"curl -s -X POST "{}" \
+  -H "Content-Type: application/json" \
+  -d '{{"{}":"echo{}"}}'
+# If the response contains "uid=", command injection via id is confirmed."#,
+            url, param, id_payload
         );
 
         let interpretation = "If the response body contains 'sicario-poc-<unix_timestamp>', \
-the command injection is confirmed. The payload appends a harmless `echo` \
-command that produces a unique, timestamped marker. \
+the command injection is confirmed. The primary payload appends a harmless `echo` \
+command that produces a unique, timestamped marker. Alternative payloads use `sleep 4` \
+for timing-based confirmation and `id` for user enumeration. \
 Run against a local development instance only."
             .to_string();
 
         Some(PocPayload {
             vuln_location,
             curl_command,
+            alternative_commands: vec![alt1, alt2],
             interpretation,
         })
     }
@@ -404,6 +395,7 @@ Run against a local development instance only.",
         Some(PocPayload {
             vuln_location,
             curl_command,
+            alternative_commands: vec![],
             interpretation,
         })
     }
@@ -621,29 +613,6 @@ mod tests {
         );
     }
 
-    // ── Destructive SQL keyword rejection ────────────────────────────────
-
-    #[test]
-    fn test_destructive_sql_keywords_rejected() {
-        let destructive = ["DROP", "DELETE", "TRUNCATE", "UPDATE", "INSERT", "ALTER"];
-        for kw in &destructive {
-            assert!(
-                contains_destructive_sql(kw),
-                "Should detect destructive keyword: {}",
-                kw
-            );
-            assert!(
-                contains_destructive_sql(&kw.to_lowercase()),
-                "Should detect lowercase destructive keyword: {}",
-                kw.to_lowercase()
-            );
-        }
-        assert!(
-            !contains_destructive_sql("SELECT pg_sleep(5)"),
-            "Safe payload should not be rejected"
-        );
-    }
-
     // ── SSRF tests ────────────────────────────────────────────────────────
 
     #[test]
@@ -664,24 +633,6 @@ mod tests {
             !payload.curl_command.contains("0.0.0.0"),
             "SSRF payload must not use 0.0.0.0"
         );
-    }
-
-    // ── Non-localhost URL rejection ───────────────────────────────────────
-
-    #[test]
-    fn test_non_localhost_url_rejected() {
-        assert!(!is_localhost_url("http://example.com/path"));
-        assert!(!is_localhost_url("http://192.168.1.1/path"));
-        assert!(!is_localhost_url("http://10.0.0.1/path"));
-        assert!(!is_localhost_url("http://0.0.0.0/path"));
-    }
-
-    #[test]
-    fn test_localhost_url_accepted() {
-        assert!(is_localhost_url("http://127.0.0.1/path"));
-        assert!(is_localhost_url("http://127.0.0.1:3000/path"));
-        assert!(is_localhost_url("http://::1/path"));
-        assert!(is_localhost_url("http://localhost/path"));
     }
 
     // ── Command injection tests ───────────────────────────────────────────
@@ -863,11 +814,13 @@ mod prove_flag_tests {
         let poc_value = serde_json::json!({
             "vuln_location": payload.vuln_location,
             "curl_command": payload.curl_command,
+            "alternative_commands": payload.alternative_commands,
             "interpretation": payload.interpretation,
         });
 
         assert!(poc_value.get("vuln_location").is_some());
         assert!(poc_value.get("curl_command").is_some());
+        assert!(poc_value.get("alternative_commands").is_some());
         assert!(poc_value.get("interpretation").is_some());
         assert!(!poc_value["vuln_location"].as_str().unwrap().is_empty());
         assert!(!poc_value["curl_command"].as_str().unwrap().is_empty());
@@ -940,6 +893,10 @@ mod prove_flag_tests {
         assert!(
             !payload.interpretation.is_empty(),
             "interpretation must not be empty"
+        );
+        assert!(
+            !payload.alternative_commands.is_empty(),
+            "SQLi should have alternative commands"
         );
     }
 }

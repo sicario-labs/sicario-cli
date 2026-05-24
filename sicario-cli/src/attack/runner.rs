@@ -40,6 +40,28 @@ impl DetectionMethod {
     }
 }
 
+impl std::fmt::Display for DetectionMethod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DetectionMethod::TimingDelta { delta_ms } => {
+                write!(f, "TimingDelta({}ms)", delta_ms)
+            }
+            DetectionMethod::StatusCode500 { .. } => {
+                write!(f, "HTTP 500")
+            }
+            DetectionMethod::ReflectionDetected { probe } => {
+                write!(f, "Reflection({})", probe)
+            }
+            DetectionMethod::SsrfProbeReceived => {
+                write!(f, "SSRF Probe Received")
+            }
+            DetectionMethod::Inconclusive => {
+                write!(f, "Inconclusive")
+            }
+        }
+    }
+}
+
 // ── AttackResult ──────────────────────────────────────────────────────────────
 
 /// The result of a single attack attempt.

@@ -324,6 +324,24 @@ pub struct ScanArgs {
     #[arg(long)]
     pub prove: bool,
 
+    /// Execute PoC payloads against the local development server (implies --prove).
+    ///
+    /// Uses the attack runner's LocalAttackRunner to fire payloads at the target
+    /// URL and report confirmed vulnerabilities. Requires a local server running
+    /// at the specified --target (default http://localhost:3000).
+    ///
+    /// WARNING: Only run against safe, local development environments.
+    #[arg(long, requires = "prove")]
+    pub exec: bool,
+
+    /// Target URL for --exec payload execution (default: http://localhost:3000).
+    #[arg(long, default_value = "http://localhost:3000")]
+    pub target: String,
+
+    /// Per-request timeout in seconds for --exec payload execution (default: 10).
+    #[arg(long, default_value_t = 10)]
+    pub attack_timeout: u64,
+
     /// Scan dependencies for license risk and append a license risk table to output.
     ///
     /// Checks npm and PyPI packages against known license risk tiers:
@@ -456,6 +474,9 @@ impl Default for ScanArgs {
             snippet_context: None,
             no_receipt: false,
             prove: false,
+            exec: false,
+            target: "http://localhost:3000".to_string(),
+            attack_timeout: 10,
             licenses: false,
             fail_on_license: None,
             learn_suppressions: false,
